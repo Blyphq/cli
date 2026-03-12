@@ -90,6 +90,21 @@
         "vitest": "catalog:",
       },
     },
+    "packages/cli": {
+      "name": "@blyphq/cli",
+      "version": "0.0.0",
+      "bin": {
+        "blyphq": "./dist/index.js",
+      },
+      "dependencies": {
+        "@clack/prompts": "^0.11.0",
+      },
+      "devDependencies": {
+        "@blyp-cli/config": "workspace:*",
+        "@types/node": "catalog:",
+        "typescript": "catalog:",
+      },
+    },
     "packages/config": {
       "name": "@blyp-cli/config",
       "version": "0.0.0",
@@ -215,6 +230,12 @@
     "@blyp-cli/config": ["@blyp-cli/config@workspace:packages/config"],
 
     "@blyp-cli/env": ["@blyp-cli/env@workspace:packages/env"],
+
+    "@blyphq/cli": ["@blyphq/cli@workspace:packages/cli"],
+
+    "@clack/core": ["@clack/core@0.5.0", "", { "dependencies": { "picocolors": "^1.0.0", "sisteransi": "^1.0.5" } }, "sha512-p3y0FIOwaYRUPRcMO7+dlmLh8PSRcrjuTndsiA0WAFbWES0mLZlrjVoBRZ9DzkPFJZG6KGkJmoEAY0ZcVWTkow=="],
+
+    "@clack/prompts": ["@clack/prompts@0.11.0", "", { "dependencies": { "@clack/core": "0.5.0", "picocolors": "^1.0.0", "sisteransi": "^1.0.5" } }, "sha512-pMN5FcrEw9hUkZA4f+zLlzivQSeQf5dRGJjSUbvVYDLvpKCdQx5OaknvKzgbtXOizhP+SJJJjqEbOe55uKKfAw=="],
 
     "@csstools/color-helpers": ["@csstools/color-helpers@5.1.0", "", {}, "sha512-S11EXWJyy0Mz5SYvRmY8nJYTFFd1LCNV+7cXyAgQtOOuzb4EsgfqDufL+9esx72/eLhsRdGZwaldu/h+E4t4BA=="],
 
