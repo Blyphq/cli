@@ -68,6 +68,14 @@ export function ProjectConfigPanel({ meta, config }: ProjectConfigPanelProps) {
                 "Disabled"
               ),
             },
+            {
+              label: "AI model",
+              value: config?.resolved.ai.model ?? "Not configured",
+            },
+            {
+              label: "AI key source",
+              value: config?.resolved.ai.apiKeySource ?? "missing",
+            },
           ]}
         />
         <Section

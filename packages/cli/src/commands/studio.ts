@@ -11,6 +11,7 @@ import {
   resolveWebAppDir,
   resolveWorkspaceRoot,
 } from "../lib/runtime.js";
+import { ensureStudioAiSetup } from "../lib/studio-ai.js";
 import {
   showInfo,
   showNote,
@@ -25,7 +26,7 @@ const STUDIO_REQUEST_TIMEOUT_MS = 1_500;
 export const studioCommand: CommandDefinition = {
   name: "studio",
   description: "Start or manage the local Studio workflow.",
-  usage: "blyphq studio",
+  usage: "blyphq studio [targetPath]",
   async run(context: CommandContext): Promise<void> {
     const targetProjectPath = path.resolve(context.cwd, context.argv[0] ?? context.cwd);
     const workspaceRoot = await resolveWorkspaceRoot(context.cwd);
@@ -39,6 +40,8 @@ export const studioCommand: CommandDefinition = {
     if (!webAppDir) {
       throw new CliError("Studio frontend was not found at apps/web.");
     }
+
+    await ensureStudioAiSetup(targetProjectPath);
 
     const studioUrl = getStudioUrl(targetProjectPath);
     const status = spinner();

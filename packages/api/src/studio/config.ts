@@ -4,6 +4,7 @@ import path from "node:path";
 import { createJiti } from "jiti";
 
 import type {
+  StudioAiSummary,
   StudioClientLoggingSummary,
   StudioConfigDiscovery,
   StudioConfigFileMatch,
@@ -55,6 +56,10 @@ interface StudioConfigInput {
   pretty?: boolean;
   level?: string;
   logDir?: string;
+  ai?: {
+    apiKey?: string;
+    model?: string;
+  };
   file?: {
     enabled?: boolean;
     dir?: string;
@@ -170,6 +175,29 @@ export async function discoverStudioConfig(
   }
 }
 
+export function resolveStudioAiCredentials(config: StudioConfigDiscovery, projectPath: string): {
+  apiKey: string | null;
+  model: string | null;
+} {
+  const parsedConfig = isStudioConfigInput(config.parsedConfig) ? config.parsedConfig : {};
+  const projectEnv = readProjectEnv(projectPath);
+
+  return {
+    apiKey:
+      firstNonEmptyString(
+        process.env.OPENROUTER_API_KEY,
+        projectEnv.OPENROUTER_API_KEY,
+        parsedConfig.ai?.apiKey,
+      ) ?? null,
+    model:
+      firstNonEmptyString(
+        parsedConfig.ai?.model,
+        projectEnv.OPENROUTER_MODEL,
+        process.env.OPENROUTER_MODEL,
+      ) ?? null,
+  };
+}
+
 export function findConfigFiles(projectPath: string): StudioConfigFileMatch[] {
   return CONFIG_FILE_NAMES.map((fileName) => path.join(projectPath, fileName))
     .filter((candidatePath) => existsSync(candidatePath))
@@ -221,6 +249,10 @@ function normalizeLoadedConfig(value: unknown): StudioConfigInput {
   return normalized as StudioConfigInput;
 }
 
+function isStudioConfigInput(value: unknown): value is StudioConfigInput {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
 function buildResolvedConfig(
   input: StudioConfigInput,
   projectPath: string,
@@ -234,7 +266,53 @@ function buildResolvedConfig(
     logDir,
     file,
     clientLogging: mergeClientLoggingConfig(input.clientLogging),
+    ai: mergeAiConfig(input.ai, projectPath),
     connectors: mergeConnectorsConfig(input.connectors, projectPath),
+  };
+}
+
+function mergeAiConfig(
+  input: StudioConfigInput["ai"],
+  projectPath: string,
+): StudioAiSummary {
+  const projectEnv = readProjectEnv(projectPath);
+  const configuredApiKey = firstNonEmptyString(
+    process.env.OPENROUTER_API_KEY,
+    projectEnv.OPENROUTER_API_KEY,
+    input?.apiKey,
+  );
+  const apiKeySource: StudioAiSummary["apiKeySource"] =
+    typeof process.env.OPENROUTER_API_KEY === "string" && process.env.OPENROUTER_API_KEY.trim().length > 0
+      ? "process-env"
+      : typeof projectEnv.OPENROUTER_API_KEY === "string" && projectEnv.OPENROUTER_API_KEY.trim().length > 0
+        ? "project-env"
+        : typeof input?.apiKey === "string" && input.apiKey.trim().length > 0
+          ? "config"
+          : "missing";
+  const configuredModel = firstNonEmptyString(
+    input?.model,
+    projectEnv.OPENROUTER_MODEL,
+    process.env.OPENROUTER_MODEL,
+  ) ?? null;
+  const modelSource: StudioAiSummary["modelSource"] =
+    typeof input?.model === "string" && input.model.trim().length > 0
+      ? "config"
+      : typeof projectEnv.OPENROUTER_MODEL === "string" && projectEnv.OPENROUTER_MODEL.trim().length > 0
+        ? "project-env"
+        : typeof process.env.OPENROUTER_MODEL === "string" && process.env.OPENROUTER_MODEL.trim().length > 0
+          ? "process-env"
+          : "missing";
+
+  return {
+    apiKeyConfigured: typeof configuredApiKey === "string" && configuredApiKey.length > 0,
+    apiKeySource,
+    model: configuredModel,
+    modelSource,
+    enabled:
+      typeof configuredApiKey === "string" &&
+      configuredApiKey.length > 0 &&
+      typeof configuredModel === "string" &&
+      configuredModel.length > 0,
   };
 }
 
@@ -391,6 +469,49 @@ function firstNonEmptyString(...values: Array<string | undefined>): string | und
   }
 
   return undefined;
+}
+
+function readProjectEnv(projectPath: string): Record<string, string> {
+  const envPath = path.join(projectPath, ".env");
+
+  if (!existsSync(envPath)) {
+    return {};
+  }
+
+  try {
+    const contents = readFileSync(envPath, "utf8");
+    const entries: Record<string, string> = {};
+
+    for (const line of contents.split(/\r?\n/)) {
+      const trimmed = line.trim();
+
+      if (!trimmed || trimmed.startsWith("#")) {
+        continue;
+      }
+
+      const separatorIndex = trimmed.indexOf("=");
+
+      if (separatorIndex <= 0) {
+        continue;
+      }
+
+      const key = trimmed.slice(0, separatorIndex).trim();
+      let value = trimmed.slice(separatorIndex + 1).trim();
+
+      if (
+        (value.startsWith("\"") && value.endsWith("\"")) ||
+        (value.startsWith("'") && value.endsWith("'"))
+      ) {
+        value = value.slice(1, -1);
+      }
+
+      entries[key] = value;
+    }
+
+    return entries;
+  } catch {
+    return {};
+  }
 }
 
 function findNearestPackageName(startDir: string): string | undefined {

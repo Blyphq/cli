@@ -1,7 +1,13 @@
 import type { ReactNode } from "react";
 import { useState } from "react";
 
-import { CalendarDays, RotateCcw, Search, SlidersHorizontal } from "lucide-react";
+import {
+  CalendarDays,
+  LayoutPanelTop,
+  RotateCcw,
+  Search,
+  SlidersHorizontal,
+} from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -16,34 +22,47 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { StudioFile, StudioFilters, StudioMeta } from "@/lib/studio";
+import type {
+  StudioFacets,
+  StudioFile,
+  StudioFilters,
+  StudioGroupingMode,
+  StudioMeta,
+} from "@/lib/studio";
 import {
   formatCalendarDate,
   fromCalendarFilterValue,
   getStatusClasses,
   toCalendarFilterValue,
 } from "@/lib/studio";
+
 import { TruncatedPath } from "./truncated-path";
 
 interface StudioToolbarProps {
   draftProjectPath: string;
-  filters: StudioFilters;
-  meta: StudioMeta | undefined;
+  facets: StudioFacets | undefined;
   files: StudioFile[];
+  filters: StudioFilters;
+  grouping: StudioGroupingMode;
+  meta: StudioMeta | undefined;
   onDraftProjectPathChange(value: string): void;
-  onInspect(): void;
   onFilterChange(next: StudioFilters): void;
+  onGroupingChange(value: StudioGroupingMode): void;
+  onInspect(): void;
   onResetFilters(): void;
 }
 
 export function StudioToolbar({
   draftProjectPath,
-  filters,
-  meta,
+  facets,
   files,
+  filters,
+  grouping,
+  meta,
   onDraftProjectPathChange,
-  onInspect,
   onFilterChange,
+  onGroupingChange,
+  onInspect,
   onResetFilters,
 }: StudioToolbarProps) {
   const currentTarget = meta?.project.absolutePath || draftProjectPath;
@@ -81,10 +100,19 @@ export function StudioToolbar({
               status={meta?.project.valid ? "valid" : "invalid"}
               value={meta?.project.resolvedFrom ?? "cwd"}
             />
-            <StatusPill label="Config" status={meta?.config.status ?? "not-found"} value={meta?.config.status ?? "idle"} />
+            <StatusPill
+              label="Config"
+              status={meta?.config.status ?? "not-found"}
+              value={meta?.config.status ?? "idle"}
+            />
+            <StatusPill
+              label="Logs"
+              status={meta?.logs.fileCount ? "found" : "not-found"}
+              value={meta ? `${meta.logs.fileCount} files` : "pending"}
+            />
           </div>
         </div>
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(0,1.15fr)_repeat(4,minmax(0,0.72fr))]">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(0,1.2fr)_repeat(6,minmax(0,0.72fr))]">
           <FilterBox icon={<Search className="size-3.5" />} label="Search">
             <Input
               value={filters.search}
@@ -109,13 +137,36 @@ export function StudioToolbar({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value={ALL_LEVELS_VALUE}>All levels</SelectItem>
-                <SelectItem value="critical">critical</SelectItem>
-                <SelectItem value="error">error</SelectItem>
-                <SelectItem value="warning">warning</SelectItem>
-                <SelectItem value="info">info</SelectItem>
-                <SelectItem value="success">success</SelectItem>
-                <SelectItem value="debug">debug</SelectItem>
-                <SelectItem value="unknown">unknown</SelectItem>
+                {facets?.levels.length
+                  ? facets.levels.map((level) => (
+                      <SelectItem key={level} value={level}>
+                        {level}
+                      </SelectItem>
+                    ))
+                  : null}
+              </SelectContent>
+            </Select>
+          </FilterBox>
+          <FilterBox label="Type">
+            <Select
+              value={filters.type || ALL_TYPES_VALUE}
+              onValueChange={(value) =>
+                onFilterChange({
+                  ...filters,
+                  type: value === ALL_TYPES_VALUE ? "" : String(value ?? ""),
+                })
+              }
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL_TYPES_VALUE}>All types</SelectItem>
+                {facets?.types.map((type) => (
+                  <SelectItem key={type} value={type}>
+                    {type}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </FilterBox>
@@ -139,6 +190,17 @@ export function StudioToolbar({
                     {file.name}
                   </SelectItem>
                 ))}
+              </SelectContent>
+            </Select>
+          </FilterBox>
+          <FilterBox icon={<LayoutPanelTop className="size-3.5" />} label="View">
+            <Select value={grouping} onValueChange={(value) => onGroupingChange(value as StudioGroupingMode)}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="grouped">Grouped</SelectItem>
+                <SelectItem value="flat">Flat</SelectItem>
               </SelectContent>
             </Select>
           </FilterBox>
@@ -172,6 +234,7 @@ export function StudioToolbar({
 
 const ALL_LEVELS_VALUE = "__all-levels__";
 const ALL_FILES_VALUE = "__all-files__";
+const ALL_TYPES_VALUE = "__all-types__";
 
 function FilterBox({
   children,
@@ -263,9 +326,8 @@ function DateFilterPicker({
         <Calendar
           mode="single"
           selected={selectedDate}
-          defaultMonth={selectedDate}
-          onSelect={(date) => {
-            onChange(toCalendarFilterValue(date, boundary));
+          onSelect={(nextDate) => {
+            onChange(toCalendarFilterValue(nextDate ?? null, boundary));
             setOpen(false);
           }}
         />

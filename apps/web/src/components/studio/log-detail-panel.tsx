@@ -1,4 +1,5 @@
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import type { StudioRecord } from "@/lib/studio";
 import { formatDateTime, getLevelClasses } from "@/lib/studio";
@@ -12,9 +13,10 @@ import { TruncatedPath } from "./truncated-path";
 
 interface LogDetailPanelProps {
   record: StudioRecord | null;
+  onDescribeWithAi?(): void;
 }
 
-export function LogDetailPanel({ record }: LogDetailPanelProps) {
+export function LogDetailPanel({ record, onDescribeWithAi }: LogDetailPanelProps) {
   if (!record) {
     return (
       <EmptyState
@@ -35,6 +37,13 @@ export function LogDetailPanel({ record }: LogDetailPanelProps) {
             </div>
           }
           description={formatDateTime(record.timestamp)}
+          action={
+            onDescribeWithAi ? (
+              <Button variant="secondary" size="xs" onClick={onDescribeWithAi}>
+                Describe with AI
+              </Button>
+            ) : null
+          }
         />
         <CardContent className="space-y-4 min-w-0">
           <MetaList

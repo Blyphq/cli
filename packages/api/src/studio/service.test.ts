@@ -5,16 +5,30 @@ import path from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
+import { __setGenerateTextForTests } from "./assistant-provider";
 import { discoverStudioConfig } from "./config";
 import { discoverLogFiles } from "./logs";
 import { resolveStudioProject } from "./project";
 import { queryLogs } from "./query";
-import { getStudioConfig, getStudioFiles, getStudioLogs, getStudioMeta } from "./service";
+import {
+  describeStudioSelection,
+  getStudioAssistantStatus,
+  getStudioConfig,
+  getStudioFacets,
+  getStudioFiles,
+  getStudioGroup,
+  getStudioLogs,
+  getStudioMeta,
+  replyWithStudioAssistant,
+} from "./service";
 
 const tempDirs: string[] = [];
 
 afterEach(async () => {
   delete process.env.BLYPQ_STUDIO_TARGET;
+  delete process.env.OPENROUTER_API_KEY;
+  delete process.env.OPENROUTER_MODEL;
+  __setGenerateTextForTests(null);
 
   await Promise.all(
     tempDirs.splice(0).map((directory) => rm(directory, { recursive: true, force: true })),
@@ -173,6 +187,110 @@ describe("studio log discovery and queries", () => {
     expect(malformed.records[0]?.malformed).toBe(true);
   });
 
+  it("groups structured logs, supports type filtering, and returns facets", async () => {
+    const projectDir = await createProject();
+    const logDir = path.join(projectDir, "logs");
+
+    await mkdir(logDir, { recursive: true });
+    await writeFile(
+      path.join(logDir, "log.ndjson"),
+      [
+        createLogLine({
+          timestamp: "2026-03-13T10:00:00.000Z",
+          level: "info",
+          message: "checkout started",
+          type: "checkout_flow",
+          groupId: "checkout-1",
+          events: ["start"],
+        }),
+        createLogLine({
+          timestamp: "2026-03-13T10:00:01.000Z",
+          level: "error",
+          message: "checkout failed",
+          type: "checkout_flow",
+          groupId: "checkout-1",
+          events: ["error"],
+        }),
+        createLogLine({
+          timestamp: "2026-03-13T10:00:05.000Z",
+          level: "info",
+          message: "plain log",
+          type: "plain_log",
+        }),
+      ].join(""),
+    );
+
+    const grouped = await getStudioLogs({
+      projectPath: projectDir,
+      limit: 50,
+      grouping: "grouped",
+    });
+
+    expect(grouped.entries.some((entry) => entry.kind === "structured-group")).toBe(true);
+
+    const flat = await getStudioLogs({
+      projectPath: projectDir,
+      limit: 50,
+      grouping: "flat",
+      type: "checkout_flow",
+    });
+
+    expect(flat.records).toHaveLength(2);
+    expect(flat.entries.every((entry) => entry.kind === "record")).toBe(true);
+
+    const group = grouped.entries.find((entry) => entry.kind === "structured-group");
+    expect(group?.recordCount).toBe(2);
+
+    const detail = await getStudioGroup({
+      projectPath: projectDir,
+      groupId: group?.id ?? "",
+    });
+
+    expect(detail?.records).toHaveLength(2);
+
+    const facets = await getStudioFacets({ projectPath: projectDir });
+    expect(facets.types).toEqual(["checkout_flow", "plain_log"]);
+    expect(facets.levels).toEqual(["error", "info"]);
+  });
+
+  it("creates heuristic structured groups when explicit ids are missing", async () => {
+    const projectDir = await createProject();
+    const logDir = path.join(projectDir, "logs");
+
+    await mkdir(logDir, { recursive: true });
+    await writeFile(
+      path.join(logDir, "log.ndjson"),
+      [
+        createLogLine({
+          timestamp: "2026-03-13T10:00:00.000Z",
+          level: "info",
+          message: "pipeline step one",
+          type: "pipeline_run",
+          caller: "worker",
+          events: ["step-1"],
+        }),
+        createLogLine({
+          timestamp: "2026-03-13T10:00:01.000Z",
+          level: "info",
+          message: "pipeline step two",
+          type: "pipeline_run",
+          caller: "worker",
+          events: ["step-2"],
+        }),
+      ].join(""),
+    );
+
+    const grouped = await getStudioLogs({
+      projectPath: projectDir,
+      limit: 50,
+      grouping: "grouped",
+    });
+
+    const group = grouped.entries.find((entry) => entry.kind === "structured-group");
+    expect(group?.groupingReason).toBe("heuristic");
+    expect(group?.recordCount).toBe(2);
+  });
+
   it("marks queries truncated when scan budgets are exceeded", async () => {
     const projectDir = await createProject();
     const logDir = path.join(projectDir, "logs");
@@ -233,6 +351,71 @@ describe("studio service", () => {
     });
 
     expect(page.records[0]?.message).toBe("hello");
+  });
+
+  it("reports assistant status and returns mocked assistant replies", async () => {
+    const projectDir = await createProject();
+    const logDir = path.join(projectDir, "logs");
+
+    await mkdir(logDir, { recursive: true });
+    await writeFile(
+      path.join(logDir, "log.ndjson"),
+      [
+        createLogLine({
+          timestamp: "2026-03-13T10:00:00.000Z",
+          level: "error",
+          message: "checkout failed",
+          type: "checkout_flow",
+          groupId: "checkout-1",
+          events: ["error"],
+        }),
+        createLogLine({
+          timestamp: "2026-03-13T10:00:01.000Z",
+          level: "info",
+          message: "checkout retry scheduled",
+          type: "checkout_flow",
+          groupId: "checkout-1",
+          events: ["retry"],
+        }),
+      ].join(""),
+    );
+
+    expect((await getStudioAssistantStatus(projectDir)).enabled).toBe(false);
+
+    process.env.OPENROUTER_API_KEY = "test-key";
+    process.env.OPENROUTER_MODEL = "openai/gpt-5.4";
+
+    __setGenerateTextForTests(
+      async () => ({
+        text: "This looks like a failed checkout sequence with a follow-up retry.",
+      }),
+    );
+
+    const grouped = await getStudioLogs({
+      projectPath: projectDir,
+      grouping: "grouped",
+      limit: 50,
+    });
+    const selectedGroup = grouped.entries.find((entry) => entry.kind === "structured-group");
+
+    const reply = await replyWithStudioAssistant({
+      projectPath: projectDir,
+      history: [{ role: "user", content: "What happened here?" }],
+      filters: {},
+      selectedGroupId: selectedGroup?.id,
+    });
+
+    expect(reply.content).toContain("failed checkout");
+    expect(reply.references.length).toBeGreaterThan(0);
+
+    const description = await describeStudioSelection({
+      projectPath: projectDir,
+      history: [],
+      filters: {},
+      selectedGroupId: selectedGroup?.id,
+    });
+
+    expect(description.references.some((reference) => reference.kind === "group")).toBe(true);
   });
 });
 

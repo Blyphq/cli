@@ -8,6 +8,13 @@ export type StudioFiles = RouterOutputs["studio"]["files"];
 export type StudioFile = StudioFiles["files"][number];
 export type StudioLogsPage = RouterOutputs["studio"]["logs"];
 export type StudioRecord = StudioLogsPage["records"][number];
+export type StudioLogEntry = StudioLogsPage["entries"][number];
+export type StudioGroupDetail = NonNullable<RouterOutputs["studio"]["group"]>;
+export type StudioFacets = RouterOutputs["studio"]["facets"];
+export type StudioAssistantStatus = RouterOutputs["studio"]["assistantStatus"];
+export type StudioAssistantMessage = RouterOutputs["studio"]["assistantReply"];
+export type StudioAssistantReference = StudioAssistantMessage["references"][number];
+export type StudioGroupingMode = "grouped" | "flat";
 export type StudioBadgeVariant =
   | "default"
   | "secondary"
@@ -15,8 +22,14 @@ export type StudioBadgeVariant =
   | "outline"
   | "destructive";
 
+export type StudioSelection =
+  | { kind: "record"; id: string }
+  | { kind: "group"; id: string }
+  | null;
+
 export interface StudioFilters {
   level: string;
+  type: string;
   search: string;
   fileId: string;
   from: string;
@@ -93,35 +106,6 @@ export function formatCalendarDate(value: Date | null | undefined): string {
     day: "numeric",
     year: "numeric",
   }).format(value);
-}
-
-export function toDatetimeInputValue(value: string | null | undefined): string {
-  if (!value) {
-    return "";
-  }
-
-  const parsed = new Date(value);
-
-  if (Number.isNaN(parsed.getTime())) {
-    return "";
-  }
-
-  const offsetMs = parsed.getTimezoneOffset() * 60 * 1000;
-  return new Date(parsed.getTime() - offsetMs).toISOString().slice(0, 16);
-}
-
-export function fromDatetimeInputValue(value: string): string | undefined {
-  if (!value) {
-    return undefined;
-  }
-
-  const parsed = new Date(value);
-
-  if (Number.isNaN(parsed.getTime())) {
-    return undefined;
-  }
-
-  return parsed.toISOString();
 }
 
 export function toCalendarFilterValue(
@@ -211,6 +195,53 @@ export function getFileStreamBadgeVariant(
   }
 }
 
+export function getSourceBadgeVariant(
+  source: StudioRecord["source"],
+): StudioBadgeVariant {
+  switch (source) {
+    case "http":
+      return "outline";
+    case "structured":
+      return "secondary";
+    case "client":
+      return "default";
+    case "unknown":
+      return "muted";
+    default:
+      return "muted";
+  }
+}
+
+export function getAssistantStatusLabel(status: StudioAssistantStatus): string {
+  if (status.enabled) {
+    return status.model ?? "Configured";
+  }
+
+  switch (status.reason) {
+    case "missing_api_key":
+      return "Missing OPENROUTER_API_KEY";
+    case "missing_model":
+      return "Missing AI model";
+    default:
+      return "Unavailable";
+  }
+}
+
+export function getGroupingReasonLabel(reason: StudioGroupDetail["group"]["groupingReason"]): string {
+  switch (reason) {
+    case "explicit-group-id":
+      return "groupId";
+    case "request-id":
+      return "requestId";
+    case "correlation-id":
+      return "correlationId";
+    case "trace-id":
+      return "traceId";
+    case "heuristic":
+      return "Heuristic";
+  }
+}
+
 export function stringifyJson(value: unknown): string {
   try {
     return JSON.stringify(value, null, 2);
@@ -244,4 +275,16 @@ export function buildHttpPreview(record: StudioRecord): string {
   ]
     .filter((line, index, lines) => line !== "" || lines[index - 1] !== "")
     .join("\n");
+}
+
+export function isGroupEntry(
+  entry: StudioLogEntry,
+): entry is Extract<StudioLogEntry, { kind: "structured-group" }> {
+  return entry.kind === "structured-group";
+}
+
+export function isRecordEntry(
+  entry: StudioLogEntry,
+): entry is Extract<StudioLogEntry, { kind: "record" }> {
+  return entry.kind === "record";
 }

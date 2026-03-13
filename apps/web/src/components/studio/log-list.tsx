@@ -2,42 +2,46 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import type { StudioRecord } from "@/lib/studio";
+import type { StudioLogEntry, StudioSelection } from "@/lib/studio";
+import { isGroupEntry } from "@/lib/studio";
 
 import { EmptyState } from "./empty-state";
+import { GroupSummaryRow } from "./group-summary-row";
 import { LogRow } from "./log-row";
 import { PanelHeader } from "./panel-header";
 
 interface LogListProps {
-  records: StudioRecord[];
-  selectedId: string | null;
+  entries: StudioLogEntry[];
+  selection: StudioSelection;
   offset: number;
   limit: number;
+  totalEntries: number;
   totalMatched: number;
   truncated: boolean;
   loading: boolean;
-  onSelect(recordId: string): void;
+  onSelect(selection: StudioSelection): void;
   onPageChange(nextOffset: number): void;
 }
 
 export function LogList({
-  records,
-  selectedId,
+  entries,
+  selection,
   offset,
   limit,
+  totalEntries,
   totalMatched,
   truncated,
   loading,
   onSelect,
   onPageChange,
 }: LogListProps) {
-  const summary = `${loading ? "Loading logs..." : `${totalMatched} matching records`}${truncated ? " (scan limit reached)" : ""}`;
+  const summary = `${loading ? "Loading logs..." : `${totalEntries} visible entries from ${totalMatched} matching logs`}${truncated ? " (scan limit reached)" : ""}`;
 
-  if (!loading && records.length === 0) {
+  if (!loading && entries.length === 0) {
     return (
       <EmptyState
         title="No log records matched"
-        description="Try a different file, level, or search term."
+        description="Try a different file, type, level, or search term."
       />
     );
   }
@@ -57,31 +61,50 @@ export function LogList({
               </tr>
             </thead>
             <tbody>
-              {records.map((record) => (
-                <LogRow
-                  key={record.id}
-                  record={record}
-                  selected={record.id === selectedId}
-                  onSelect={onSelect}
-                />
-              ))}
+              {entries.map((entry) =>
+                isGroupEntry(entry) ? (
+                  <GroupSummaryRow
+                    key={entry.id}
+                    group={entry}
+                    selected={selection?.kind === "group" && selection.id === entry.id}
+                    onSelect={(groupId) => onSelect({ kind: "group", id: groupId })}
+                  />
+                ) : (
+                  <LogRow
+                    key={entry.id}
+                    record={entry}
+                    selected={selection?.kind === "record" && selection.id === entry.id}
+                    onSelect={(recordId) => onSelect({ kind: "record", id: recordId })}
+                  />
+                ),
+              )}
             </tbody>
           </table>
         </div>
         <div className="divide-y divide-border/60 lg:hidden">
-          {records.map((record) => (
-            <LogRow
-              key={record.id}
-              record={record}
-              selected={record.id === selectedId}
-              onSelect={onSelect}
-              variant="mobile"
-            />
-          ))}
+          {entries.map((entry) =>
+            isGroupEntry(entry) ? (
+              <GroupSummaryRow
+                key={entry.id}
+                group={entry}
+                selected={selection?.kind === "group" && selection.id === entry.id}
+                onSelect={(groupId) => onSelect({ kind: "group", id: groupId })}
+                variant="mobile"
+              />
+            ) : (
+              <LogRow
+                key={entry.id}
+                record={entry}
+                selected={selection?.kind === "record" && selection.id === entry.id}
+                onSelect={(recordId) => onSelect({ kind: "record", id: recordId })}
+                variant="mobile"
+              />
+            ),
+          )}
         </div>
         <div className="flex flex-col gap-3 border-t border-border/60 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="text-xs text-muted-foreground">
-            Showing {offset + 1}-{Math.min(offset + records.length, totalMatched)} of {totalMatched}
+            Showing {offset + 1}-{Math.min(offset + entries.length, totalEntries)} of {totalEntries}
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Button
@@ -96,7 +119,7 @@ export function LogList({
             <Button
               variant="outline"
               size="sm"
-              disabled={offset + limit >= totalMatched}
+              disabled={offset + limit >= totalEntries}
               onClick={() => onPageChange(offset + limit)}
             >
               Next

@@ -2,6 +2,14 @@ export type StudioConfigFileType = "json" | "jiti";
 export type StudioLogFileKind = "active" | "archive";
 export type StudioLogStream = "combined" | "error" | "unknown";
 export type StudioRecordSource = "server" | "client" | "structured" | "http" | "unknown";
+export type StudioGroupingMode = "flat" | "grouped";
+export type StudioGroupingReason =
+  | "explicit-group-id"
+  | "request-id"
+  | "correlation-id"
+  | "trace-id"
+  | "heuristic";
+export type StudioAssistantRole = "user" | "assistant";
 
 export interface StudioProjectResolution {
   requestedPath: string | null;
@@ -36,6 +44,14 @@ export interface StudioLogFileSummary {
 export interface StudioClientLoggingSummary {
   enabled: boolean;
   path: string;
+}
+
+export interface StudioAiSummary {
+  apiKeyConfigured: boolean;
+  apiKeySource: "process-env" | "project-env" | "config" | "missing";
+  model: string | null;
+  modelSource: "config" | "project-env" | "process-env" | "missing";
+  enabled: boolean;
 }
 
 export interface StudioResolvedPostHogErrorTrackingSummary {
@@ -89,6 +105,7 @@ export interface StudioResolvedConfigSummary {
   logDir: string;
   file: StudioLogFileSummary;
   clientLogging: StudioClientLoggingSummary;
+  ai: StudioAiSummary;
   connectors: StudioResolvedConnectorsSummary;
 }
 
@@ -154,25 +171,106 @@ export interface StudioNormalizedRecord {
   raw: unknown;
 }
 
+export type StudioNormalizedRecordListItem = StudioNormalizedRecord & {
+  kind: "record";
+};
+
+export interface StudioStructuredGroupSummary {
+  kind: "structured-group";
+  id: string;
+  groupKey: string;
+  groupingReason: StudioGroupingReason;
+  title: string;
+  type: string | null;
+  source: "structured";
+  recordCount: number;
+  matchedRecordCount: number;
+  timestampStart: string | null;
+  timestampEnd: string | null;
+  levelSummary: string[];
+  fileIds: string[];
+  fileNames: string[];
+  representativeRecordId: string;
+  previewMessages: string[];
+}
+
+export interface StudioStructuredGroupDetail {
+  group: StudioStructuredGroupSummary;
+  records: StudioNormalizedRecord[];
+}
+
+export type StudioLogListEntry = StudioNormalizedRecordListItem | StudioStructuredGroupSummary;
+
 export interface StudioLogsQueryInput {
   projectPath?: string;
   limit?: number;
   offset?: number;
   level?: string;
+  type?: string;
   search?: string;
   fileId?: string;
   from?: string;
   to?: string;
+  grouping?: StudioGroupingMode;
 }
 
 export interface StudioLogsPage {
   records: StudioNormalizedRecord[];
+  entries: StudioLogListEntry[];
   totalMatched: number;
+  totalEntries: number;
   scannedRecords: number;
   returnedCount: number;
   offset: number;
   limit: number;
   truncated: boolean;
+}
+
+export interface StudioLogFacets {
+  types: string[];
+  sources: StudioRecordSource[];
+  levels: string[];
+}
+
+export interface StudioAssistantHistoryItem {
+  role: StudioAssistantRole;
+  content: string;
+}
+
+export interface StudioAssistantReference {
+  kind: "record" | "group";
+  id: string;
+  label: string;
+  fileName: string | null;
+  timestamp: string | null;
+  reason: string;
+}
+
+export interface StudioAssistantStatus {
+  enabled: boolean;
+  provider: "openrouter";
+  model: string | null;
+  apiKeySource: StudioAiSummary["apiKeySource"];
+  modelSource: StudioAiSummary["modelSource"];
+  reason: "missing_api_key" | "missing_model" | null;
+}
+
+export interface StudioAssistantMessage {
+  id: string;
+  role: "assistant";
+  content: string;
+  references: StudioAssistantReference[];
+}
+
+export interface StudioAssistantReplyInput {
+  projectPath?: string;
+  history: StudioAssistantHistoryItem[];
+  filters: Pick<
+    StudioLogsQueryInput,
+    "level" | "search" | "fileId" | "from" | "to" | "type"
+  >;
+  selectedRecordId?: string;
+  selectedGroupId?: string;
 }
 
 export interface StudioMeta {

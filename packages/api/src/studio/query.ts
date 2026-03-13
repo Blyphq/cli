@@ -1,6 +1,13 @@
-import type { StudioLogDiscovery, StudioLogsPage, StudioLogsQueryInput, StudioNormalizedRecord } from "./types";
+import { buildLogEntries } from "./grouping";
 import { normalizeRecord, serializeForSearch } from "./normalize";
 import { readLogFileText } from "./logs";
+
+import type {
+  StudioLogDiscovery,
+  StudioLogsPage,
+  StudioLogsQueryInput,
+  StudioNormalizedRecord,
+} from "./types";
 
 const DEFAULT_LIMIT = 100;
 const MAX_LIMIT = 500;
@@ -21,13 +28,45 @@ export async function queryLogs({
   const candidateFiles = input.fileId
     ? files.filter((file) => file.id === input.fileId)
     : files;
+  const loaded = await loadNormalizedRecords(candidateFiles);
+  const allRecords = loaded.records.slice().sort(compareRecordsDescending);
+  const matchedRecords = filterRecords(allRecords, input).sort(compareRecordsDescending);
+  const grouping = input.grouping ?? "grouped";
+  const { entries } = buildLogEntries(matchedRecords, allRecords, grouping);
+  const pagedEntries = entries.slice(offset, offset + limit);
+  const pagedRecordIds = new Set(
+    pagedEntries.flatMap((entry) =>
+      entry.kind === "record" ? [entry.id] : [entry.representativeRecordId],
+    ),
+  );
+  const pagedRecords = matchedRecords.filter((record) => pagedRecordIds.has(record.id));
 
+  return {
+    records: pagedRecords,
+    entries: pagedEntries,
+    totalMatched: matchedRecords.length,
+    totalEntries: entries.length,
+    scannedRecords: loaded.scannedRecords,
+    returnedCount: pagedEntries.length,
+    offset,
+    limit,
+    truncated: loaded.truncated,
+  };
+}
+
+export async function loadNormalizedRecords(
+  files: StudioLogDiscovery["files"],
+): Promise<{
+  records: StudioNormalizedRecord[];
+  scannedRecords: number;
+  truncated: boolean;
+}> {
   let scannedRecords = 0;
   let consumedBytes = 0;
   let truncated = false;
   const normalized: StudioNormalizedRecord[] = [];
 
-  for (const file of candidateFiles) {
+  for (const file of files) {
     if (scannedRecords >= MAX_SCANNED_RECORDS || consumedBytes >= MAX_DECOMPRESSED_BYTES) {
       truncated = true;
       break;
@@ -56,34 +95,33 @@ export async function queryLogs({
 
       const rawLine = lines[index]!;
       const parsed = parseJsonLine(rawLine);
-      const record = normalizeRecord({
-        file,
-        lineNumber: index + 1,
-        rawLine,
-        parsed,
-      });
-
+      normalized.push(
+        normalizeRecord({
+          file,
+          lineNumber: index + 1,
+          rawLine,
+          parsed,
+        }),
+      );
       scannedRecords += 1;
-
-      if (matchesFilters(record, input)) {
-        normalized.push(record);
-      }
     }
   }
 
-  normalized.sort(compareRecordsDescending);
-
-  const records = normalized.slice(offset, offset + limit);
-
   return {
-    records,
-    totalMatched: normalized.length,
+    records: normalized,
     scannedRecords,
-    returnedCount: records.length,
-    offset,
-    limit,
     truncated,
   };
+}
+
+export function filterRecords(
+  records: StudioNormalizedRecord[],
+  input: Pick<
+    StudioLogsQueryInput,
+    "level" | "type" | "search" | "fileId" | "from" | "to"
+  >,
+): StudioNormalizedRecord[] {
+  return records.filter((record) => matchesFilters(record, input));
 }
 
 function clampLimit(limit: number | undefined): number {
@@ -98,8 +136,25 @@ function parseJsonLine(line: string): unknown {
   }
 }
 
-function matchesFilters(record: StudioNormalizedRecord, input: StudioLogsQueryInput): boolean {
+function matchesFilters(
+  record: StudioNormalizedRecord,
+  input: Pick<
+    StudioLogsQueryInput,
+    "level" | "type" | "search" | "fileId" | "from" | "to"
+  >,
+): boolean {
+  if (input.fileId && record.fileId !== input.fileId) {
+    return false;
+  }
+
   if (input.level && record.level.toLowerCase() !== input.level.toLowerCase()) {
+    return false;
+  }
+
+  if (
+    input.type &&
+    (!record.type || record.type.toLowerCase() !== input.type.toLowerCase())
+  ) {
     return false;
   }
 
@@ -107,7 +162,11 @@ function matchesFilters(record: StudioNormalizedRecord, input: StudioLogsQueryIn
     const fromTimestamp = Date.parse(input.from);
     const recordTimestamp = record.timestamp ? Date.parse(record.timestamp) : Number.NaN;
 
-    if (!Number.isNaN(fromTimestamp) && !Number.isNaN(recordTimestamp) && recordTimestamp < fromTimestamp) {
+    if (
+      !Number.isNaN(fromTimestamp) &&
+      !Number.isNaN(recordTimestamp) &&
+      recordTimestamp < fromTimestamp
+    ) {
       return false;
     }
   }
@@ -116,7 +175,11 @@ function matchesFilters(record: StudioNormalizedRecord, input: StudioLogsQueryIn
     const toTimestamp = Date.parse(input.to);
     const recordTimestamp = record.timestamp ? Date.parse(record.timestamp) : Number.NaN;
 
-    if (!Number.isNaN(toTimestamp) && !Number.isNaN(recordTimestamp) && recordTimestamp > toTimestamp) {
+    if (
+      !Number.isNaN(toTimestamp) &&
+      !Number.isNaN(recordTimestamp) &&
+      recordTimestamp > toTimestamp
+    ) {
       return false;
     }
   }
