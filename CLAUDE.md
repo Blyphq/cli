@@ -34,9 +34,12 @@ This file provides context about the project for AI assistants.
 ```
 blyp-cli/
 ├── apps/
-│   ├── web/         # Frontend application
+│   └── web/         # Frontend application
 ├── packages/
 │   ├── api/         # API layer
+│   ├── cli/         # blyphq CLI
+│   ├── config/      # Shared config
+│   └── env/         # Environment utilities
 ```
 
 ## Common Commands

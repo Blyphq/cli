@@ -8,7 +8,7 @@ import { getDefaultCwd } from "./lib/runtime.js";
 
 import type { CommandContext } from "./types.js";
 
-async function main(argv: readonly string[]): Promise<void> {
+async function main(argv: readonly string[]): Promise<boolean> {
   const [commandName, ...commandArgs] = argv;
   const command = resolveCommand(commandName);
 
@@ -16,7 +16,7 @@ async function main(argv: readonly string[]): Promise<void> {
     showError(`Unknown command: ${commandName ?? "(empty)"}`);
     showNote("Usage", buildHelpText(commandRegistry));
     process.exitCode = 1;
-    return;
+    return false;
   }
 
   const context: CommandContext = {
@@ -25,15 +25,16 @@ async function main(argv: readonly string[]): Promise<void> {
   };
 
   await command.run(context);
+  return true;
 }
 
 async function run(): Promise<void> {
   showIntro();
 
   try {
-    await main(process.argv.slice(2));
+    const success = await main(process.argv.slice(2));
 
-    if (process.exitCode && process.exitCode !== 0) {
+    if (!success || (process.exitCode !== undefined && process.exitCode !== 0)) {
       return;
     }
 

@@ -29,6 +29,14 @@ export const studioCommand: CommandDefinition = {
   usage: "blyphq studio [targetPath]",
   async run(context: CommandContext): Promise<void> {
     const targetProjectPath = path.resolve(context.cwd, context.argv[0] ?? context.cwd);
+
+    const relativeToCwd = path.relative(context.cwd, targetProjectPath);
+    if (relativeToCwd.startsWith("..") || path.isAbsolute(relativeToCwd)) {
+      throw new CliError(
+        "The target path must be inside the current directory. Path traversal (e.g. ..) is not allowed.",
+      );
+    }
+
     const workspaceRoot = await resolveWorkspaceRoot(context.cwd);
 
     if (!workspaceRoot) {

@@ -8,6 +8,8 @@ import {
   type MutableRefObject,
 } from "react";
 
+import { useMediaQuery } from "@/hooks/use-media-query";
+
 import { Bot, Plus, X } from "lucide-react";
 
 import { AssistantPanel } from "@/components/studio/assistant-panel";
@@ -49,6 +51,7 @@ interface AssistantSheetProps {
   model: string;
   statusState: StudioChatStatus;
   canDescribeSelection: boolean;
+  canEdit: boolean;
   scopeLabel: string;
   status: StudioAssistantStatus | undefined;
   onCreateChat(): void;
@@ -73,6 +76,7 @@ export function AssistantSheet({
   model,
   statusState,
   canDescribeSelection,
+  canEdit,
   scopeLabel,
   status,
   onCreateChat,
@@ -153,6 +157,7 @@ export function AssistantSheet({
   const sharedPanel = (
     <AssistantPanel
       canDescribeSelection={canDescribeSelection}
+      canEdit={canEdit}
       chatError={chatError}
       draft={draft}
       messages={messages}
@@ -375,41 +380,6 @@ function MobileAssistantChrome({
       </div>
     </div>
   );
-}
-
-function useMediaQuery(query: string) {
-  const [matches, setMatches] = useState(() => {
-    if (typeof window === "undefined") {
-      return false;
-    }
-
-    return window.matchMedia(query).matches;
-  });
-
-  useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-
-    const mediaQuery = window.matchMedia(query);
-    const legacyMediaQuery = mediaQuery as MediaQueryList & {
-      addListener?: (listener: (event: MediaQueryListEvent) => void) => void;
-      removeListener?: (listener: (event: MediaQueryListEvent) => void) => void;
-    };
-    const handleChange = () => setMatches(mediaQuery.matches);
-
-    handleChange();
-
-    if ("addEventListener" in mediaQuery) {
-      mediaQuery.addEventListener("change", handleChange);
-      return () => mediaQuery.removeEventListener("change", handleChange);
-    }
-
-    legacyMediaQuery.addListener?.(handleChange);
-    return () => legacyMediaQuery.removeListener?.(handleChange);
-  }, [query]);
-
-  return matches;
 }
 
 function clearCollapseTimer(timeoutRef: MutableRefObject<number | null>) {

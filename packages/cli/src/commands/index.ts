@@ -2,12 +2,14 @@ import type { CommandDefinition } from "../types.js";
 import { createHelpCommand } from "./help.js";
 import { healthCommand } from "./health.js";
 import { studioCommand } from "./studio.js";
+import { versionCommand } from "./version.js";
 
 const baseCommands = [studioCommand, healthCommand] as const;
 
 export const commandRegistry: readonly CommandDefinition[] = [
   ...baseCommands,
   createHelpCommand(baseCommands),
+  versionCommand,
 ];
 
 export function resolveCommand(name: string | undefined): CommandDefinition | null {
@@ -17,6 +19,10 @@ export function resolveCommand(name: string | undefined): CommandDefinition | nu
 
   if (name === "-h" || name === "--help") {
     return commandRegistry.find((command) => command.name === "help") ?? null;
+  }
+
+  if (name === "-V" || name === "--version") {
+    return commandRegistry.find((command) => command.name === "version") ?? null;
   }
 
   return (

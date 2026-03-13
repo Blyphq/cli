@@ -8,14 +8,17 @@ import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 
 import { Toaster } from "@/components/ui/sonner";
 
-import Header from "../components/header";
+import { RootErrorBoundary } from "../components/root-error-boundary";
+import { Header } from "../components/header";
 import appCss from "../index.css?url";
+
 export interface RouterAppContext {
   trpc: TRPCOptionsProxy<AppRouter>;
   queryClient: QueryClient;
 }
 
 export const Route = createRootRouteWithContext<RouterAppContext>()({
+  errorComponent: RootErrorBoundary,
   head: () => ({
     meta: [
       {
@@ -53,8 +56,12 @@ function RootDocument() {
         </div>
         <Toaster richColors />
 
-        <TanStackRouterDevtools position="bottom-left" />
-        <ReactQueryDevtools position="bottom" buttonPosition="bottom-right" />
+        {import.meta.env.DEV && (
+          <>
+            <TanStackRouterDevtools position="bottom-left" />
+            <ReactQueryDevtools position="bottom" buttonPosition="bottom-right" />
+          </>
+        )}
         <Scripts />
       </body>
     </html>

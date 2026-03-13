@@ -33,6 +33,7 @@ interface AssistantPanelProps {
   model: string;
   statusState: StudioChatStatus;
   canDescribeSelection: boolean;
+  canEdit: boolean;
   scopeLabel: string;
   status: StudioAssistantStatus | undefined;
   textareaRef?: Ref<HTMLTextAreaElement>;
@@ -52,6 +53,7 @@ export function AssistantPanel({
   model,
   statusState,
   canDescribeSelection,
+  canEdit,
   scopeLabel,
   status,
   textareaRef,
@@ -121,7 +123,7 @@ export function AssistantPanel({
               Model
             </div>
             <Select value={model} onValueChange={(value) => onModelChange(value ?? "")}>
-              <SelectTrigger>
+              <SelectTrigger disabled={!canEdit}>
                 <SelectValue placeholder="Choose a model" />
               </SelectTrigger>
               <SelectContent>
@@ -216,6 +218,7 @@ export function AssistantPanel({
         <textarea
           ref={textareaRef}
           value={draft}
+          disabled={!canEdit}
           onChange={(event) => onDraftChange(event.currentTarget.value)}
           placeholder="Ask about these logs, recurring patterns, or what to inspect next."
           className={cn(

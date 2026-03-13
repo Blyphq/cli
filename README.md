@@ -25,7 +25,24 @@ Then, run the development server:
 bun run dev
 ```
 
-Open [http://localhost:3001](http://localhost:3001) in your browser to see the fullstack application.
+Open [http://localhost:3003](http://localhost:3003) in your browser to see the fullstack application.
+
+## CLI
+
+The `blyphq` CLI provides local workflow commands:
+
+- **`blyphq studio [targetPath]`** - Start or manage the local Studio workflow. Optionally pass a project path; defaults to the current directory. The Studio web app runs at [http://localhost:3003](http://localhost:3003).
+- **`blyphq health`** - Print basic runtime and workspace diagnostics.
+- **`blyphq help`** or **`blyphq -h`** / **`blyphq --help`** - Show available commands and usage.
+- **`blyphq --version`** or **`blyphq -V`** - Print CLI version.
+
+To run the CLI from the repo without installing:
+
+```bash
+bun run cli -- <command>
+```
+
+**Note:** Project config files (`blyp.config.*`) are executed as code in the CLI process. Use only trusted configuration.
 
 ## Project Structure
 
@@ -35,7 +52,9 @@ blyp-cli/
 │   └── web/         # Fullstack application (React + TanStack Start)
 ├── packages/
 │   ├── api/         # API layer / business logic
-│   └── db/          # Database schema & queries
+│   ├── cli/         # blyphq CLI (studio, health, help, version)
+│   ├── config/      # Shared config utilities
+│   └── env/         # Environment utilities
 ```
 
 ## Available Scripts
@@ -43,3 +62,4 @@ blyp-cli/
 - `bun run dev`: Start all applications in development mode
 - `bun run build`: Build all applications
 - `bun run check-types`: Check TypeScript types across all apps
+- `bun run cli`: Run the CLI from source (`bun run cli -- studio`)
