@@ -5,6 +5,7 @@ import { publicProcedure, router } from "../index";
 import { StudioAssistantDisabledError } from "../studio/assistant-provider";
 import {
   describeStudioSelection,
+  generateStudioChatTitle,
   getStudioAssistantStatus,
   getStudioConfig,
   getStudioFacets,
@@ -111,6 +112,20 @@ export const studioRouter = router({
   assistantStatus: publicProcedure
     .input(z.object({ projectPath: z.string().optional() }).optional())
     .query(({ input }) => getStudioAssistantStatus(input?.projectPath)),
+  generateChatTitle: publicProcedure
+    .input(
+      z.object({
+        projectPath: z.string().optional(),
+        prompt: z.string().min(1),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      try {
+        return await generateStudioChatTitle(input);
+      } catch (error) {
+        throw toAssistantTrpcError(error);
+      }
+    }),
   assistantReply: publicProcedure
     .input(assistantInput)
     .mutation(async ({ input }) => {

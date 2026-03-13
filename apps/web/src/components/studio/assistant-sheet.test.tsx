@@ -2,6 +2,7 @@
 
 import "@testing-library/jest-dom/vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type {
@@ -55,6 +56,28 @@ describe("AssistantSheet", () => {
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 
+  it("renders the chat switcher and new chat action", async () => {
+    mockMatchMedia(true);
+    const onCreateChat = vi.fn();
+    const onSelectChat = vi.fn();
+    const user = userEvent.setup();
+
+    render(
+      <TestAssistantSheet
+        open
+        onCreateChat={onCreateChat}
+        onSelectChat={onSelectChat}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: /new chat/i })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /new chat/i }));
+    expect(onCreateChat).toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("combobox", { name: /choose chat/i }));
+    fireEvent.click(screen.getByRole("option", { name: /current filters chat/i }));
+    expect(onSelectChat).toHaveBeenCalledWith("chat-1");
+  });
+
   it("renders setup guidance when disabled", () => {
     mockMatchMedia(true);
 
@@ -80,30 +103,44 @@ describe("AssistantSheet", () => {
 function TestAssistantSheet({
   open,
   onOpenChange = vi.fn(),
+  onCreateChat = vi.fn(),
+  onSelectChat = vi.fn(),
   status = enabledStatus(),
   statusState = "ready",
 }: {
   open: boolean;
   onOpenChange?: (next: boolean) => void;
+  onCreateChat?: () => void;
+  onSelectChat?: (chatId: string) => void;
   status?: StudioAssistantStatus;
   statusState?: StudioChatStatus;
 }) {
   return (
     <AssistantSheet
       open={open}
+      activeChatId="chat-1"
       canDescribeSelection
+      chatSessions={[
+        {
+          id: "chat-1",
+          title: "Current filters chat",
+          updatedAt: "2026-03-13T00:00:00.000Z",
+        },
+      ]}
       draft=""
       messages={[] as StudioChatMessage[]}
       model="openai/gpt-5.4"
       scopeLabel="current filters"
       status={status}
       statusState={statusState}
+      onCreateChat={onCreateChat}
       onDescribeSelection={vi.fn()}
       onDraftChange={vi.fn()}
       onModelChange={vi.fn()}
       onOpenChange={onOpenChange}
       onQuickAction={vi.fn()}
       onReferenceSelect={vi.fn()}
+      onSelectChat={onSelectChat}
       onSend={vi.fn()}
       onStop={vi.fn()}
     />

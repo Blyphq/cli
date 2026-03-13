@@ -190,7 +190,7 @@ export function AssistantPanel({
             {messages.length === 0 ? (
               <EmptyState
                 title="No assistant messages yet"
-                description="Ask a question about the current assistant scope to start the conversation."
+                description="Start this chat by asking about the current assistant scope."
                 size="compact"
               />
             ) : (

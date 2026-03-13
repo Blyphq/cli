@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { DefaultChatTransport } from "ai";
 import { useChat } from "@ai-sdk/react";
-import { useDeferredValue, useEffect, useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { z } from "zod";
 
 import { AssistantSheet } from "@/components/studio/assistant-sheet";
@@ -15,6 +15,10 @@ import { LogList } from "@/components/studio/log-list";
 import { ProjectConfigPanel } from "@/components/studio/project-config-panel";
 import { StudioShell } from "@/components/studio/studio-shell";
 import { StudioToolbar } from "@/components/studio/studio-toolbar";
+import {
+  type AssistantScopeMode,
+  useStudioAssistantStore,
+} from "@/lib/studio-assistant-store";
 import type {
   StudioAssistantReference,
   StudioChatMessage,
@@ -22,8 +26,8 @@ import type {
   StudioGroupingMode,
   StudioSelection,
 } from "@/lib/studio";
-import { isGroupEntry } from "@/lib/studio";
-import { useTRPC } from "@/utils/trpc";
+import { getMessageText, isGroupEntry } from "@/lib/studio";
+import { useTRPC, useTRPCClient } from "@/utils/trpc";
 
 export const Route = createFileRoute("/")({
   validateSearch: z.object({
@@ -40,43 +44,66 @@ const DEFAULT_FILTERS: StudioFilters = {
   from: "",
   to: "",
 };
-type AssistantScopeMode = "selection" | "standalone";
 
 function StudioRoute() {
   const trpc = useTRPC();
+  const trpcClient = useTRPCClient();
   const navigate = Route.useNavigate();
   const search = Route.useSearch();
-  const [draftProjectPath, setDraftProjectPath] = useState(search.project ?? "");
+  const projectPath = search.project ?? "";
+  const [draftProjectPath, setDraftProjectPath] = useState(projectPath);
   const [filters, setFilters] = useState<StudioFilters>(DEFAULT_FILTERS);
   const [selection, setSelection] = useState<StudioSelection>(null);
   const [offset, setOffset] = useState(0);
   const [grouping, setGrouping] = useState<StudioGroupingMode>("grouped");
-  const [assistantOpen, setAssistantOpen] = useState(false);
-  const [assistantScopeMode, setAssistantScopeMode] =
-    useState<AssistantScopeMode>("selection");
-  const [assistantDraft, setAssistantDraft] = useState("");
-  const [selectedModel, setSelectedModel] = useState("");
+  const [pendingPrompt, setPendingPrompt] = useState<{
+    chatId: string;
+    content: string;
+    model?: string;
+    mode: "chat" | "describe-selection";
+  } | null>(null);
+  const loadingChatIdRef = useRef<string | null>(null);
+  const titleRequestChatIdRef = useRef<string | null>(null);
   const deferredSearch = useDeferredValue(filters.search);
+  const hasHydrated = useStudioAssistantStore((state) => state.hasHydrated);
+  const workspace = useStudioAssistantStore((state) =>
+    projectPath ? state.workspacesByProject[projectPath] ?? null : null,
+  );
+  const ensureWorkspace = useStudioAssistantStore((state) => state.ensureWorkspace);
+  const createChat = useStudioAssistantStore((state) => state.createChat);
+  const setActiveChat = useStudioAssistantStore((state) => state.setActiveChat);
+  const setAssistantOpen = useStudioAssistantStore((state) => state.setAssistantOpen);
+  const updateChatDraft = useStudioAssistantStore((state) => state.updateChatDraft);
+  const updateChatMessages = useStudioAssistantStore((state) => state.updateChatMessages);
+  const setChatTitle = useStudioAssistantStore((state) => state.setChatTitle);
+  const updateChatModel = useStudioAssistantStore((state) => state.updateChatModel);
+  const updateChatScopeMode = useStudioAssistantStore(
+    (state) => state.updateChatScopeMode,
+  );
+  const resetChat = useStudioAssistantStore((state) => state.resetChat);
+  const generateChatTitle = useStudioAssistantStore(
+    (state) => state.generateChatTitle,
+  );
 
   useEffect(() => {
-    setDraftProjectPath(search.project ?? "");
-  }, [search.project]);
+    setDraftProjectPath(projectPath);
+  }, [projectPath]);
 
-  const metaQuery = useQuery(trpc.studio.meta.queryOptions({ projectPath: search.project }));
+  const metaQuery = useQuery(trpc.studio.meta.queryOptions({ projectPath }));
 
   const configQuery = useQuery({
-    ...trpc.studio.config.queryOptions({ projectPath: search.project }),
+    ...trpc.studio.config.queryOptions({ projectPath }),
     enabled: metaQuery.isSuccess && metaQuery.data.project.valid,
   });
 
   const filesQuery = useQuery({
-    ...trpc.studio.files.queryOptions({ projectPath: search.project }),
+    ...trpc.studio.files.queryOptions({ projectPath }),
     enabled: metaQuery.isSuccess && metaQuery.data.project.valid,
   });
 
   const facetsQuery = useQuery({
     ...trpc.studio.facets.queryOptions({
-      projectPath: search.project,
+      projectPath,
       level: filters.level || undefined,
       search: deferredSearch || undefined,
       fileId: filters.fileId || undefined,
@@ -88,7 +115,7 @@ function StudioRoute() {
 
   const logsQuery = useQuery({
     ...trpc.studio.logs.queryOptions({
-      projectPath: search.project,
+      projectPath,
       offset,
       limit: 100,
       grouping,
@@ -104,7 +131,7 @@ function StudioRoute() {
 
   const groupQuery = useQuery({
     ...trpc.studio.group.queryOptions({
-      projectPath: search.project,
+      projectPath,
       groupId: selection?.kind === "group" ? selection.id : "",
     }),
     enabled:
@@ -115,7 +142,7 @@ function StudioRoute() {
 
   const recordQuery = useQuery({
     ...trpc.studio.record.queryOptions({
-      projectPath: search.project,
+      projectPath,
       recordId: selection?.kind === "record" ? selection.id : "",
     }),
     enabled:
@@ -125,14 +152,23 @@ function StudioRoute() {
   });
 
   const assistantStatusQuery = useQuery(
-    trpc.studio.assistantStatus.queryOptions({ projectPath: search.project }),
+    trpc.studio.assistantStatus.queryOptions({ projectPath }),
   );
+  const activeChat = workspace?.activeChatId
+    ? workspace.chatsById[workspace.activeChatId] ?? null
+    : null;
+  const activeChatId = activeChat?.id ?? null;
+  const assistantDraft = activeChat?.draft ?? "";
+  const assistantOpen = hasHydrated ? workspace?.assistantOpen ?? false : false;
+  const assistantScopeMode = activeChat?.scopeMode ?? "standalone";
+  const selectedModel = activeChat?.selectedModel ?? "";
+  const assistantChatId = activeChatId ?? "studio-assistant-transient";
   const assistantTransport = useMemo(
     () =>
       new DefaultChatTransport<StudioChatMessage>({
         api: "/api/chat",
         body: {
-          projectPath: search.project,
+          projectPath,
           filters: {
             level: filters.level || undefined,
             type: filters.type || undefined,
@@ -159,7 +195,7 @@ function StudioRoute() {
       filters.level,
       filters.to,
       filters.type,
-      search.project,
+      projectPath,
       selectedModel,
       assistantScopeMode,
       selection,
@@ -174,6 +210,7 @@ function StudioRoute() {
     status: assistantStatus,
     stop: stopAssistant,
   } = useChat<StudioChatMessage>({
+    id: assistantChatId,
     transport: assistantTransport,
     experimental_throttle: 50,
   });
@@ -186,8 +223,29 @@ function StudioRoute() {
   const isProjectInvalid = Boolean(metaQuery.data && !metaQuery.data.project.valid);
   const projectError =
     metaQuery.data?.project.error ?? "Studio could not inspect the requested path.";
-  const hasLogsError = filesQuery.isError || logsQuery.isError || groupQuery.isError || recordQuery.isError;
+  const hasLogsError =
+    filesQuery.isError ||
+    logsQuery.isError ||
+    groupQuery.isError ||
+    recordQuery.isError;
   const hasBackendError = metaQuery.isError || configQuery.isError || hasLogsError;
+  const fallbackModel =
+    assistantStatusQuery.data?.model ??
+    assistantStatusQuery.data?.availableModels[0] ??
+    "";
+  const chatSessions = useMemo(
+    () =>
+      workspace
+        ? Object.values(workspace.chatsById)
+            .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
+            .map((chat) => ({
+              id: chat.id,
+              title: chat.title,
+              updatedAt: chat.updatedAt,
+            }))
+        : [],
+    [workspace],
+  );
   const scopeLabel =
     assistantScopeMode === "standalone"
       ? "current filters"
@@ -196,36 +254,125 @@ function StudioRoute() {
         : selection?.kind === "group"
           ? "selected structured group"
           : "no selection";
-  const openStandaloneAssistant = () => {
-    setAssistantScopeMode("standalone");
-    setAssistantOpen(true);
-  };
-  const openSelectionAssistant = () => {
-    setAssistantScopeMode("selection");
-    setAssistantOpen(true);
-  };
-  const closeAssistant = () => setAssistantOpen(false);
 
   useEffect(() => {
-    const status = assistantStatusQuery.data;
-
-    if (!status) {
+    if (!hasHydrated || !projectPath) {
       return;
     }
 
-    const fallback = status.model ?? status.availableModels[0] ?? "";
-    setSelectedModel((current) =>
-      current && status.availableModels.includes(current) ? current : fallback,
-    );
-  }, [assistantStatusQuery.data]);
+    ensureWorkspace(projectPath);
+  }, [ensureWorkspace, hasHydrated, projectPath]);
 
   useEffect(() => {
-    setMessages([]);
-    setAssistantDraft("");
-    setSelectedModel("");
-    setAssistantScopeMode("selection");
-    setAssistantOpen(false);
-  }, [search.project, setMessages]);
+    if (!hasHydrated || !projectPath || !activeChat || !assistantStatusQuery.data) {
+      return;
+    }
+
+    if (!fallbackModel) {
+      return;
+    }
+
+    if (
+      activeChat.selectedModel &&
+      assistantStatusQuery.data.availableModels.includes(activeChat.selectedModel)
+    ) {
+      return;
+    }
+
+    updateChatModel(projectPath, activeChat.id, fallbackModel);
+  }, [
+    activeChat,
+    assistantStatusQuery.data,
+    fallbackModel,
+    hasHydrated,
+    projectPath,
+    updateChatModel,
+  ]);
+
+  useEffect(() => {
+    if (!hasHydrated || !activeChat) {
+      return;
+    }
+
+    loadingChatIdRef.current = activeChat.id;
+    setMessages(activeChat.messages);
+  }, [activeChat?.id, hasHydrated, setMessages]);
+
+  useEffect(() => {
+    if (!hasHydrated || !projectPath || !activeChatId) {
+      return;
+    }
+
+    if (loadingChatIdRef.current === activeChatId) {
+      loadingChatIdRef.current = null;
+      return;
+    }
+
+    updateChatMessages(projectPath, activeChatId, messages);
+  }, [
+    activeChatId,
+    hasHydrated,
+    messages,
+    projectPath,
+    updateChatMessages,
+  ]);
+
+  useEffect(() => {
+    if (!hasHydrated || !projectPath || !activeChatId || activeChat?.title !== "New chat") {
+      return;
+    }
+
+    const firstUserMessage = messages.find(
+      (message) => message.role === "user" && getMessageText(message),
+    );
+    const prompt = firstUserMessage ? getMessageText(firstUserMessage) : "";
+
+    if (!prompt || titleRequestChatIdRef.current === activeChatId) {
+      return;
+    }
+
+    titleRequestChatIdRef.current = activeChatId;
+    let cancelled = false;
+
+    const run = async () => {
+      try {
+        const result = await trpcClient.studio.generateChatTitle.mutate({
+          projectPath,
+          prompt,
+        });
+
+        if (!cancelled) {
+          setChatTitle(projectPath, activeChatId, result.title);
+        }
+      } catch {
+        if (!cancelled) {
+          generateChatTitle(projectPath, activeChatId);
+        }
+      } finally {
+        if (!cancelled && titleRequestChatIdRef.current === activeChatId) {
+          titleRequestChatIdRef.current = null;
+        }
+      }
+    };
+
+    void run();
+
+    return () => {
+      cancelled = true;
+      if (titleRequestChatIdRef.current === activeChatId) {
+        titleRequestChatIdRef.current = null;
+      }
+    };
+  }, [
+    activeChat?.title,
+    activeChatId,
+    generateChatTitle,
+    hasHydrated,
+    messages,
+    projectPath,
+    setChatTitle,
+    trpcClient,
+  ]);
 
   useEffect(() => {
     if (!logsQuery.data?.entries.length) {
@@ -257,8 +404,54 @@ function StudioRoute() {
     filters.fileId,
     filters.from,
     filters.to,
-    search.project,
+    projectPath,
     grouping,
+  ]);
+
+  useEffect(() => {
+    if (
+      !pendingPrompt ||
+      !hasHydrated ||
+      !projectPath ||
+      !activeChatId ||
+      pendingPrompt.chatId !== activeChatId
+    ) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const run = async () => {
+      await sendMessage(
+        {
+          text: pendingPrompt.content,
+        },
+        {
+          body: {
+            mode: pendingPrompt.mode,
+            model: pendingPrompt.model,
+          },
+        },
+      );
+
+      if (!cancelled) {
+        updateChatDraft(projectPath, activeChatId, "");
+        setPendingPrompt(null);
+      }
+    };
+
+    void run();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    activeChatId,
+    hasHydrated,
+    pendingPrompt,
+    projectPath,
+    sendMessage,
+    updateChatDraft,
   ]);
 
   const handleReferenceSelect = (reference: StudioAssistantReference) => {
@@ -268,38 +461,72 @@ function StudioRoute() {
     });
   };
 
-  const resetAssistantConversation = (scopeMode: AssistantScopeMode) => {
-    setMessages([]);
-    setAssistantDraft("");
-    setAssistantScopeMode(scopeMode);
+  const openAssistant = () => {
+    if (!projectPath) {
+      return;
+    }
+
+    setAssistantOpen(projectPath, true);
   };
+
+  const closeAssistant = () => {
+    if (!projectPath) {
+      return;
+    }
+
+    setAssistantOpen(projectPath, false);
+  };
+
+  const isBlankStandaloneChat = () =>
+    Boolean(
+      activeChat &&
+        activeChat.scopeMode === "standalone" &&
+        activeChat.messages.length === 0 &&
+        activeChat.draft.trim().length === 0,
+    );
 
   const submitAssistantPrompt = async (
     content: string,
     mode: "chat" | "describe-selection" = "chat",
     options?: {
       scopeMode?: AssistantScopeMode;
+      chatId?: string;
       resetConversation?: boolean;
     },
   ) => {
+    if (!projectPath || !activeChatId) {
+      return;
+    }
+
     const value = content.trim();
     if (!value) {
       return;
     }
 
     const scopeMode = options?.scopeMode ?? assistantScopeMode;
+    const targetChatId = options?.chatId ?? activeChatId;
+
     if (options?.resetConversation) {
-      resetAssistantConversation(scopeMode);
-    } else {
-      setAssistantScopeMode(scopeMode);
+      resetChat(projectPath, targetChatId, { scopeMode });
+      if (targetChatId === activeChatId) {
+        setMessages([]);
+      }
     }
 
+    updateChatScopeMode(projectPath, targetChatId, scopeMode);
     clearAssistantError();
-    if (scopeMode === "standalone") {
-      openStandaloneAssistant();
-    } else {
-      openSelectionAssistant();
+    setAssistantOpen(projectPath, true);
+
+    if (targetChatId !== activeChatId) {
+      setPendingPrompt({
+        chatId: targetChatId,
+        content: value,
+        model: selectedModel || undefined,
+        mode,
+      });
+      return;
     }
+
     await sendMessage(
       {
         text: value,
@@ -311,13 +538,87 @@ function StudioRoute() {
         },
       },
     );
-    setAssistantDraft("");
+    updateChatDraft(projectPath, targetChatId, "");
   };
 
-  const startStandaloneChat = () => {
+  const createStandaloneChat = () => {
+    if (!projectPath) {
+      return;
+    }
+
+    stopAssistant();
     clearAssistantError();
-    resetAssistantConversation("standalone");
-    openStandaloneAssistant();
+    ensureWorkspace(projectPath);
+
+    if (isBlankStandaloneChat()) {
+      setAssistantOpen(projectPath, true);
+      return;
+    }
+
+    const chatId = createChat(projectPath, { scopeMode: "standalone" });
+    if (!chatId) {
+      return;
+    }
+
+    if (fallbackModel) {
+      updateChatModel(projectPath, chatId, fallbackModel);
+    }
+
+    setAssistantOpen(projectPath, true);
+  };
+
+  const createSelectionChatAndSubmit = (prompt: string) => {
+    if (!projectPath) {
+      return;
+    }
+
+    stopAssistant();
+    clearAssistantError();
+    ensureWorkspace(projectPath);
+
+    const chatId = createChat(projectPath, { scopeMode: "selection" });
+    if (!chatId) {
+      return;
+    }
+
+    if (fallbackModel) {
+      updateChatModel(projectPath, chatId, fallbackModel);
+    }
+
+    updateChatScopeMode(projectPath, chatId, "selection");
+    setAssistantOpen(projectPath, true);
+    setPendingPrompt({
+      chatId,
+      content: prompt,
+      model: fallbackModel || undefined,
+      mode: "describe-selection",
+    });
+  };
+
+  const switchAssistantChat = (chatId: string) => {
+    if (!projectPath || !chatId) {
+      return;
+    }
+
+    stopAssistant();
+    clearAssistantError();
+    setActiveChat(projectPath, chatId);
+    setAssistantOpen(projectPath, true);
+  };
+
+  const handleDescribeSelection = (prompt: string) => {
+    if (!selection) {
+      return;
+    }
+
+    if (assistantScopeMode === "standalone") {
+      createSelectionChatAndSubmit(prompt);
+      return;
+    }
+
+    void submitAssistantPrompt(prompt, "describe-selection", {
+      scopeMode: "selection",
+    });
   };
 
   return (
@@ -339,7 +640,7 @@ function StudioRoute() {
                 },
               })
             }
-            onStartStandaloneChat={startStandaloneChat}
+            onStartStandaloneChat={createStandaloneChat}
             onFilterChange={setFilters}
             onGroupingChange={setGrouping}
             onResetFilters={() => setFilters(DEFAULT_FILTERS)}
@@ -366,7 +667,9 @@ function StudioRoute() {
               <LogFilesPanel
                 files={files}
                 activeFileId={filters.fileId}
-                onSelectFile={(fileId) => setFilters((current) => ({ ...current, fileId }))}
+                onSelectFile={(fileId) =>
+                  setFilters((current) => ({ ...current, fileId }))
+                }
               />
             )}
           </>
@@ -413,17 +716,8 @@ function StudioRoute() {
               group={selectedGroup}
               loading={groupQuery.isLoading}
               onDescribeWithAi={() => {
-                if (!selection) {
-                  return;
-                }
-
-                void submitAssistantPrompt(
+                handleDescribeSelection(
                   "Describe the selected structured group like an observability copilot. Explain what happened, likely cause, related signals, and what to inspect next.",
-                  "describe-selection",
-                  {
-                    scopeMode: "selection",
-                    resetConversation: assistantScopeMode !== "selection",
-                  },
                 );
               }}
               onSelectRecord={(recordId) => {
@@ -434,17 +728,8 @@ function StudioRoute() {
             <LogDetailPanel
               record={selectedRecord}
               onDescribeWithAi={() => {
-                if (!selection) {
-                  return;
-                }
-
-                void submitAssistantPrompt(
+                handleDescribeSelection(
                   "Describe the selected log like an observability copilot. Explain what happened, likely cause, related signals, and what to inspect next.",
-                  "describe-selection",
-                  {
-                    scopeMode: "selection",
-                    resetConversation: assistantScopeMode !== "selection",
-                  },
                 );
               }}
             />
@@ -454,37 +739,39 @@ function StudioRoute() {
       {hasBackendError || isProjectInvalid || isLoadingMeta ? null : (
         <AssistantSheet
           open={assistantOpen}
+          activeChatId={activeChatId}
           canDescribeSelection={selection !== null}
           chatError={assistantError}
+          chatSessions={chatSessions}
           draft={assistantDraft}
           messages={messages}
           model={selectedModel}
           scopeLabel={scopeLabel}
           statusState={assistantStatus}
           status={assistantStatusQuery.data}
-          onDraftChange={setAssistantDraft}
-          onModelChange={setSelectedModel}
-          onDescribeSelection={() => {
-            if (!selection) {
+          onCreateChat={createStandaloneChat}
+          onDraftChange={(value) => {
+            if (!projectPath || !activeChatId) {
               return;
             }
 
-            void submitAssistantPrompt(
+            updateChatDraft(projectPath, activeChatId, value);
+          }}
+          onModelChange={(value) => {
+            if (!projectPath || !activeChatId) {
+              return;
+            }
+
+            updateChatModel(projectPath, activeChatId, value);
+          }}
+          onDescribeSelection={() => {
+            handleDescribeSelection(
               "Describe the selected log or structured group like an observability copilot. Explain what happened, likely cause, related signals, and what to inspect next.",
-              "describe-selection",
-              {
-                scopeMode: "selection",
-                resetConversation: assistantScopeMode !== "selection",
-              },
             );
           }}
           onOpenChange={(next) => {
             if (next) {
-              if (assistantScopeMode === "standalone") {
-                openStandaloneAssistant();
-              } else {
-                openSelectionAssistant();
-              }
+              openAssistant();
               return;
             }
 
@@ -496,6 +783,7 @@ function StudioRoute() {
             });
           }}
           onReferenceSelect={handleReferenceSelect}
+          onSelectChat={switchAssistantChat}
           onSend={() => {
             void submitAssistantPrompt(assistantDraft, "chat", {
               scopeMode: assistantScopeMode,

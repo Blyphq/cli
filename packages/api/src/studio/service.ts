@@ -4,7 +4,7 @@ import {
   streamAssistant,
   type StudioAssistantStreamResult,
 } from "./assistant";
-import { getAssistantStatus } from "./assistant-provider";
+import { generateAssistantText, getAssistantStatus } from "./assistant-provider";
 import { discoverStudioConfig, resolveStudioAiCredentials } from "./config";
 import { getLogFacets } from "./facets";
 import { buildGroupDetails } from "./grouping";
@@ -111,6 +111,26 @@ export async function getStudioAssistantStatus(projectPath?: string): Promise<St
   return getAssistantStatus(config.resolved.ai);
 }
 
+export async function generateStudioChatTitle(input: {
+  projectPath?: string;
+  prompt: string;
+}): Promise<{ title: string }> {
+  const project = await resolveStudioProject(input.projectPath);
+  const config = await discoverStudioConfig(project);
+  const ai = resolveStudioAiCredentials(config, project.absolutePath);
+  const title = await generateAssistantText({
+    apiKey: ai.apiKey ?? "",
+    model: "x-ai/grok-4.1-fast",
+    system:
+      "Generate a concise chat title from the user's first message. Return only the title, no quotes, no markdown, no punctuation wrappers, and keep it under 48 characters.",
+    prompt: input.prompt,
+  });
+
+  return {
+    title: sanitizeGeneratedChatTitle(title),
+  };
+}
+
 export async function replyWithStudioAssistant(
   input: StudioAssistantReplyInput,
 ): Promise<StudioAssistantMessage> {
@@ -187,4 +207,17 @@ function emptyLogDiscovery(config: StudioConfigDiscovery): StudioLogDiscovery {
     archiveDirExists: false,
     files: [],
   };
+}
+
+function sanitizeGeneratedChatTitle(value: string): string {
+  const normalized = value
+    .replace(/^["'`]+|["'`]+$/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (normalized.length <= 48) {
+    return normalized || "New chat";
+  }
+
+  return `${normalized.slice(0, 47).trimEnd()}…`;
 }

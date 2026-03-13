@@ -8,7 +8,7 @@ import {
   type MutableRefObject,
 } from "react";
 
-import { Bot, X } from "lucide-react";
+import { Bot, Plus, X } from "lucide-react";
 
 import { AssistantPanel } from "@/components/studio/assistant-panel";
 import { Badge } from "@/components/ui/badge";
@@ -19,6 +19,13 @@ import {
   DialogDescription,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import type {
   StudioAssistantReference,
   StudioAssistantStatus,
@@ -34,6 +41,8 @@ const COLLAPSE_DELAY_MS = 180;
 
 interface AssistantSheetProps {
   open: boolean;
+  activeChatId: string | null;
+  chatSessions: Array<{ id: string; title: string; updatedAt: string }>;
   chatError?: Error;
   draft: string;
   messages: StudioChatMessage[];
@@ -42,10 +51,12 @@ interface AssistantSheetProps {
   canDescribeSelection: boolean;
   scopeLabel: string;
   status: StudioAssistantStatus | undefined;
+  onCreateChat(): void;
   onDraftChange(value: string): void;
   onModelChange(value: string): void;
   onDescribeSelection(): void;
   onReferenceSelect(reference: StudioAssistantReference): void;
+  onSelectChat(chatId: string): void;
   onSend(): void;
   onQuickAction(prompt: string): void;
   onStop(): void;
@@ -54,6 +65,8 @@ interface AssistantSheetProps {
 
 export function AssistantSheet({
   open,
+  activeChatId,
+  chatSessions,
   chatError,
   draft,
   messages,
@@ -62,10 +75,12 @@ export function AssistantSheet({
   canDescribeSelection,
   scopeLabel,
   status,
+  onCreateChat,
   onDraftChange,
   onModelChange,
   onDescribeSelection,
   onReferenceSelect,
+  onSelectChat,
   onSend,
   onQuickAction,
   onStop,
@@ -171,6 +186,12 @@ export function AssistantSheet({
             scopeLabel={scopeLabel}
             onClose={() => onOpenChange(false)}
           />
+          <AssistantChatSwitcher
+            activeChatId={activeChatId}
+            chatSessions={chatSessions}
+            onCreateChat={onCreateChat}
+            onSelectChat={onSelectChat}
+          />
           {sharedPanel}
         </DialogContent>
       </Dialog>
@@ -206,6 +227,12 @@ export function AssistantSheet({
           titleId={titleId}
           scopeLabel={scopeLabel}
           onClose={() => onOpenChange(false)}
+        />
+        <AssistantChatSwitcher
+          activeChatId={activeChatId}
+          chatSessions={chatSessions}
+          onCreateChat={onCreateChat}
+          onSelectChat={onSelectChat}
         />
         {sharedPanel}
       </div>
@@ -256,6 +283,54 @@ function AssistantChrome({
           </Button>
         </div>
       </div>
+    </div>
+  );
+}
+
+function AssistantChatSwitcher({
+  activeChatId,
+  chatSessions,
+  onCreateChat,
+  onSelectChat,
+}: {
+  activeChatId: string | null;
+  chatSessions: Array<{ id: string; title: string; updatedAt: string }>;
+  onCreateChat(): void;
+  onSelectChat(chatId: string): void;
+}) {
+  const chatItems = chatSessions.map((chat) => ({
+    value: chat.id,
+    label: chat.title,
+  }));
+
+  return (
+    <div className="flex items-center gap-2 border-b border-border/60 px-4 py-3">
+      <div className="min-w-0 flex-1">
+        <Select
+          items={chatItems}
+          value={activeChatId ?? undefined}
+          onValueChange={(value) => {
+            if (value) {
+              onSelectChat(String(value));
+            }
+          }}
+        >
+          <SelectTrigger aria-label="Choose chat">
+            <SelectValue placeholder="Choose chat" />
+          </SelectTrigger>
+          <SelectContent>
+            {chatSessions.map((chat) => (
+              <SelectItem key={chat.id} value={chat.id}>
+                {chat.title}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <Button variant="outline" size="sm" onClick={onCreateChat}>
+        <Plus />
+        New chat
+      </Button>
     </div>
   );
 }
