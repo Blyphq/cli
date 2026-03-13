@@ -1,11 +1,12 @@
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import type { StudioRecord } from "@/lib/studio";
 
 import { EmptyState } from "./empty-state";
 import { LogRow } from "./log-row";
+import { PanelHeader } from "./panel-header";
 
 interface LogListProps {
   records: StudioRecord[];
@@ -30,6 +31,8 @@ export function LogList({
   onSelect,
   onPageChange,
 }: LogListProps) {
+  const summary = `${loading ? "Loading logs..." : `${totalMatched} matching records`}${truncated ? " (scan limit reached)" : ""}`;
+
   if (!loading && records.length === 0) {
     return (
       <EmptyState
@@ -40,23 +43,17 @@ export function LogList({
   }
 
   return (
-    <Card className="min-h-[36rem]">
-      <CardHeader className="border-b border-border/60">
-        <CardTitle>Log Viewer</CardTitle>
-        <CardDescription>
-          {loading ? "Loading logs..." : `${totalMatched} matching records`}
-          {truncated ? " (scan limit reached)" : ""}
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="p-0">
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[44rem] text-left text-sm">
+    <Card className="min-h-[36rem] min-w-0">
+      <PanelHeader title="Log Viewer" description={summary} />
+      <CardContent className="min-w-0 p-0">
+        <div className="hidden min-w-0 overflow-x-auto lg:block">
+          <table className="w-full table-fixed text-left text-sm">
             <thead className="border-b border-border/60 bg-background/60 text-xs uppercase tracking-[0.18em] text-muted-foreground">
               <tr>
-                <th className="px-3 py-2 font-medium">Timestamp</th>
-                <th className="px-3 py-2 font-medium">Level</th>
+                <th className="w-36 px-3 py-2 font-medium">Timestamp</th>
+                <th className="w-24 px-3 py-2 font-medium">Level</th>
                 <th className="px-3 py-2 font-medium">Message</th>
-                <th className="px-3 py-2 font-medium">File</th>
+                <th className="w-44 px-3 py-2 font-medium">File</th>
               </tr>
             </thead>
             <tbody>
@@ -71,11 +68,22 @@ export function LogList({
             </tbody>
           </table>
         </div>
-        <div className="flex items-center justify-between border-t border-border/60 px-4 py-3">
+        <div className="divide-y divide-border/60 lg:hidden">
+          {records.map((record) => (
+            <LogRow
+              key={record.id}
+              record={record}
+              selected={record.id === selectedId}
+              onSelect={onSelect}
+              variant="mobile"
+            />
+          ))}
+        </div>
+        <div className="flex flex-col gap-3 border-t border-border/60 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="text-xs text-muted-foreground">
             Showing {offset + 1}-{Math.min(offset + records.length, totalMatched)} of {totalMatched}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button
               variant="outline"
               size="sm"

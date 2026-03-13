@@ -2,11 +2,18 @@ import { FileArchive, FileText, FilterX } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import type { StudioFile } from "@/lib/studio";
-import { formatBytes, formatDateTime } from "@/lib/studio";
+import {
+  formatBytes,
+  formatDateTime,
+  getFileKindBadgeVariant,
+  getFileStreamBadgeVariant,
+} from "@/lib/studio";
 
 import { EmptyState } from "./empty-state";
+import { PanelHeader } from "./panel-header";
+import { TruncatedPath } from "./truncated-path";
 
 interface LogFilesPanelProps {
   files: StudioFile[];
@@ -26,11 +33,11 @@ export function LogFilesPanel({ files, activeFileId, onSelectFile }: LogFilesPan
 
   return (
     <Card>
-      <CardHeader className="border-b border-border/60">
-        <CardTitle>Log Files</CardTitle>
-        <CardDescription>Active and archived Blyp streams.</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-2">
+      <PanelHeader
+        title="Log Files"
+        description="Active and archived Blyp streams."
+      />
+      <CardContent className="space-y-2 min-w-0">
         <Button
           variant="outline"
           size="sm"
@@ -51,24 +58,33 @@ export function LogFilesPanel({ files, activeFileId, onSelectFile }: LogFilesPan
               onClick={() => onSelectFile(selected ? "" : file.id)}
               className={`h-auto w-full justify-start px-3 py-3 text-left ${selected ? "border-primary/30 bg-primary/10 hover:bg-primary/15" : "border-border/60 bg-background/60 hover:bg-muted/30"}`}
             >
-              <div className="flex items-start justify-between gap-3">
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2 text-sm font-medium">
+              <div className="min-w-0 space-y-3">
+                <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0 space-y-1">
+                    <div
+                      className="flex min-w-0 items-center gap-2 text-sm font-medium"
+                      title={file.name}
+                    >
                     {file.kind === "archive" ? <FileArchive className="size-4" /> : <FileText className="size-4" />}
-                    {file.name}
+                      <span className="min-w-0 truncate">{file.name}</span>
+                    </div>
+                    <TruncatedPath value={file.relativePath} />
                   </div>
-                  <div className="text-xs text-muted-foreground">{file.relativePath}</div>
+                  <div className="flex shrink-0 flex-wrap items-center gap-1 sm:max-w-[9rem] sm:justify-end">
+                    <Badge variant={getFileKindBadgeVariant(file.kind)}>
+                      {file.kind}
+                    </Badge>
+                    <Badge variant={getFileStreamBadgeVariant(file.stream)}>
+                      {file.stream}
+                    </Badge>
+                  </div>
                 </div>
-                <div className="flex flex-col items-end gap-1 text-right">
-                  <Badge variant={file.kind === "archive" ? "secondary" : "muted"}>
-                    {file.kind}
-                  </Badge>
-                  <Badge variant="outline">{file.stream}</Badge>
+                <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+                  <span>{formatBytes(file.sizeBytes)}</span>
+                  <span className="truncate" title={formatDateTime(file.modifiedAt)}>
+                    {formatDateTime(file.modifiedAt)}
+                  </span>
                 </div>
-              </div>
-              <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
-                <span>{formatBytes(file.sizeBytes)}</span>
-                <span>{formatDateTime(file.modifiedAt)}</span>
               </div>
             </Button>
           );

@@ -1,11 +1,14 @@
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import type { StudioRecord } from "@/lib/studio";
 import { formatDateTime, getLevelClasses } from "@/lib/studio";
 
 import { EmptyState } from "./empty-state";
 import { HttpLogDetail } from "./http-log-detail";
 import { JsonDetailBlock } from "./json-detail-block";
+import { MetaList } from "./meta-list";
+import { PanelHeader } from "./panel-header";
+import { TruncatedPath } from "./truncated-path";
 
 interface LogDetailPanelProps {
   record: StudioRecord | null;
@@ -22,22 +25,39 @@ export function LogDetailPanel({ record }: LogDetailPanelProps) {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="min-w-0 space-y-4">
       <Card>
-        <CardHeader className="border-b border-border/60">
-          <CardTitle className="flex items-center justify-between gap-3">
-            <span className="min-w-0 truncate">{record.message}</span>
-            <Badge className={getLevelClasses(record.level)}>
-              {record.level}
-            </Badge>
-          </CardTitle>
-          <CardDescription>{formatDateTime(record.timestamp)}</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <Detail label="Source" value={record.source} />
-          <Detail label="Type" value={record.type ?? "n/a"} />
-          <Detail label="Caller" value={record.caller ?? "n/a"} />
-          <Detail label="File" value={`${record.fileName}:${record.lineNumber}`} />
+        <PanelHeader
+          title={
+            <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <span className="min-w-0 break-words text-balance">{record.message}</span>
+              <Badge className={getLevelClasses(record.level)}>{record.level}</Badge>
+            </div>
+          }
+          description={formatDateTime(record.timestamp)}
+        />
+        <CardContent className="space-y-4 min-w-0">
+          <MetaList
+            items={[
+              { label: "Source", value: record.source },
+              { label: "Type", value: record.type ?? "n/a" },
+              { label: "Caller", value: record.caller ?? "n/a" },
+              {
+                label: "File",
+                value: (
+                  <div className="space-y-1">
+                    <TruncatedPath
+                      value={record.filePath ?? record.fileName}
+                      variant="block"
+                    />
+                    <div className="text-xs text-muted-foreground">
+                      Line {record.lineNumber}
+                    </div>
+                  </div>
+                ),
+              },
+            ]}
+          />
           {record.malformed ? (
             <div className="border border-secondary bg-secondary/40 p-3 text-xs text-secondary-foreground">
               This line could not be parsed as JSON. Studio kept it as a fallback record.
@@ -49,15 +69,6 @@ export function LogDetailPanel({ record }: LogDetailPanelProps) {
       {record.bindings ? <JsonDetailBlock title="Bindings" value={record.bindings} /> : null}
       {record.data !== undefined ? <JsonDetailBlock title="Data" value={record.data} /> : null}
       <JsonDetailBlock title="Raw Record" value={record.raw} />
-    </div>
-  );
-}
-
-function Detail({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="space-y-1">
-      <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">{label}</div>
-      <div className="break-words text-sm">{value}</div>
     </div>
   );
 }

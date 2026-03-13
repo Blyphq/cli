@@ -23,6 +23,7 @@ import {
   getStatusClasses,
   toCalendarFilterValue,
 } from "@/lib/studio";
+import { TruncatedPath } from "./truncated-path";
 
 interface StudioToolbarProps {
   draftProjectPath: string;
@@ -45,14 +46,28 @@ export function StudioToolbar({
   onFilterChange,
   onResetFilters,
 }: StudioToolbarProps) {
+  const currentTarget = meta?.project.absolutePath || draftProjectPath;
+
   return (
     <Card className="overflow-visible border-border/70 bg-card">
       <CardContent className="space-y-4 p-4">
-        <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
-          <div className="grid flex-1 gap-2">
-            <div className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">Target Project</div>
-            <div className="flex flex-col gap-2 sm:flex-row">
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-end">
+          <div className="min-w-0 space-y-3">
+            <div className="min-w-0 space-y-1">
+              <div className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">
+                Studio
+              </div>
+              {currentTarget ? (
+                <TruncatedPath value={currentTarget} />
+              ) : (
+                <div className="text-xs text-muted-foreground">
+                  Inspect a local project using its current Blyp config and logs.
+                </div>
+              )}
+            </div>
+            <div className="flex min-w-0 flex-col gap-2 sm:flex-row">
               <Input
+                className="flex-1"
                 value={draftProjectPath}
                 onChange={(event) => onDraftProjectPathChange(event.currentTarget.value)}
                 placeholder="Absolute or relative path"
@@ -60,7 +75,7 @@ export function StudioToolbar({
               <Button onClick={onInspect}>Inspect</Button>
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2 text-[10px] uppercase tracking-[0.18em]">
+          <div className="flex min-w-0 flex-wrap items-center gap-2 text-[10px] uppercase tracking-[0.18em]">
             <StatusPill
               label="Project"
               status={meta?.project.valid ? "valid" : "invalid"}
@@ -69,7 +84,7 @@ export function StudioToolbar({
             <StatusPill label="Config" status={meta?.config.status ?? "not-found"} value={meta?.config.status ?? "idle"} />
           </div>
         </div>
-        <div className="grid gap-3 lg:grid-cols-[minmax(0,1.1fr)_repeat(4,minmax(0,0.65fr))]">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(0,1.15fr)_repeat(4,minmax(0,0.72fr))]">
           <FilterBox icon={<Search className="size-3.5" />} label="Search">
             <Input
               value={filters.search}
@@ -168,7 +183,7 @@ function FilterBox({
   label: string;
 }) {
   return (
-    <div className="grid gap-2">
+    <div className="grid min-w-0 gap-2">
       <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
         {icon}
         {label}
@@ -188,9 +203,11 @@ function StatusPill({
   value: string;
 }) {
   return (
-    <Badge className={`gap-2 px-2 py-1 ${getStatusClasses(status)}`}>
+    <Badge className={`max-w-full gap-2 px-2 py-1 ${getStatusClasses(status)}`}>
       <span>{label}</span>
-      <span className="text-foreground">{value}</span>
+      <span className="max-w-[10rem] truncate text-foreground" title={value}>
+        {value}
+      </span>
     </Badge>
   );
 }

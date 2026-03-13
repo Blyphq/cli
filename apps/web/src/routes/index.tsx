@@ -94,8 +94,15 @@ function StudioRoute() {
     setOffset(0);
   }, [filters.level, deferredSearch, filters.fileId, filters.from, filters.to, search.project]);
 
+  const files = filesQuery.data?.files ?? [];
+  const records = logsQuery.data?.records ?? [];
+  const isLoadingMeta = !metaQuery.data && metaQuery.isLoading;
+  const isProjectInvalid = Boolean(metaQuery.data && !metaQuery.data.project.valid);
+  const projectError =
+    metaQuery.data?.project.error ?? "Studio could not inspect the requested path.";
+  const hasLogsError = filesQuery.isError || logsQuery.isError;
   const hasBackendError =
-    metaQuery.isError || configQuery.isError || filesQuery.isError || logsQuery.isError;
+    metaQuery.isError || configQuery.isError || hasLogsError;
 
   return (
     <StudioShell
@@ -104,7 +111,7 @@ function StudioRoute() {
           draftProjectPath={draftProjectPath}
           filters={filters}
           meta={metaQuery.data}
-          files={filesQuery.data?.files ?? []}
+          files={files}
           onDraftProjectPathChange={setDraftProjectPath}
           onInspect={() =>
             navigate({
@@ -122,13 +129,21 @@ function StudioRoute() {
           {metaQuery.data ? (
             <ProjectConfigPanel meta={metaQuery.data} config={configQuery.data} />
           ) : (
-            <EmptyState title="Loading project metadata" description="Resolving the target project and Blyp config." />
+            <EmptyState
+              title="Loading project metadata"
+              description="Resolving the target project and Blyp config."
+              size="compact"
+            />
           )}
           {filesQuery.isError ? (
-            <ErrorState title="Log discovery failed" description={filesQuery.error.message} />
+            <ErrorState
+              title="Log discovery failed"
+              description={filesQuery.error.message}
+              size="compact"
+            />
           ) : (
             <LogFilesPanel
-              files={filesQuery.data?.files ?? []}
+              files={files}
               activeFileId={filters.fileId}
               onSelectFile={(fileId) => setFilters((current) => ({ ...current, fileId }))}
             />
@@ -147,14 +162,19 @@ function StudioRoute() {
               "Unknown Studio error"
             }
           />
-        ) : metaQuery.data && !metaQuery.data.project.valid ? (
+        ) : isProjectInvalid ? (
           <ErrorState
             title="Target project is invalid"
-            description={metaQuery.data.project.error ?? "Studio could not inspect the requested path."}
+            description={projectError}
+          />
+        ) : isLoadingMeta ? (
+          <EmptyState
+            title="Loading Studio"
+            description="Resolving project metadata, config, and logs."
           />
         ) : (
           <LogList
-            records={logsQuery.data?.records ?? []}
+            records={records}
             selectedId={selectedRecordId}
             offset={logsQuery.data?.offset ?? offset}
             limit={logsQuery.data?.limit ?? 100}

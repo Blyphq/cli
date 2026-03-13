@@ -8,6 +8,12 @@ export type StudioFiles = RouterOutputs["studio"]["files"];
 export type StudioFile = StudioFiles["files"][number];
 export type StudioLogsPage = RouterOutputs["studio"]["logs"];
 export type StudioRecord = StudioLogsPage["records"][number];
+export type StudioBadgeVariant =
+  | "default"
+  | "secondary"
+  | "muted"
+  | "outline"
+  | "destructive";
 
 export interface StudioFilters {
   level: string;
@@ -38,6 +44,29 @@ export function formatBytes(bytes: number): string {
   }
 
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+export function formatCompactDateTime(value: string | null | undefined): string {
+  if (!value) {
+    return "Unknown";
+  }
+
+  const parsed = new Date(value);
+
+  if (Number.isNaN(parsed.getTime())) {
+    return value;
+  }
+
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(parsed);
+}
+
+export function formatRotation(maxSizeBytes: number, maxArchives: number): string {
+  return `${formatBytes(maxSizeBytes)} max, ${maxArchives} archives`;
 }
 
 export function formatDateTime(value: string | null | undefined): string {
@@ -160,6 +189,25 @@ export function getStatusClasses(
     case "error":
     case "invalid":
       return "border-destructive/30 bg-destructive/10 text-destructive";
+  }
+}
+
+export function getFileKindBadgeVariant(
+  kind: StudioFile["kind"],
+): StudioBadgeVariant {
+  return kind === "archive" ? "secondary" : "muted";
+}
+
+export function getFileStreamBadgeVariant(
+  stream: StudioFile["stream"],
+): StudioBadgeVariant {
+  switch (stream) {
+    case "error":
+      return "destructive";
+    case "combined":
+      return "outline";
+    default:
+      return "muted";
   }
 }
 

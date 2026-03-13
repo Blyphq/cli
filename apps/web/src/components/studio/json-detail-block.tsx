@@ -1,5 +1,6 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { stringifyJson } from "@/lib/studio";
+import { PanelHeader } from "./panel-header";
 
 interface JsonDetailBlockProps {
   title: string;
@@ -9,13 +10,10 @@ interface JsonDetailBlockProps {
 
 export function JsonDetailBlock({ title, description, value }: JsonDetailBlockProps) {
   return (
-    <Card size="sm" className="bg-background/70">
-      <CardHeader className="border-b border-border/60">
-        <CardTitle>{title}</CardTitle>
-        {description ? <CardDescription>{description}</CardDescription> : null}
-      </CardHeader>
-      <CardContent>
-        <pre className="overflow-x-auto whitespace-pre-wrap break-words font-mono text-[11px] leading-5 text-foreground">
+    <Card size="sm" className="min-w-0 bg-background/70">
+      <PanelHeader title={title} description={description} />
+      <CardContent className="min-w-0">
+        <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-words font-mono text-[11px] leading-5 text-foreground">
           {stringifyJson(value)}
         </pre>
       </CardContent>
