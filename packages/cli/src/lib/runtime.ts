@@ -21,7 +21,7 @@ export interface RuntimeInfo {
 }
 
 export async function collectRuntimeInfo(cwd: string): Promise<RuntimeInfo> {
-  const workspaceRoot = await findWorkspaceRoot(cwd);
+  const workspaceRoot = await resolveWorkspaceRoot(cwd);
   const webAppPath = workspaceRoot
     ? await resolveIfExists(path.join(workspaceRoot, "apps", "web", "package.json"))
     : null;
@@ -54,7 +54,9 @@ export function formatRuntimeSummary(info: RuntimeInfo): string {
   return lines.join("\n");
 }
 
-async function findWorkspaceRoot(startDirectory: string): Promise<string | null> {
+export async function resolveWorkspaceRoot(
+  startDirectory: string,
+): Promise<string | null> {
   let currentDirectory = path.resolve(startDirectory);
   const rootDirectory = path.parse(currentDirectory).root;
 
@@ -72,6 +74,27 @@ async function findWorkspaceRoot(startDirectory: string): Promise<string | null>
 
     currentDirectory = path.dirname(currentDirectory);
   }
+}
+
+export async function resolveWebAppDir(cwd: string): Promise<string | null> {
+  const workspaceRoot = await resolveWorkspaceRoot(cwd);
+
+  if (!workspaceRoot) {
+    return null;
+  }
+
+  const webAppPackagePath = path.join(workspaceRoot, "apps", "web", "package.json");
+  const existingPackagePath = await resolveIfExists(webAppPackagePath);
+
+  if (!existingPackagePath) {
+    return null;
+  }
+
+  return path.dirname(existingPackagePath);
+}
+
+export function getStudioUrl(): string {
+  return "http://localhost:3001/";
 }
 
 async function readWorkspaceManifest(

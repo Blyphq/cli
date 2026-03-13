@@ -16,6 +16,10 @@ export function showSuccess(message: string): void {
   log.success(message);
 }
 
+export function showWarning(message: string): void {
+  log.warn(message);
+}
+
 export function showError(message: string): void {
   log.error(message);
 }
