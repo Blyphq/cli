@@ -12,9 +12,9 @@ function getCliVersion(): string {
     const data = JSON.parse(readFileSync(packagePath, "utf-8")) as {
       version?: string;
     };
-    return data.version ?? "0.0.0";
+    return data.version ?? "0.1.0";
   } catch {
-    return "0.0.0";
+    return "0.1.0";
   }
 }
 

@@ -1,5 +1,6 @@
 {
   "name": "@blyp-cli/api",
+  "version": "0.1.0",
   "type": "module",
   "exports": {
     ".": {
