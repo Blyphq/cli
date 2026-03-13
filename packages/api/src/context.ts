@@ -1,4 +1,4 @@
-export async function createContext({ req }: { req: Request }) {
+export async function createContext({ req: _req }: { req: Request }) {
   // No auth configured
   return {
     session: null,

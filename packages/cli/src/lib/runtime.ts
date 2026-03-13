@@ -93,8 +93,14 @@ export async function resolveWebAppDir(cwd: string): Promise<string | null> {
   return path.dirname(existingPackagePath);
 }
 
-export function getStudioUrl(): string {
-  return "http://localhost:3001/";
+export function getStudioUrl(projectPath?: string): string {
+  const url = new URL("http://localhost:3001/");
+
+  if (projectPath) {
+    url.searchParams.set("project", projectPath);
+  }
+
+  return url.toString();
 }
 
 async function readWorkspaceManifest(

@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "build": "vite build",
+    "check-types": "tsc -p tsconfig.json --noEmit",
     "serve": "vite preview",
     "dev": "vite dev"
   },
@@ -31,8 +32,10 @@
     "lucide-react": "^0.511.0",
     "next-themes": "^0.4.6",
     "react": "19.2.3",
+    "react-day-picker": "^9.14.0",
     "react-dom": "19.2.3",
     "shadcn": "^3.6.2",
+    "shiki": "^3.13.0",
     "sonner": "^2.0.3",
     "tailwind-merge": "^3.3.1",
     "tailwindcss": "^4.1.3",

@@ -1,6 +1,7 @@
 import { spinner } from "@clack/prompts";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
+import path from "node:path";
 
 import type { CommandContext, CommandDefinition } from "../types.js";
 import { openBrowser } from "../lib/browser.js";
@@ -26,6 +27,7 @@ export const studioCommand: CommandDefinition = {
   description: "Start or manage the local Studio workflow.",
   usage: "blyphq studio",
   async run(context: CommandContext): Promise<void> {
+    const targetProjectPath = path.resolve(context.cwd, context.argv[0] ?? context.cwd);
     const workspaceRoot = await resolveWorkspaceRoot(context.cwd);
 
     if (!workspaceRoot) {
@@ -38,7 +40,7 @@ export const studioCommand: CommandDefinition = {
       throw new CliError("Studio frontend was not found at apps/web.");
     }
 
-    const studioUrl = getStudioUrl();
+    const studioUrl = getStudioUrl(targetProjectPath);
     const status = spinner();
 
     status.start("Checking Studio frontend");
@@ -46,6 +48,7 @@ export const studioCommand: CommandDefinition = {
 
     if (frontendIsRunning) {
       status.stop("Studio frontend is already running");
+      showInfo(`Inspecting ${targetProjectPath}`);
       await openStudioBrowser(studioUrl);
       return;
     }
@@ -53,7 +56,10 @@ export const studioCommand: CommandDefinition = {
     status.message("Starting Studio frontend");
     const child = spawn("bun", ["run", "dev"], {
       cwd: webAppDir,
-      env: process.env,
+      env: {
+        ...process.env,
+        BLYPQ_STUDIO_TARGET: targetProjectPath,
+      },
       stdio: "inherit",
     });
 
@@ -71,7 +77,10 @@ export const studioCommand: CommandDefinition = {
 
       status.stop("Studio frontend is ready");
       await openStudioBrowser(studioUrl);
-      showNote("Studio", `Frontend running at ${studioUrl}\nPress Ctrl-C to stop it.`);
+      showNote(
+        "Studio",
+        `Inspecting ${targetProjectPath}\nFrontend running at ${studioUrl}\nPress Ctrl-C to stop it.`,
+      );
       await forwardSignalsUntilExit(child);
     } catch (error) {
       if (!child.killed && child.exitCode === null && child.signalCode === null) {
