@@ -22,6 +22,7 @@ import type {
   StudioAssistantReference,
   StudioChatMessage,
 } from "@/lib/studio";
+import { cn } from "@/lib/utils";
 import {
   getMessageModel,
   getMessageReasoning,
@@ -48,7 +49,14 @@ export function AssistantMessage({
 
   return (
     <Message from={message.role}>
-      <MessageContent className="w-full max-w-full rounded-none border px-4 py-3">
+      <MessageContent
+        className={cn(
+          "w-fit min-w-0 overflow-visible border px-4 shadow-xs",
+          isAssistant
+            ? "max-w-[80%] gap-3 bg-background py-3"
+            : "max-w-[72%] gap-2 border-secondary/60 bg-secondary py-2.5",
+        )}
+      >
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant={isAssistant ? "default" : "outline"}>
             {isAssistant ? "Observability assistant" : "You"}

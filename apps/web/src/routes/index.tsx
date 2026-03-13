@@ -5,7 +5,7 @@ import { useChat } from "@ai-sdk/react";
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { z } from "zod";
 
-import { AssistantPanel } from "@/components/studio/assistant-panel";
+import { AssistantSheet } from "@/components/studio/assistant-sheet";
 import { EmptyState } from "@/components/studio/empty-state";
 import { ErrorState } from "@/components/studio/error-state";
 import { GroupDetailPanel } from "@/components/studio/group-detail-panel";
@@ -15,7 +15,6 @@ import { LogList } from "@/components/studio/log-list";
 import { ProjectConfigPanel } from "@/components/studio/project-config-panel";
 import { StudioShell } from "@/components/studio/studio-shell";
 import { StudioToolbar } from "@/components/studio/studio-toolbar";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type {
   StudioAssistantReference,
   StudioChatMessage,
@@ -51,7 +50,7 @@ function StudioRoute() {
   const [selection, setSelection] = useState<StudioSelection>(null);
   const [offset, setOffset] = useState(0);
   const [grouping, setGrouping] = useState<StudioGroupingMode>("grouped");
-  const [assistantTab, setAssistantTab] = useState<"details" | "assistant">("details");
+  const [assistantOpen, setAssistantOpen] = useState(false);
   const [assistantDraft, setAssistantDraft] = useState("");
   const [selectedModel, setSelectedModel] = useState("");
   const deferredSearch = useDeferredValue(filters.search);
@@ -185,6 +184,8 @@ function StudioRoute() {
       : selection?.kind === "group"
         ? "Selected structured group"
         : "No selection";
+  const openAssistant = () => setAssistantOpen(true);
+  const closeAssistant = () => setAssistantOpen(false);
 
   useEffect(() => {
     const status = assistantStatusQuery.data;
@@ -202,7 +203,8 @@ function StudioRoute() {
   useEffect(() => {
     setMessages([]);
     setAssistantDraft("");
-    setAssistantTab("details");
+    setSelectedModel("");
+    setAssistantOpen(false);
   }, [search.project, setMessages]);
 
   useEffect(() => {
@@ -256,7 +258,7 @@ function StudioRoute() {
     }
 
     clearAssistantError();
-    setAssistantTab("assistant");
+    openAssistant();
     await sendMessage(
       {
         text: value,
@@ -272,174 +274,169 @@ function StudioRoute() {
   };
 
   return (
-    <StudioShell
-      toolbar={
-        <StudioToolbar
-          draftProjectPath={draftProjectPath}
-          facets={facetsQuery.data}
-          filters={filters}
-          grouping={grouping}
-          meta={metaQuery.data}
-          files={files}
-          onDraftProjectPathChange={setDraftProjectPath}
-          onInspect={() =>
-            navigate({
-              search: {
-                project: draftProjectPath || undefined,
-              },
-            })
-          }
-          onFilterChange={setFilters}
-          onGroupingChange={setGrouping}
-          onResetFilters={() => setFilters(DEFAULT_FILTERS)}
-        />
-      }
-      sidebar={
-        <>
-          {metaQuery.data ? (
-            <ProjectConfigPanel meta={metaQuery.data} config={configQuery.data} />
-          ) : (
-            <EmptyState
-              title="Loading project metadata"
-              description="Resolving the target project and Blyp config."
-              size="compact"
-            />
-          )}
-          {filesQuery.isError ? (
-            <ErrorState
-              title="Log discovery failed"
-              description={filesQuery.error.message}
-              size="compact"
-            />
-          ) : (
-            <LogFilesPanel
-              files={files}
-              activeFileId={filters.fileId}
-              onSelectFile={(fileId) => setFilters((current) => ({ ...current, fileId }))}
-            />
-          )}
-        </>
-      }
-      content={
-        hasBackendError ? (
-          <ErrorState
-            title="Studio backend failed"
-            description={
-              metaQuery.error?.message ??
-              configQuery.error?.message ??
-              filesQuery.error?.message ??
-              logsQuery.error?.message ??
-              groupQuery.error?.message ??
-              recordQuery.error?.message ??
-              "Unknown Studio error"
+    <>
+      <StudioShell
+        toolbar={
+          <StudioToolbar
+            draftProjectPath={draftProjectPath}
+            facets={facetsQuery.data}
+            filters={filters}
+            grouping={grouping}
+            meta={metaQuery.data}
+            files={files}
+            onDraftProjectPathChange={setDraftProjectPath}
+            onInspect={() =>
+              navigate({
+                search: {
+                  project: draftProjectPath || undefined,
+                },
+              })
             }
+            onOpenAssistant={openAssistant}
+            onFilterChange={setFilters}
+            onGroupingChange={setGrouping}
+            onResetFilters={() => setFilters(DEFAULT_FILTERS)}
           />
-        ) : isProjectInvalid ? (
-          <ErrorState title="Target project is invalid" description={projectError} />
-        ) : isLoadingMeta ? (
-          <EmptyState
-            title="Loading Studio"
-            description="Resolving project metadata, config, and logs."
-          />
-        ) : (
-          <LogList
-            entries={entries}
-            selection={selection}
-            offset={logsQuery.data?.offset ?? offset}
-            limit={logsQuery.data?.limit ?? 100}
-            totalEntries={logsQuery.data?.totalEntries ?? 0}
-            totalMatched={logsQuery.data?.totalMatched ?? 0}
-            truncated={logsQuery.data?.truncated ?? false}
-            loading={logsQuery.isLoading}
-            onSelect={(nextSelection) => {
-              setSelection(nextSelection);
-              setAssistantTab("details");
-            }}
-            onPageChange={setOffset}
-          />
-        )
-      }
-      detail={
-        <Tabs value={assistantTab} className="space-y-3">
-          <div className="flex items-center justify-between gap-2">
-            <TabsList>
-              <TabsTrigger value="details" onClick={() => setAssistantTab("details")}>
-                Details
-              </TabsTrigger>
-              <TabsTrigger value="assistant" onClick={() => setAssistantTab("assistant")}>
-                Assistant
-              </TabsTrigger>
-            </TabsList>
-          </div>
-          <TabsContent value="details">
-            {selection?.kind === "group" ? (
-              <GroupDetailPanel
-                group={selectedGroup}
-                loading={groupQuery.isLoading}
-                onDescribeWithAi={() => {
-                  if (!selection) {
-                    return;
-                  }
-
-                  void submitAssistantPrompt(
-                    "Describe the selected structured group like an observability copilot. Explain what happened, likely cause, related signals, and what to inspect next.",
-                    "describe-selection",
-                  );
-                }}
-                onSelectRecord={(recordId) => {
-                  setSelection({ kind: "record", id: recordId });
-                }}
-              />
+        }
+        sidebar={
+          <>
+            {metaQuery.data ? (
+              <ProjectConfigPanel meta={metaQuery.data} config={configQuery.data} />
             ) : (
-              <LogDetailPanel
-                record={selectedRecord}
-                onDescribeWithAi={() => {
-                  if (!selection) {
-                    return;
-                  }
-
-                  void submitAssistantPrompt(
-                    "Describe the selected log like an observability copilot. Explain what happened, likely cause, related signals, and what to inspect next.",
-                    "describe-selection",
-                  );
-                }}
+              <EmptyState
+                title="Loading project metadata"
+                description="Resolving the target project and Blyp config."
+                size="compact"
               />
             )}
-          </TabsContent>
-          <TabsContent value="assistant">
-            <AssistantPanel
-              canDescribeSelection={selection !== null}
-              chatError={assistantError}
-              draft={assistantDraft}
-              messages={messages}
-              model={selectedModel}
-              selectionLabel={selectionLabel}
-              statusState={assistantStatus}
-              status={assistantStatusQuery.data}
-              onDraftChange={setAssistantDraft}
-              onModelChange={setSelectedModel}
-              onDescribeSelection={() => {
+            {filesQuery.isError ? (
+              <ErrorState
+                title="Log discovery failed"
+                description={filesQuery.error.message}
+                size="compact"
+              />
+            ) : (
+              <LogFilesPanel
+                files={files}
+                activeFileId={filters.fileId}
+                onSelectFile={(fileId) => setFilters((current) => ({ ...current, fileId }))}
+              />
+            )}
+          </>
+        }
+        content={
+          hasBackendError ? (
+            <ErrorState
+              title="Studio backend failed"
+              description={
+                metaQuery.error?.message ??
+                configQuery.error?.message ??
+                filesQuery.error?.message ??
+                logsQuery.error?.message ??
+                groupQuery.error?.message ??
+                recordQuery.error?.message ??
+                "Unknown Studio error"
+              }
+            />
+          ) : isProjectInvalid ? (
+            <ErrorState title="Target project is invalid" description={projectError} />
+          ) : isLoadingMeta ? (
+            <EmptyState
+              title="Loading Studio"
+              description="Resolving project metadata, config, and logs."
+            />
+          ) : (
+            <LogList
+              entries={entries}
+              selection={selection}
+              offset={logsQuery.data?.offset ?? offset}
+              limit={logsQuery.data?.limit ?? 100}
+              totalEntries={logsQuery.data?.totalEntries ?? 0}
+              totalMatched={logsQuery.data?.totalMatched ?? 0}
+              truncated={logsQuery.data?.truncated ?? false}
+              loading={logsQuery.isLoading}
+              onSelect={setSelection}
+              onPageChange={setOffset}
+            />
+          )
+        }
+        detail={
+          selection?.kind === "group" ? (
+            <GroupDetailPanel
+              group={selectedGroup}
+              loading={groupQuery.isLoading}
+              onDescribeWithAi={() => {
                 if (!selection) {
                   return;
                 }
 
                 void submitAssistantPrompt(
-                  "Describe the selected log or structured group like an observability copilot. Explain what happened, likely cause, related signals, and what to inspect next.",
+                  "Describe the selected structured group like an observability copilot. Explain what happened, likely cause, related signals, and what to inspect next.",
                   "describe-selection",
                 );
               }}
-              onReferenceSelect={handleReferenceSelect}
-              onSend={() => {
-                void submitAssistantPrompt(assistantDraft);
+              onSelectRecord={(recordId) => {
+                setSelection({ kind: "record", id: recordId });
               }}
-              onQuickAction={(prompt) => {
-                void submitAssistantPrompt(prompt);
-              }}
-              onStop={stopAssistant}
             />
-          </TabsContent>
-        </Tabs>
-      }
-    />
+          ) : (
+            <LogDetailPanel
+              record={selectedRecord}
+              onDescribeWithAi={() => {
+                if (!selection) {
+                  return;
+                }
+
+                void submitAssistantPrompt(
+                  "Describe the selected log like an observability copilot. Explain what happened, likely cause, related signals, and what to inspect next.",
+                  "describe-selection",
+                );
+              }}
+            />
+          )
+        }
+      />
+      {hasBackendError || isProjectInvalid || isLoadingMeta ? null : (
+        <AssistantSheet
+          open={assistantOpen}
+          canDescribeSelection={selection !== null}
+          chatError={assistantError}
+          draft={assistantDraft}
+          messages={messages}
+          model={selectedModel}
+          selectionLabel={selectionLabel}
+          statusState={assistantStatus}
+          status={assistantStatusQuery.data}
+          onDraftChange={setAssistantDraft}
+          onModelChange={setSelectedModel}
+          onDescribeSelection={() => {
+            if (!selection) {
+              return;
+            }
+
+            void submitAssistantPrompt(
+              "Describe the selected log or structured group like an observability copilot. Explain what happened, likely cause, related signals, and what to inspect next.",
+              "describe-selection",
+            );
+          }}
+          onOpenChange={(next) => {
+            if (next) {
+              openAssistant();
+              return;
+            }
+
+            closeAssistant();
+          }}
+          onQuickAction={(prompt) => {
+            void submitAssistantPrompt(prompt);
+          }}
+          onReferenceSelect={handleReferenceSelect}
+          onSend={() => {
+            void submitAssistantPrompt(assistantDraft);
+          }}
+          onStop={stopAssistant}
+        />
+      )}
+    </>
   );
 }

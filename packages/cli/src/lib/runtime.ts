@@ -94,7 +94,7 @@ export async function resolveWebAppDir(cwd: string): Promise<string | null> {
 }
 
 export function getStudioUrl(projectPath?: string): string {
-  const url = new URL("http://localhost:3001/");
+  const url = new URL("http://localhost:3003/");
 
   if (projectPath) {
     url.searchParams.set("project", projectPath);

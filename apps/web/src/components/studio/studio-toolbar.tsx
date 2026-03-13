@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { useState } from "react";
 
 import {
+  Bot,
   CalendarDays,
   LayoutPanelTop,
   RotateCcw,
@@ -49,6 +50,7 @@ interface StudioToolbarProps {
   onFilterChange(next: StudioFilters): void;
   onGroupingChange(value: StudioGroupingMode): void;
   onInspect(): void;
+  onOpenAssistant(): void;
   onResetFilters(): void;
 }
 
@@ -63,6 +65,7 @@ export function StudioToolbar({
   onFilterChange,
   onGroupingChange,
   onInspect,
+  onOpenAssistant,
   onResetFilters,
 }: StudioToolbarProps) {
   const currentTarget = meta?.project.absolutePath || draftProjectPath;
@@ -95,6 +98,15 @@ export function StudioToolbar({
             </div>
           </div>
           <div className="flex min-w-0 flex-wrap items-center gap-2 text-[10px] uppercase tracking-[0.18em]">
+            <Button
+              aria-label="Open assistant"
+              variant="outline"
+              size="sm"
+              onClick={onOpenAssistant}
+            >
+              <Bot />
+              Assistant
+            </Button>
             <StatusPill
               label="Project"
               status={meta?.project.valid ? "valid" : "invalid"}
