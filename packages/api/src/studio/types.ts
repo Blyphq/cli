@@ -152,6 +152,35 @@ export interface StudioHttpDetails {
   error: unknown;
 }
 
+export interface StudioResolvedSourceLocation {
+  absolutePath: string;
+  relativePath: string;
+  line: number;
+  column: number | null;
+  origin: "stack" | "caller";
+}
+
+export type StudioSourceUnavailableReason =
+  | "no_location"
+  | "no_project_frame"
+  | "outside_project"
+  | "node_modules"
+  | "unsupported_extension"
+  | "file_missing"
+  | "file_too_large"
+  | "read_failed";
+
+export interface StudioSourceContext {
+  status: "resolved" | "unavailable";
+  reason: StudioSourceUnavailableReason | null;
+  location: StudioResolvedSourceLocation | null;
+  startLine: number | null;
+  endLine: number | null;
+  focusLine: number | null;
+  language: string | null;
+  snippet: string | null;
+}
+
 export interface StudioNormalizedRecord {
   id: string;
   timestamp: string | null;
@@ -168,6 +197,9 @@ export interface StudioNormalizedRecord {
   lineNumber: number;
   malformed: boolean;
   http: StudioHttpDetails | null;
+  error: unknown | null;
+  stack: string | null;
+  sourceLocation: StudioResolvedSourceLocation | null;
   raw: unknown;
 }
 

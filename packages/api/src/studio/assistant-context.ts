@@ -1,10 +1,12 @@
 import { buildGroupDetails } from "./grouping";
 import { filterRecords } from "./query";
+import { resolveRecordSourceContext } from "./source";
 
 import type {
   StudioAssistantReference,
   StudioLogsQueryInput,
   StudioNormalizedRecord,
+  StudioSourceContext,
   StudioStructuredGroupDetail,
 } from "./types";
 
@@ -19,19 +21,21 @@ interface BuildAssistantContextInput {
   >;
   selectedRecordId?: string;
   selectedGroupId?: string;
+  projectPath: string;
   userQuestion: string;
 }
 
 export interface StudioAssistantContext {
   selectedRecord: StudioNormalizedRecord | null;
+  selectedRecordSource: StudioSourceContext | null;
   selectedGroup: StudioStructuredGroupDetail | null;
   evidenceRecords: StudioNormalizedRecord[];
   references: StudioAssistantReference[];
 }
 
-export function buildAssistantContext(
+export async function buildAssistantContext(
   input: BuildAssistantContextInput,
-): StudioAssistantContext {
+): Promise<StudioAssistantContext> {
   const groups = buildGroupDetails(input.allRecords);
   const selectedRecord =
     input.selectedRecordId
@@ -146,9 +150,13 @@ export function buildAssistantContext(
     selectedRecord,
     allGroups: groups,
   });
+  const selectedRecordSource = selectedRecord
+    ? await resolveRecordSourceContext(input.projectPath, selectedRecord)
+    : null;
 
   return {
     selectedRecord,
+    selectedRecordSource,
     selectedGroup,
     evidenceRecords,
     references,

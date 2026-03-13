@@ -14,6 +14,7 @@ import {
   getStudioLogs,
   getStudioMeta,
   getStudioRecord,
+  getStudioRecordSource,
   replyWithStudioAssistant,
 } from "../studio/service";
 
@@ -109,6 +110,14 @@ export const studioRouter = router({
       }),
     )
     .query(({ input }) => getStudioRecord(input)),
+  recordSource: publicProcedure
+    .input(
+      z.object({
+        projectPath: z.string().optional(),
+        recordId: z.string(),
+      }),
+    )
+    .query(({ input }) => getStudioRecordSource(input)),
   assistantStatus: publicProcedure
     .input(z.object({ projectPath: z.string().optional() }).optional())
     .query(({ input }) => getStudioAssistantStatus(input?.projectPath)),

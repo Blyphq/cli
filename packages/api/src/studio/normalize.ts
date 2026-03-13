@@ -1,3 +1,5 @@
+import { resolveRecordSourceLocation } from "./source";
+
 import type { StudioHttpDetails, StudioLogFile, StudioNormalizedRecord, StudioRecordSource } from "./types";
 
 interface NormalizeRecordOptions {
@@ -5,14 +7,16 @@ interface NormalizeRecordOptions {
   lineNumber: number;
   rawLine: string;
   parsed: unknown;
+  projectPath?: string;
 }
 
-export function normalizeRecord({
+export async function normalizeRecord({
   file,
   lineNumber,
   rawLine,
   parsed,
-}: NormalizeRecordOptions): StudioNormalizedRecord {
+  projectPath,
+}: NormalizeRecordOptions): Promise<StudioNormalizedRecord> {
   const malformed = !isPlainObject(parsed);
   const objectRecord = isPlainObject(parsed) ? parsed : {};
   const message = getMessage(objectRecord, rawLine, malformed);
@@ -24,6 +28,12 @@ export function normalizeRecord({
   const bindings = isPlainObject(objectRecord.bindings)
     ? (objectRecord.bindings as Record<string, unknown>)
     : null;
+  const caller = getOptionalString(objectRecord.caller) ?? null;
+  const error = objectRecord.error ?? null;
+  const stack = resolveRecordStack(objectRecord);
+  const sourceResolution = projectPath
+    ? await resolveRecordSourceLocation(projectPath, { caller, stack })
+    : null;
 
   return {
     id: `${file.id}:${lineNumber}`,
@@ -32,7 +42,7 @@ export function normalizeRecord({
     message,
     source,
     type,
-    caller: getOptionalString(objectRecord.caller) ?? null,
+    caller,
     bindings,
     data: objectRecord.data,
     fileId: file.id,
@@ -41,6 +51,10 @@ export function normalizeRecord({
     lineNumber,
     malformed,
     http,
+    error,
+    stack,
+    sourceLocation:
+      sourceResolution?.status === "resolved" ? sourceResolution.location : null,
     raw: malformed ? { rawLine } : parsed,
   };
 }
@@ -125,6 +139,20 @@ function getMessage(
   }
 
   return "Unknown log record";
+}
+
+function resolveRecordStack(record: Record<string, unknown>): string | null {
+  const topLevelStack = getOptionalString(record.stack);
+
+  if (topLevelStack) {
+    return topLevelStack;
+  }
+
+  if (isPlainObject(record.error)) {
+    return getOptionalString(record.error.stack) ?? null;
+  }
+
+  return null;
 }
 
 function getOptionalString(value: unknown): string | null {

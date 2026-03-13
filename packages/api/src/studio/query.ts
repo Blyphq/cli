@@ -17,18 +17,20 @@ const MAX_DECOMPRESSED_BYTES = 25 * 1024 * 1024;
 interface QueryLogsOptions {
   files: StudioLogDiscovery["files"];
   input: StudioLogsQueryInput;
+  projectPath?: string;
 }
 
 export async function queryLogs({
   files,
   input,
+  projectPath,
 }: QueryLogsOptions): Promise<StudioLogsPage> {
   const limit = clampLimit(input.limit);
   const offset = Math.max(0, input.offset ?? 0);
   const candidateFiles = input.fileId
     ? files.filter((file) => file.id === input.fileId)
     : files;
-  const loaded = await loadNormalizedRecords(candidateFiles);
+  const loaded = await loadNormalizedRecords(candidateFiles, projectPath);
   const allRecords = loaded.records.slice().sort(compareRecordsDescending);
   const matchedRecords = filterRecords(allRecords, input).sort(compareRecordsDescending);
   const grouping = input.grouping ?? "grouped";
@@ -56,6 +58,7 @@ export async function queryLogs({
 
 export async function loadNormalizedRecords(
   files: StudioLogDiscovery["files"],
+  projectPath?: string,
 ): Promise<{
   records: StudioNormalizedRecord[];
   scannedRecords: number;
@@ -96,11 +99,12 @@ export async function loadNormalizedRecords(
       const rawLine = lines[index]!;
       const parsed = parseJsonLine(rawLine);
       normalized.push(
-        normalizeRecord({
+        await normalizeRecord({
           file,
           lineNumber: index + 1,
           rawLine,
           parsed,
+          projectPath,
         }),
       );
       scannedRecords += 1;

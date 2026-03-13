@@ -9,6 +9,7 @@ export type StudioFiles = RouterOutputs["studio"]["files"];
 export type StudioFile = StudioFiles["files"][number];
 export type StudioLogsPage = RouterOutputs["studio"]["logs"];
 export type StudioRecord = StudioLogsPage["records"][number];
+export type StudioRecordSourceContext = RouterOutputs["studio"]["recordSource"];
 export type StudioLogEntry = StudioLogsPage["entries"][number];
 export type StudioGroupDetail = NonNullable<RouterOutputs["studio"]["group"]>;
 export type StudioFacets = RouterOutputs["studio"]["facets"];

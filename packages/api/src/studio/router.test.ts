@@ -54,8 +54,21 @@ describe("studio router", () => {
   it("serves grouped logs and assistant routes", async () => {
     const projectDir = await createProject();
     const logDir = path.join(projectDir, "logs");
+    const sourcePath = path.join(projectDir, "src/routes/checkout.ts");
 
     await mkdir(logDir, { recursive: true });
+    await mkdir(path.dirname(sourcePath), { recursive: true });
+    await writeFile(
+      sourcePath,
+      [
+        "export function checkoutRoute() {",
+        "  const cart = null;",
+        "  if (!cart) {",
+        "    throw new Error('checkout failed');",
+        "  }",
+        "}",
+      ].join("\n"),
+    );
     await writeFile(
       path.join(logDir, "log.ndjson"),
       [
@@ -66,6 +79,7 @@ describe("studio router", () => {
           type: "checkout_flow",
           groupId: "checkout-1",
           events: ["error"],
+          caller: "src/routes/checkout.ts:4",
         }),
         JSON.stringify({
           timestamp: "2026-03-13T12:00:01.000Z",
@@ -92,6 +106,11 @@ describe("studio router", () => {
       grouping: "grouped",
       limit: 10,
     });
+    const flatLogs = await caller.studio.logs({
+      projectPath: projectDir,
+      grouping: "flat",
+      limit: 10,
+    });
     const group = logs.entries.find((entry) => entry.kind === "structured-group");
 
     expect(group).toBeTruthy();
@@ -99,6 +118,11 @@ describe("studio router", () => {
     const groupDetail = await caller.studio.group({
       projectPath: projectDir,
       groupId: group?.id ?? "",
+    });
+    const selectedRecord = flatLogs.records.find((record) => record.message === "checkout failed");
+    const recordSource = await caller.studio.recordSource({
+      projectPath: projectDir,
+      recordId: selectedRecord?.id ?? "",
     });
     const assistantStatus = await caller.studio.assistantStatus({ projectPath: projectDir });
     const description = await caller.studio.describeSelection({
@@ -109,6 +133,12 @@ describe("studio router", () => {
     });
 
     expect(groupDetail?.records).toHaveLength(2);
+    expect(recordSource).toMatchObject({
+      status: "resolved",
+      location: {
+        relativePath: "src/routes/checkout.ts",
+      },
+    });
     expect(assistantStatus.enabled).toBe(true);
     expect(description.references.length).toBeGreaterThan(0);
   });

@@ -2,12 +2,14 @@ import type {
   StudioAssistantHistoryItem,
   StudioAssistantReference,
   StudioNormalizedRecord,
+  StudioSourceContext,
   StudioStructuredGroupDetail,
 } from "./types";
 
 interface PromptEvidence {
   projectPath: string;
   selectedRecord: StudioNormalizedRecord | null;
+  selectedRecordSource: StudioSourceContext | null;
   selectedGroup: StudioStructuredGroupDetail | null;
   records: StudioNormalizedRecord[];
   references: StudioAssistantReference[];
@@ -26,6 +28,8 @@ export function buildAssistantSystemPrompt(): string {
     "When the logs suggest a causal chain, walk through that chain clearly and point to the corroborating signals.",
     "When there are multiple plausible explanations, rank them and say what evidence is missing to disambiguate them.",
     "Call out matching or related logs when they strengthen the conclusion, especially repeated errors, correlated requests, or the same caller/type/path.",
+    "When selected source context is provided, use it as code evidence and explain how it relates to the log.",
+    "Do not confuse the throw site with the full root cause; if the snippet is insufficient, say what additional code would be needed.",
     "Prefer concrete language like 'I traced', 'I correlated', or 'I suspect' when it matches the certainty level.",
     "Do not invent fields, causes, or missing context.",
     "Write in compact markdown with short sections and bullets when useful, but keep the tone helpful and operational.",
@@ -89,11 +93,30 @@ function renderEvidence(input: PromptEvidence): string {
   return [
     "Evidence references:",
     JSON.stringify(input.references, null, 2),
+    "Selected source context:",
+    JSON.stringify(summarizeSourceContext(input.selectedRecordSource), null, 2),
     "Selected context:",
     JSON.stringify(selection, null, 2),
     "Evidence records:",
     JSON.stringify(input.records.map(summarizeRecord), null, 2),
   ].join("\n");
+}
+
+function summarizeSourceContext(source: StudioSourceContext | null) {
+  if (!source || source.status !== "resolved" || !source.location) {
+    return null;
+  }
+
+  return {
+    path: source.location.relativePath,
+    line: source.location.line,
+    column: source.location.column,
+    origin: source.location.origin,
+    startLine: source.startLine,
+    endLine: source.endLine,
+    language: source.language,
+    snippet: source.snippet,
+  };
 }
 
 function summarizeRecord(record: StudioNormalizedRecord) {
@@ -105,6 +128,7 @@ function summarizeRecord(record: StudioNormalizedRecord) {
     type: record.type,
     message: record.message,
     caller: record.caller,
+    stack: record.stack,
     fileName: record.fileName,
     http: record.http
       ? {

@@ -150,6 +150,16 @@ function StudioRoute() {
       metaQuery.data.project.valid &&
       selection?.kind === "record",
   });
+  const recordSourceQuery = useQuery({
+    ...trpc.studio.recordSource.queryOptions({
+      projectPath,
+      recordId: selection?.kind === "record" ? selection.id : "",
+    }),
+    enabled:
+      metaQuery.isSuccess &&
+      metaQuery.data.project.valid &&
+      selection?.kind === "record",
+  });
 
   const assistantStatusQuery = useQuery(
     trpc.studio.assistantStatus.queryOptions({ projectPath }),
@@ -727,6 +737,8 @@ function StudioRoute() {
           ) : (
             <LogDetailPanel
               record={selectedRecord}
+              source={recordSourceQuery.data ?? null}
+              sourceLoading={recordSourceQuery.isLoading}
               onDescribeWithAi={() => {
                 handleDescribeSelection(
                   "Describe the selected log like an observability copilot. Explain what happened, likely cause, related signals, and what to inspect next.",

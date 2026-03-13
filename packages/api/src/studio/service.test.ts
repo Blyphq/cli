@@ -6,6 +6,7 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { __setGenerateTextForTests } from "./assistant-provider";
+import { __setStreamTextForTests } from "./assistant";
 import { discoverStudioConfig } from "./config";
 import { discoverLogFiles } from "./logs";
 import { resolveStudioProject } from "./project";
@@ -19,7 +20,9 @@ import {
   getStudioGroup,
   getStudioLogs,
   getStudioMeta,
+  getStudioRecordSource,
   replyWithStudioAssistant,
+  streamStudioAssistant,
 } from "./service";
 
 const tempDirs: string[] = [];
@@ -29,6 +32,7 @@ afterEach(async () => {
   delete process.env.OPENROUTER_API_KEY;
   delete process.env.OPENROUTER_MODEL;
   __setGenerateTextForTests(null);
+  __setStreamTextForTests(null);
 
   await Promise.all(
     tempDirs.splice(0).map((directory) => rm(directory, { recursive: true, force: true })),
@@ -356,8 +360,21 @@ describe("studio service", () => {
   it("reports assistant status and returns mocked assistant replies", async () => {
     const projectDir = await createProject();
     const logDir = path.join(projectDir, "logs");
+    const sourcePath = path.join(projectDir, "src/routes/checkout.ts");
 
     await mkdir(logDir, { recursive: true });
+    await mkdir(path.dirname(sourcePath), { recursive: true });
+    await writeFile(
+      sourcePath,
+      [
+        "export function checkoutRoute() {",
+        "  const cart = null;",
+        "  if (!cart) {",
+        "    throw new Error('checkout failed');",
+        "  }",
+        "}",
+      ].join("\n"),
+    );
     await writeFile(
       path.join(logDir, "log.ndjson"),
       [
@@ -368,6 +385,7 @@ describe("studio service", () => {
           type: "checkout_flow",
           groupId: "checkout-1",
           events: ["error"],
+          caller: "src/routes/checkout.ts:4",
         }),
         createLogLine({
           timestamp: "2026-03-13T10:00:01.000Z",
@@ -384,16 +402,25 @@ describe("studio service", () => {
 
     process.env.OPENROUTER_API_KEY = "test-key";
     process.env.OPENROUTER_MODEL = "openai/gpt-5.4";
+    let capturedPrompt = "";
 
     __setGenerateTextForTests(
-      async () => ({
+      async ({ prompt }) => {
+        capturedPrompt = prompt;
+        return {
         text: "This looks like a failed checkout sequence with a follow-up retry.",
-      }),
+        };
+      },
     );
 
     const grouped = await getStudioLogs({
       projectPath: projectDir,
       grouping: "grouped",
+      limit: 50,
+    });
+    const flat = await getStudioLogs({
+      projectPath: projectDir,
+      grouping: "flat",
       limit: 50,
     });
     const selectedGroup = grouped.entries.find((entry) => entry.kind === "structured-group");
@@ -412,10 +439,132 @@ describe("studio service", () => {
       projectPath: projectDir,
       history: [],
       filters: {},
-      selectedGroupId: selectedGroup?.id,
+      selectedRecordId: flat.records.find((record) => record.message === "checkout failed")?.id,
     });
 
-    expect(description.references.some((reference) => reference.kind === "group")).toBe(true);
+    expect(description.references.some((reference) => reference.kind === "record")).toBe(true);
+    expect(capturedPrompt).toContain("Selected source context:");
+    expect(capturedPrompt).toContain("src/routes/checkout.ts");
+    expect(capturedPrompt).toContain("throw new Error('checkout failed');");
+  });
+
+  it("returns source context for a record and keeps framework-only records unavailable", async () => {
+    const projectDir = await createProject();
+    const logDir = path.join(projectDir, "logs");
+    const sourcePath = path.join(projectDir, "src/routes/demo.ts");
+
+    await mkdir(logDir, { recursive: true });
+    await mkdir(path.dirname(sourcePath), { recursive: true });
+    await writeFile(
+      sourcePath,
+      [
+        "export function handler() {",
+        "  const value = null;",
+        "  if (!value) {",
+        "    throw new Error('boom');",
+        "  }",
+        "}",
+      ].join("\n"),
+    );
+    await writeFile(
+      path.join(logDir, "log.ndjson"),
+      [
+        createLogLine({
+          level: "error",
+          message: "boom",
+          caller: "src/routes/demo.ts:4",
+        }),
+        createLogLine({
+          level: "error",
+          message: "favicon missing",
+          stack: `Error\n    at anonymous (${path.join(projectDir, "node_modules/elysia/index.js")}:12:33)`,
+        }),
+      ].join(""),
+    );
+
+    const logs = await getStudioLogs({ projectPath: projectDir, limit: 10, grouping: "flat" });
+
+    const resolved = await getStudioRecordSource({
+      projectPath: projectDir,
+      recordId: logs.records.find((record) => record.message === "boom")?.id ?? "",
+    });
+    const unavailable = await getStudioRecordSource({
+      projectPath: projectDir,
+      recordId: logs.records.find((record) => record.message === "favicon missing")?.id ?? "",
+    });
+
+    expect(resolved).toMatchObject({
+      status: "resolved",
+      location: {
+        relativePath: "src/routes/demo.ts",
+        line: 4,
+      },
+    });
+    expect(resolved.snippet).toContain("throw new Error('boom');");
+    expect(unavailable).toMatchObject({
+      status: "unavailable",
+      reason: "node_modules",
+    });
+  });
+
+  it("includes selected record source context in streamed prompts", async () => {
+    const projectDir = await createProject();
+    const logDir = path.join(projectDir, "logs");
+    const sourcePath = path.join(projectDir, "src/routes/stream.ts");
+
+    await mkdir(logDir, { recursive: true });
+    await mkdir(path.dirname(sourcePath), { recursive: true });
+    await writeFile(
+      sourcePath,
+      [
+        "export function streamDemo() {",
+        "  const user = null;",
+        "  if (!user) {",
+        "    throw new Error('stream failure');",
+        "  }",
+        "}",
+      ].join("\n"),
+    );
+    await writeFile(
+      path.join(logDir, "log.ndjson"),
+      createLogLine({
+        level: "error",
+        message: "stream failure",
+        caller: "src/routes/stream.ts:4",
+      }),
+    );
+
+    process.env.OPENROUTER_API_KEY = "test-key";
+    process.env.OPENROUTER_MODEL = "openai/gpt-5.4";
+
+    let streamedPrompt = "";
+    __setStreamTextForTests(async ({ prompt, model, references }) => {
+      streamedPrompt = prompt;
+      return {
+        result: {} as never,
+        references,
+        model,
+      };
+    });
+
+    const logs = await getStudioLogs({ projectPath: projectDir, limit: 10, grouping: "flat" });
+    await streamStudioAssistant({
+      projectPath: projectDir,
+      filters: {},
+      selectedRecordId: logs.records[0]?.id,
+      messages: [
+        {
+          id: "u1",
+          role: "user",
+          parts: [{ type: "text", text: "What caused this?" }],
+        } as never,
+      ],
+      mode: "describe-selection",
+    });
+
+    expect(streamedPrompt).toContain("Selected source context:");
+    expect(streamedPrompt).toContain("src/routes/stream.ts");
+    expect(streamedPrompt).toContain("throw new Error('stream failure');");
   });
 });
 

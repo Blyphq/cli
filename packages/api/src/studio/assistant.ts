@@ -29,6 +29,16 @@ interface AiConfigInput {
   model: string | null;
 }
 
+type TestStreamTextFn = (input: {
+  system: string;
+  prompt: string;
+  model: string;
+  history: UIMessage[];
+  references: StudioAssistantMessage["references"];
+}) => Promise<StudioAssistantStreamResult>;
+
+let testStreamText: TestStreamTextFn | null = null;
+
 interface RunAssistantInput extends StudioAssistantReplyInput {
   files: StudioLogDiscovery["files"];
   projectPath: string;
@@ -59,17 +69,18 @@ export interface StudioAssistantStreamResult {
 export async function replyWithAssistant(
   input: RunAssistantInput,
 ): Promise<StudioAssistantMessage> {
-  const loaded = await loadNormalizedRecords(input.files);
+  const loaded = await loadNormalizedRecords(input.files, input.projectPath);
   const history = input.history.slice(-8);
   const latestUserMessage = history
     .slice()
     .reverse()
     .find((item) => item.role === "user")?.content ?? "Summarize the current logs.";
-  const context = buildAssistantContext({
+  const context = await buildAssistantContext({
     allRecords: loaded.records,
     filters: input.filters,
     selectedRecordId: input.selectedRecordId,
     selectedGroupId: input.selectedGroupId,
+    projectPath: input.projectPath,
     userQuestion: latestUserMessage,
   });
   const content = await generateAssistantText({
@@ -79,6 +90,7 @@ export async function replyWithAssistant(
     prompt: buildAssistantReplyPrompt({
       projectPath: input.projectPath,
       selectedRecord: context.selectedRecord,
+      selectedRecordSource: context.selectedRecordSource,
       selectedGroup: context.selectedGroup,
       records: context.evidenceRecords,
       references: context.references,
@@ -99,12 +111,13 @@ export async function replyWithAssistant(
 export async function describeSelectionWithAssistant(
   input: RunAssistantInput,
 ): Promise<StudioAssistantMessage> {
-  const loaded = await loadNormalizedRecords(input.files);
-  const context = buildAssistantContext({
+  const loaded = await loadNormalizedRecords(input.files, input.projectPath);
+  const context = await buildAssistantContext({
     allRecords: loaded.records,
     filters: input.filters,
     selectedRecordId: input.selectedRecordId,
     selectedGroupId: input.selectedGroupId,
+    projectPath: input.projectPath,
     userQuestion: "Describe this selection.",
   });
   const content = await generateAssistantText({
@@ -114,6 +127,7 @@ export async function describeSelectionWithAssistant(
     prompt: buildDescribeSelectionPrompt({
       projectPath: input.projectPath,
       selectedRecord: context.selectedRecord,
+      selectedRecordSource: context.selectedRecordSource,
       selectedGroup: context.selectedGroup,
       records: context.evidenceRecords,
       references: context.references,
@@ -134,18 +148,19 @@ export async function describeSelectionWithAssistant(
 export async function streamAssistant(
   input: StreamAssistantInput,
 ): Promise<StudioAssistantStreamResult> {
-  const loaded = await loadNormalizedRecords(input.files);
+  const loaded = await loadNormalizedRecords(input.files, input.projectPath);
   const latestUserMessage =
     input.messages
       .slice()
       .reverse()
       .find((message) => message.role === "user")?.parts.find((part) => part.type === "text")
       ?.text ?? "Summarize the current logs.";
-  const context = buildAssistantContext({
+  const context = await buildAssistantContext({
     allRecords: loaded.records,
     filters: input.filters,
     selectedRecordId: input.selectedRecordId,
     selectedGroupId: input.selectedGroupId,
+    projectPath: input.projectPath,
     userQuestion: latestUserMessage,
   });
   const prompt =
@@ -153,6 +168,7 @@ export async function streamAssistant(
       ? buildDescribeSelectionPrompt({
           projectPath: input.projectPath,
           selectedRecord: context.selectedRecord,
+          selectedRecordSource: context.selectedRecordSource,
           selectedGroup: context.selectedGroup,
           records: context.evidenceRecords,
           references: context.references,
@@ -163,6 +179,7 @@ export async function streamAssistant(
       : buildAssistantReplyPrompt({
           projectPath: input.projectPath,
           selectedRecord: context.selectedRecord,
+          selectedRecordSource: context.selectedRecordSource,
           selectedGroup: context.selectedGroup,
           records: context.evidenceRecords,
           references: context.references,
@@ -176,6 +193,16 @@ export async function streamAssistant(
   });
   const history = input.messages.slice(0, -1);
   const modelMessages = await convertToModelMessages(history);
+
+  if (testStreamText) {
+    return testStreamText({
+      system: buildAssistantSystemPrompt(),
+      prompt,
+      model: modelId,
+      history: input.messages,
+      references: context.references,
+    });
+  }
 
   return {
     result: streamText({
@@ -194,6 +221,10 @@ export async function streamAssistant(
     references: context.references,
     model: modelId,
   };
+}
+
+export function __setStreamTextForTests(fn: TestStreamTextFn | null): void {
+  testStreamText = fn;
 }
 
 function summarizeFilters(filters: StudioAssistantReplyInput["filters"]): string {

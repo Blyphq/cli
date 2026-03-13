@@ -11,6 +11,7 @@ import { buildGroupDetails } from "./grouping";
 import { discoverLogFiles } from "./logs";
 import { resolveStudioProject } from "./project";
 import { loadNormalizedRecords, queryLogs } from "./query";
+import { createUnavailableSourceContext, resolveRecordSourceContext } from "./source";
 
 import type {
   StudioAssistantMessage,
@@ -22,6 +23,7 @@ import type {
   StudioLogsPage,
   StudioLogsQueryInput,
   StudioMeta,
+  StudioSourceContext,
   StudioStructuredGroupDetail,
 } from "./types";
 
@@ -64,10 +66,11 @@ export async function getStudioFiles(projectPath?: string): Promise<StudioLogDis
 }
 
 export async function getStudioLogs(input: StudioLogsQueryInput): Promise<StudioLogsPage> {
-  const files = await getStudioFiles(input.projectPath);
+  const { files, project } = await getStudioProjectFiles(input.projectPath);
   return queryLogs({
     files: files.files,
     input,
+    projectPath: project.absolutePath,
   });
 }
 
@@ -77,8 +80,8 @@ export async function getStudioFacets(
     "projectPath" | "level" | "search" | "fileId" | "from" | "to"
   >,
 ): Promise<StudioLogFacets> {
-  const files = await getStudioFiles(input.projectPath);
-  const loaded = await loadNormalizedRecords(files.files);
+  const { files, project } = await getStudioProjectFiles(input.projectPath);
+  const loaded = await loadNormalizedRecords(files.files, project.absolutePath);
 
   return getLogFacets(loaded.records, input);
 }
@@ -87,8 +90,8 @@ export async function getStudioGroup(input: {
   projectPath?: string;
   groupId: string;
 }): Promise<StudioStructuredGroupDetail | null> {
-  const files = await getStudioFiles(input.projectPath);
-  const loaded = await loadNormalizedRecords(files.files);
+  const { files, project } = await getStudioProjectFiles(input.projectPath);
+  const loaded = await loadNormalizedRecords(files.files, project.absolutePath);
   const groups = buildGroupDetails(loaded.records);
 
   return groups.get(input.groupId) ?? null;
@@ -98,10 +101,25 @@ export async function getStudioRecord(input: {
   projectPath?: string;
   recordId: string;
 }) {
-  const files = await getStudioFiles(input.projectPath);
-  const loaded = await loadNormalizedRecords(files.files);
+  const { files, project } = await getStudioProjectFiles(input.projectPath);
+  const loaded = await loadNormalizedRecords(files.files, project.absolutePath);
 
   return loaded.records.find((record) => record.id === input.recordId) ?? null;
+}
+
+export async function getStudioRecordSource(input: {
+  projectPath?: string;
+  recordId: string;
+}): Promise<StudioSourceContext> {
+  const { files, project } = await getStudioProjectFiles(input.projectPath);
+  const loaded = await loadNormalizedRecords(files.files, project.absolutePath);
+  const record = loaded.records.find((candidate) => candidate.id === input.recordId);
+
+  if (!record) {
+    return createUnavailableSourceContext("no_location");
+  }
+
+  return resolveRecordSourceContext(project.absolutePath, record);
 }
 
 export async function getStudioAssistantStatus(projectPath?: string): Promise<StudioAssistantStatus> {
@@ -206,6 +224,23 @@ function emptyLogDiscovery(config: StudioConfigDiscovery): StudioLogDiscovery {
     logDirExists: false,
     archiveDirExists: false,
     files: [],
+  };
+}
+
+async function getStudioProjectFiles(projectPath?: string): Promise<{
+  project: Awaited<ReturnType<typeof resolveStudioProject>>;
+  config: StudioConfigDiscovery;
+  files: StudioLogDiscovery;
+}> {
+  const project = await resolveStudioProject(projectPath);
+  const config = await discoverStudioConfig(project);
+
+  return {
+    project,
+    config,
+    files: project.valid
+      ? await discoverLogFiles(project.absolutePath, config)
+      : emptyLogDiscovery(config),
   };
 }
 

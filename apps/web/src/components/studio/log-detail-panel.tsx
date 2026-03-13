@@ -1,7 +1,7 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import type { StudioRecord } from "@/lib/studio";
+import type { StudioRecord, StudioRecordSourceContext } from "@/lib/studio";
 import { formatDateTime, getLevelClasses } from "@/lib/studio";
 
 import { EmptyState } from "./empty-state";
@@ -9,14 +9,22 @@ import { HttpLogDetail } from "./http-log-detail";
 import { JsonDetailBlock } from "./json-detail-block";
 import { MetaList } from "./meta-list";
 import { PanelHeader } from "./panel-header";
+import { SourceContextPanel } from "./source-context-panel";
 import { TruncatedPath } from "./truncated-path";
 
 interface LogDetailPanelProps {
   record: StudioRecord | null;
+  source?: StudioRecordSourceContext | null;
+  sourceLoading?: boolean;
   onDescribeWithAi?(): void;
 }
 
-export function LogDetailPanel({ record, onDescribeWithAi }: LogDetailPanelProps) {
+export function LogDetailPanel({
+  record,
+  source,
+  sourceLoading = false,
+  onDescribeWithAi,
+}: LogDetailPanelProps) {
   if (!record) {
     return (
       <EmptyState
@@ -74,6 +82,7 @@ export function LogDetailPanel({ record, onDescribeWithAi }: LogDetailPanelProps
           ) : null}
         </CardContent>
       </Card>
+      <SourceContextPanel source={source} loading={sourceLoading} />
       {record.http ? <HttpLogDetail record={record} /> : null}
       {record.bindings ? <JsonDetailBlock title="Bindings" value={record.bindings} /> : null}
       {record.data !== undefined ? <JsonDetailBlock title="Data" value={record.data} /> : null}
