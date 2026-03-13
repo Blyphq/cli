@@ -1,51 +1,71 @@
-import { useState } from "react";
-
-import { Bot, Search, Send, Sparkles } from "lucide-react";
+import { Bot, Search, Send, Sparkles, StopCircle } from "lucide-react";
 
 import { AssistantMessage } from "@/components/studio/assistant-message";
+import { AssistantShimmer } from "@/components/studio/assistant-shimmer";
 import { AssistantSetupState } from "@/components/studio/assistant-setup-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import type {
-  StudioAssistantMessage,
   StudioAssistantReference,
   StudioAssistantStatus,
+  StudioChatMessage,
+  StudioChatStatus,
 } from "@/lib/studio";
+import { isMessageStreaming } from "@/lib/studio";
 
 import { EmptyState } from "./empty-state";
+import { ErrorState } from "./error-state";
 import { PanelHeader } from "./panel-header";
 
-type ChatMessage =
-  | StudioAssistantMessage
-  | {
-      id: string;
-      role: "user";
-      content: string;
-    };
-
 interface AssistantPanelProps {
-  busy: boolean;
-  messages: ChatMessage[];
+  chatError?: Error;
+  draft: string;
+  messages: StudioChatMessage[];
+  model: string;
+  statusState: StudioChatStatus;
+  canDescribeSelection: boolean;
   selectionLabel: string;
   status: StudioAssistantStatus | undefined;
+  onDraftChange(value: string): void;
+  onModelChange(value: string): void;
   onDescribeSelection(): void;
   onReferenceSelect(reference: StudioAssistantReference): void;
-  onSend(content: string): void;
+  onSend(): void;
   onQuickAction(prompt: string): void;
+  onStop(): void;
 }
 
 export function AssistantPanel({
-  busy,
+  chatError,
+  draft,
   messages,
+  model,
+  statusState,
+  canDescribeSelection,
   selectionLabel,
   status,
+  onDraftChange,
+  onModelChange,
   onDescribeSelection,
   onReferenceSelect,
   onSend,
   onQuickAction,
+  onStop,
 }: AssistantPanelProps) {
-  const [draft, setDraft] = useState("");
+  const busy = statusState === "submitted" || statusState === "streaming";
+  const showShimmer =
+    busy &&
+    !messages.some(
+      (message) => message.role === "assistant" && isMessageStreaming(message),
+    );
 
   if (!status) {
     return (
@@ -70,15 +90,49 @@ export function AssistantPanel({
               Assistant
             </span>
           }
-          description="Ask about the current log view or describe the current selection."
+          description="Ask for patterns, causal chains, blast radius, and next debugging steps."
           action={<Badge variant="default">{selectionLabel}</Badge>}
         />
         <CardContent className="space-y-4">
+          <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_12rem]">
+            <div className="min-w-0 space-y-1">
+              <div
+                className="truncate text-xs font-medium text-foreground"
+                title={selectionLabel}
+              >
+                Current scope: {selectionLabel}
+              </div>
+              <div className="text-[11px] text-muted-foreground">
+                The assistant starts from the current filter scope, then pulls related
+                records from the wider log corpus when needed.
+              </div>
+            </div>
+            <div className="min-w-0 space-y-1">
+              <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+                Model
+              </div>
+              <Select
+                value={model}
+                onValueChange={(value) => onModelChange(value ?? "")}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Choose a model" />
+                </SelectTrigger>
+                <SelectContent>
+                  {status.availableModels.map((option) => (
+                    <SelectItem key={option} value={option}>
+                      {option}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
           <div className="flex flex-wrap gap-2">
             <Button
               variant="secondary"
               size="xs"
-              disabled={busy}
+              disabled={busy || !canDescribeSelection}
               onClick={onDescribeSelection}
             >
               <Sparkles />
@@ -109,8 +163,21 @@ export function AssistantPanel({
             >
               Next inspection step
             </Button>
+            {busy ? (
+              <Button variant="outline" size="xs" onClick={onStop}>
+                <StopCircle />
+                Stop
+              </Button>
+            ) : null}
           </div>
-          <div className="max-h-[32rem] space-y-3 overflow-y-auto pr-1">
+          {chatError ? (
+            <ErrorState
+              title="Assistant request failed"
+              description={chatError.message}
+              size="compact"
+            />
+          ) : null}
+          <div className="max-h-[32rem] min-h-[18rem] space-y-3 overflow-y-auto pr-1">
             {messages.length === 0 ? (
               <EmptyState
                 title="No assistant messages yet"
@@ -126,30 +193,24 @@ export function AssistantPanel({
                 />
               ))
             )}
+            {showShimmer ? <AssistantShimmer /> : null}
           </div>
           <form
             className="space-y-2"
             onSubmit={(event) => {
               event.preventDefault();
-
-              const value = draft.trim();
-              if (!value) {
-                return;
-              }
-
-              onSend(value);
-              setDraft("");
+              onSend();
             }}
           >
             <textarea
               value={draft}
-              onChange={(event) => setDraft(event.currentTarget.value)}
+              onChange={(event) => onDraftChange(event.currentTarget.value)}
               placeholder="Ask about these logs, recurring patterns, or what to inspect next."
               className="border-input bg-background min-h-24 w-full resize-y rounded-none border px-3 py-2 text-sm outline-none focus-visible:border-ring"
             />
             <div className="flex items-center justify-between gap-2">
               <div className="text-[11px] text-muted-foreground">
-                Responses are grounded in the selected context and related logs.
+                Responses stay grounded in the current selection, filter scope, and related logs.
               </div>
               <Button type="submit" disabled={busy || draft.trim().length === 0}>
                 <Send />

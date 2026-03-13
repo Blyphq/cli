@@ -1,4 +1,9 @@
-import { replyWithAssistant, describeSelectionWithAssistant } from "./assistant";
+import {
+  replyWithAssistant,
+  describeSelectionWithAssistant,
+  streamAssistant,
+  type StudioAssistantStreamResult,
+} from "./assistant";
 import { getAssistantStatus } from "./assistant-provider";
 import { discoverStudioConfig, resolveStudioAiCredentials } from "./config";
 import { getLogFacets } from "./facets";
@@ -139,6 +144,38 @@ export async function describeStudioSelection(
     projectPath: project.absolutePath,
     ai,
     files: files.files,
+  });
+}
+
+export async function streamStudioAssistant(input: {
+  projectPath?: string;
+  filters: StudioAssistantReplyInput["filters"];
+  selectedRecordId?: string;
+  selectedGroupId?: string;
+  messages: import("ai").UIMessage[];
+  mode?: "chat" | "describe-selection";
+  model?: string;
+}): Promise<StudioAssistantStreamResult> {
+  const project = await resolveStudioProject(input.projectPath);
+  const config = await discoverStudioConfig(project);
+  const files = project.valid
+    ? await discoverLogFiles(project.absolutePath, config)
+    : emptyLogDiscovery(config);
+  const ai = resolveStudioAiCredentials(config, project.absolutePath);
+
+  return streamAssistant({
+    projectPath: project.absolutePath,
+    files: files.files,
+    filters: input.filters,
+    selectedRecordId: input.selectedRecordId,
+    selectedGroupId: input.selectedGroupId,
+    messages: input.messages,
+    mode: input.mode,
+    ai: {
+      apiKey: ai.apiKey,
+      model: ai.model,
+      overrideModel: input.model,
+    },
   });
 }
 

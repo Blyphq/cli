@@ -10,14 +10,15 @@ describe("AssistantSetupState", () => {
   it("renders the missing api key guidance", () => {
     render(
       <AssistantSetupState
-        status={{
-          enabled: false,
-          provider: "openrouter",
-          model: null,
-          apiKeySource: "missing",
-          modelSource: "missing",
-          reason: "missing_api_key",
-        }}
+      status={{
+        enabled: false,
+        provider: "openrouter",
+        model: null,
+        availableModels: ["openai/gpt-5.4"],
+        apiKeySource: "missing",
+        modelSource: "missing",
+        reason: "missing_api_key",
+      }}
       />,
     );
 

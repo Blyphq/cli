@@ -1,6 +1,7 @@
 import { generateText } from "ai";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 
+import { STUDIO_AI_MODELS } from "./models";
 import type { StudioAiSummary, StudioAssistantStatus } from "./types";
 
 type TestGenerateTextFn = (input: {
@@ -23,6 +24,7 @@ export function getAssistantStatus(ai: StudioAiSummary): StudioAssistantStatus {
       enabled: false,
       provider: "openrouter",
       model: ai.model,
+      availableModels: [...STUDIO_AI_MODELS],
       apiKeySource: ai.apiKeySource,
       modelSource: ai.modelSource,
       reason: "missing_api_key",
@@ -34,6 +36,7 @@ export function getAssistantStatus(ai: StudioAiSummary): StudioAssistantStatus {
       enabled: false,
       provider: "openrouter",
       model: null,
+      availableModels: [...STUDIO_AI_MODELS],
       apiKeySource: ai.apiKeySource,
       modelSource: ai.modelSource,
       reason: "missing_model",
@@ -44,6 +47,7 @@ export function getAssistantStatus(ai: StudioAiSummary): StudioAssistantStatus {
     enabled: true,
     provider: "openrouter",
     model: ai.model,
+    availableModels: [...STUDIO_AI_MODELS],
     apiKeySource: ai.apiKeySource,
     modelSource: ai.modelSource,
     reason: null,

@@ -250,6 +250,7 @@ export interface StudioAssistantStatus {
   enabled: boolean;
   provider: "openrouter";
   model: string | null;
+  availableModels: string[];
   apiKeySource: StudioAiSummary["apiKeySource"];
   modelSource: StudioAiSummary["modelSource"];
   reason: "missing_api_key" | "missing_model" | null;

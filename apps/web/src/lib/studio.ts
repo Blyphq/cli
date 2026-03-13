@@ -1,5 +1,6 @@
 import type { AppRouter } from "@blyp-cli/api/routers/index";
 import type { inferRouterOutputs } from "@trpc/server";
+import type { UIMessage } from "ai";
 
 export type RouterOutputs = inferRouterOutputs<AppRouter>;
 export type StudioMeta = RouterOutputs["studio"]["meta"];
@@ -15,12 +16,20 @@ export type StudioAssistantStatus = RouterOutputs["studio"]["assistantStatus"];
 export type StudioAssistantMessage = RouterOutputs["studio"]["assistantReply"];
 export type StudioAssistantReference = StudioAssistantMessage["references"][number];
 export type StudioGroupingMode = "grouped" | "flat";
+export type StudioChatStatus = "submitted" | "streaming" | "ready" | "error";
 export type StudioBadgeVariant =
   | "default"
   | "secondary"
   | "muted"
   | "outline"
   | "destructive";
+
+export interface StudioAssistantMessageMetadata {
+  references?: StudioAssistantReference[];
+  model?: string;
+}
+
+export type StudioChatMessage = UIMessage<StudioAssistantMessageMetadata>;
 
 export type StudioSelection =
   | { kind: "record"; id: string }
@@ -225,6 +234,40 @@ export function getAssistantStatusLabel(status: StudioAssistantStatus): string {
     default:
       return "Unavailable";
   }
+}
+
+export function getMessageText(message: StudioChatMessage): string {
+  return message.parts
+    .filter((part) => part.type === "text")
+    .map((part) => part.text)
+    .join("\n")
+    .trim();
+}
+
+export function getMessageReasoning(message: StudioChatMessage): string {
+  return message.parts
+    .filter((part) => part.type === "reasoning")
+    .map((part) => part.text)
+    .join("\n")
+    .trim();
+}
+
+export function getMessageReferences(
+  message: StudioChatMessage,
+): StudioAssistantReference[] {
+  return message.metadata?.references ?? [];
+}
+
+export function getMessageModel(message: StudioChatMessage): string | null {
+  return message.metadata?.model ?? null;
+}
+
+export function isMessageStreaming(message: StudioChatMessage): boolean {
+  return message.parts.some(
+    (part) =>
+      (part.type === "text" || part.type === "reasoning") &&
+      part.state === "streaming",
+  );
 }
 
 export function getGroupingReasonLabel(reason: StudioGroupDetail["group"]["groupingReason"]): string {

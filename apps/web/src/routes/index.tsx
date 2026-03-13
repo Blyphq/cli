@@ -1,6 +1,8 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { useDeferredValue, useEffect, useState } from "react";
+import { DefaultChatTransport } from "ai";
+import { useChat } from "@ai-sdk/react";
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { z } from "zod";
 
 import { AssistantPanel } from "@/components/studio/assistant-panel";
@@ -15,8 +17,8 @@ import { StudioShell } from "@/components/studio/studio-shell";
 import { StudioToolbar } from "@/components/studio/studio-toolbar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type {
-  StudioAssistantMessage,
   StudioAssistantReference,
+  StudioChatMessage,
   StudioFilters,
   StudioGroupingMode,
   StudioSelection,
@@ -40,14 +42,6 @@ const DEFAULT_FILTERS: StudioFilters = {
   to: "",
 };
 
-type ChatMessage =
-  | StudioAssistantMessage
-  | {
-      id: string;
-      role: "user";
-      content: string;
-    };
-
 function StudioRoute() {
   const trpc = useTRPC();
   const navigate = Route.useNavigate();
@@ -58,7 +52,8 @@ function StudioRoute() {
   const [offset, setOffset] = useState(0);
   const [grouping, setGrouping] = useState<StudioGroupingMode>("grouped");
   const [assistantTab, setAssistantTab] = useState<"details" | "assistant">("details");
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [assistantDraft, setAssistantDraft] = useState("");
+  const [selectedModel, setSelectedModel] = useState("");
   const deferredSearch = useDeferredValue(filters.search);
 
   useEffect(() => {
@@ -130,12 +125,49 @@ function StudioRoute() {
   const assistantStatusQuery = useQuery(
     trpc.studio.assistantStatus.queryOptions({ projectPath: search.project }),
   );
-  const assistantReplyMutation = useMutation(
-    trpc.studio.assistantReply.mutationOptions(),
+  const assistantTransport = useMemo(
+    () =>
+      new DefaultChatTransport<StudioChatMessage>({
+        api: "/api/chat",
+        body: {
+          projectPath: search.project,
+          filters: {
+            level: filters.level || undefined,
+            type: filters.type || undefined,
+            search: deferredSearch || undefined,
+            fileId: filters.fileId || undefined,
+            from: filters.from || undefined,
+            to: filters.to || undefined,
+          },
+          selectedRecordId: selection?.kind === "record" ? selection.id : undefined,
+          selectedGroupId: selection?.kind === "group" ? selection.id : undefined,
+          model: selectedModel || undefined,
+        },
+      }),
+    [
+      deferredSearch,
+      filters.fileId,
+      filters.from,
+      filters.level,
+      filters.to,
+      filters.type,
+      search.project,
+      selectedModel,
+      selection,
+    ],
   );
-  const describeSelectionMutation = useMutation(
-    trpc.studio.describeSelection.mutationOptions(),
-  );
+  const {
+    clearError: clearAssistantError,
+    error: assistantError,
+    messages,
+    sendMessage,
+    setMessages,
+    status: assistantStatus,
+    stop: stopAssistant,
+  } = useChat<StudioChatMessage>({
+    transport: assistantTransport,
+    experimental_throttle: 50,
+  });
 
   const files = filesQuery.data?.files ?? [];
   const entries = logsQuery.data?.entries ?? [];
@@ -153,6 +185,25 @@ function StudioRoute() {
       : selection?.kind === "group"
         ? "Selected structured group"
         : "No selection";
+
+  useEffect(() => {
+    const status = assistantStatusQuery.data;
+
+    if (!status) {
+      return;
+    }
+
+    const fallback = status.model ?? status.availableModels[0] ?? "";
+    setSelectedModel((current) =>
+      current && status.availableModels.includes(current) ? current : fallback,
+    );
+  }, [assistantStatusQuery.data]);
+
+  useEffect(() => {
+    setMessages([]);
+    setAssistantDraft("");
+    setAssistantTab("details");
+  }, [search.project, setMessages]);
 
   useEffect(() => {
     if (!logsQuery.data?.entries.length) {
@@ -188,60 +239,36 @@ function StudioRoute() {
     grouping,
   ]);
 
-  const buildAssistantInput = () => ({
-    projectPath: search.project,
-    history: messages.map((message) => ({
-      role: message.role,
-      content: message.content,
-    })),
-    filters: {
-      level: filters.level || undefined,
-      type: filters.type || undefined,
-      search: deferredSearch || undefined,
-      fileId: filters.fileId || undefined,
-      from: filters.from || undefined,
-      to: filters.to || undefined,
-    },
-    selectedRecordId: selection?.kind === "record" ? selection.id : undefined,
-    selectedGroupId: selection?.kind === "group" ? selection.id : undefined,
-  });
-
-  const submitAssistantPrompt = async (content: string) => {
-    const userMessage: ChatMessage = {
-      id: crypto.randomUUID(),
-      role: "user",
-      content,
-    };
-
-    setAssistantTab("assistant");
-    setMessages((current) => [...current, userMessage]);
-
-    const response = await assistantReplyMutation.mutateAsync({
-      ...buildAssistantInput(),
-      history: [...messages, userMessage].map((message) => ({
-        role: message.role,
-        content: message.content,
-      })),
-    });
-
-    setMessages((current) => [...current, response]);
-  };
-
-  const describeSelection = async () => {
-    if (!selection) {
-      return;
-    }
-
-    setAssistantTab("assistant");
-    const response = await describeSelectionMutation.mutateAsync(buildAssistantInput());
-    setMessages((current) => [...current, response]);
-  };
-
   const handleReferenceSelect = (reference: StudioAssistantReference) => {
     setSelection({
       kind: reference.kind === "group" ? "group" : "record",
       id: reference.id,
     });
+  };
+
+  const submitAssistantPrompt = async (
+    content: string,
+    mode: "chat" | "describe-selection" = "chat",
+  ) => {
+    const value = content.trim();
+    if (!value) {
+      return;
+    }
+
+    clearAssistantError();
+    setAssistantTab("assistant");
+    await sendMessage(
+      {
+        text: value,
+      },
+      {
+        body: {
+          mode,
+          model: selectedModel || undefined,
+        },
+      },
+    );
+    setAssistantDraft("");
   };
 
   return (
@@ -324,7 +351,10 @@ function StudioRoute() {
             totalMatched={logsQuery.data?.totalMatched ?? 0}
             truncated={logsQuery.data?.truncated ?? false}
             loading={logsQuery.isLoading}
-            onSelect={setSelection}
+            onSelect={(nextSelection) => {
+              setSelection(nextSelection);
+              setAssistantTab("details");
+            }}
             onPageChange={setOffset}
           />
         )
@@ -347,7 +377,14 @@ function StudioRoute() {
                 group={selectedGroup}
                 loading={groupQuery.isLoading}
                 onDescribeWithAi={() => {
-                  void describeSelection();
+                  if (!selection) {
+                    return;
+                  }
+
+                  void submitAssistantPrompt(
+                    "Describe the selected structured group like an observability copilot. Explain what happened, likely cause, related signals, and what to inspect next.",
+                    "describe-selection",
+                  );
                 }}
                 onSelectRecord={(recordId) => {
                   setSelection({ kind: "record", id: recordId });
@@ -357,27 +394,48 @@ function StudioRoute() {
               <LogDetailPanel
                 record={selectedRecord}
                 onDescribeWithAi={() => {
-                  void describeSelection();
+                  if (!selection) {
+                    return;
+                  }
+
+                  void submitAssistantPrompt(
+                    "Describe the selected log like an observability copilot. Explain what happened, likely cause, related signals, and what to inspect next.",
+                    "describe-selection",
+                  );
                 }}
               />
             )}
           </TabsContent>
           <TabsContent value="assistant">
             <AssistantPanel
-              busy={assistantReplyMutation.isPending || describeSelectionMutation.isPending}
+              canDescribeSelection={selection !== null}
+              chatError={assistantError}
+              draft={assistantDraft}
               messages={messages}
+              model={selectedModel}
               selectionLabel={selectionLabel}
+              statusState={assistantStatus}
               status={assistantStatusQuery.data}
+              onDraftChange={setAssistantDraft}
+              onModelChange={setSelectedModel}
               onDescribeSelection={() => {
-                void describeSelection();
+                if (!selection) {
+                  return;
+                }
+
+                void submitAssistantPrompt(
+                  "Describe the selected log or structured group like an observability copilot. Explain what happened, likely cause, related signals, and what to inspect next.",
+                  "describe-selection",
+                );
               }}
               onReferenceSelect={handleReferenceSelect}
-              onSend={(content) => {
-                void submitAssistantPrompt(content);
+              onSend={() => {
+                void submitAssistantPrompt(assistantDraft);
               }}
               onQuickAction={(prompt) => {
                 void submitAssistantPrompt(prompt);
               }}
+              onStop={stopAssistant}
             />
           </TabsContent>
         </Tabs>
