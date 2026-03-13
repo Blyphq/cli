@@ -1,12 +1,13 @@
 {
-  "name": "@blyphq/cli",
+  "name": "@blyp/cli",
   "version": "0.0.0",
   "type": "module",
   "bin": {
     "blyphq": "./dist/index.js"
   },
   "files": [
-    "dist"
+    "dist",
+    "skills"
   ],
   "exports": {
     ".": {
@@ -19,6 +20,7 @@
     "build": "tsc -p tsconfig.build.json && chmod +x dist/index.js",
     "check-types": "tsc -p tsconfig.json --noEmit",
     "dev": "bun run ./src/index.ts",
+    "test": "vitest run",
     "prepack": "bun run build"
   },
   "dependencies": {
@@ -29,6 +31,7 @@
   "devDependencies": {
     "@blyp-cli/config": "workspace:*",
     "@types/node": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   }
 }

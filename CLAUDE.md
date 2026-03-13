@@ -5,6 +5,7 @@ This file provides context about the project for AI assistants.
 ## Project Overview
 
 - **Ecosystem**: Typescript
+- **CLI Package**: `@blyp/cli`
 
 ## Tech Stack
 
@@ -37,7 +38,7 @@ blyp-cli/
 │   └── web/         # Frontend application
 ├── packages/
 │   ├── api/         # API layer
-│   ├── cli/         # blyphq CLI
+│   ├── cli/         # @blyp/cli package for the blyphq CLI, including local skill installation
 │   ├── config/      # Shared config
 │   └── env/         # Environment utilities
 ```

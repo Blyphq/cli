@@ -21,13 +21,13 @@
   },
   "type": "module",
   "scripts": {
-    "dev": "turbo dev --filter=!@blyphq/cli",
+    "dev": "turbo dev --filter=!@blyp/cli",
     "build": "turbo build",
     "check-types": "turbo check-types",
     "cli": "bun run ./packages/cli/src/index.ts",
     "dev:cli": "bun run --watch ./packages/cli/src/index.ts",
-    "build:cli": "turbo -F @blyphq/cli build",
-    "check-types:cli": "turbo -F @blyphq/cli check-types",
+    "build:cli": "turbo -F @blyp/cli build",
+    "check-types:cli": "turbo -F @blyp/cli check-types",
     "dev:native": "turbo -F native dev",
     "dev:web": "turbo -F web dev"
   },

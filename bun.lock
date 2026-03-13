@@ -114,7 +114,7 @@
       },
     },
     "packages/cli": {
-      "name": "@blyphq/cli",
+      "name": "@blyp/cli",
       "version": "0.0.0",
       "bin": {
         "blyphq": "./dist/index.js",
@@ -128,6 +128,7 @@
         "@blyp-cli/config": "workspace:*",
         "@types/node": "catalog:",
         "typescript": "catalog:",
+        "vitest": "catalog:",
       },
     },
     "packages/config": {
@@ -258,7 +259,7 @@
 
     "@blyp-cli/env": ["@blyp-cli/env@workspace:packages/env"],
 
-    "@blyphq/cli": ["@blyphq/cli@workspace:packages/cli"],
+    "@blyp/cli": ["@blyp/cli@workspace:packages/cli"],
 
     "@braintree/sanitize-url": ["@braintree/sanitize-url@7.1.2", "", {}, "sha512-jigsZK+sMF/cuiB7sERuo9V7N9jx+dhmHHnQyDSVdpZwVutaBu7WvNYqMDLSgFgfB30n452TP3vjDAvFC973mA=="],
 
