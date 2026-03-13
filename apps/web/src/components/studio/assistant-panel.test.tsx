@@ -30,7 +30,7 @@ describe("AssistantPanel", () => {
         draft="   "
         messages={[]}
         model="openai/gpt-5.4"
-        selectionLabel="Selected log"
+        scopeLabel="current filters"
         status={enabledStatus()}
         statusState="ready"
         onDescribeSelection={vi.fn()}
@@ -43,10 +43,11 @@ describe("AssistantPanel", () => {
       />,
     );
 
+    expect(screen.getByText("Current scope: current filters")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /send/i })).toBeDisabled();
-    await user.click(screen.getByRole("button", { name: /find similar logs/i }));
+    await user.click(screen.getByRole("button", { name: /find related logs/i }));
     expect(onQuickAction).toHaveBeenCalledWith(
-      "Find similar logs to the current selection.",
+      "Find related logs in the current scope.",
     );
   });
 
@@ -60,7 +61,7 @@ describe("AssistantPanel", () => {
         draft="What happened?"
         messages={[]}
         model="openai/gpt-5.4"
-        selectionLabel="Selected log"
+        scopeLabel="selected log"
         status={enabledStatus()}
         statusState="streaming"
         onDescribeSelection={vi.fn()}
@@ -73,6 +74,7 @@ describe("AssistantPanel", () => {
       />,
     );
 
+    expect(screen.getByText("Current scope: selected log")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /stop/i }));
     expect(onStop).toHaveBeenCalled();
   });
@@ -84,7 +86,7 @@ describe("AssistantPanel", () => {
         draft=""
         messages={[]}
         model=""
-        selectionLabel="No selection"
+        scopeLabel="no selection"
         status={{
           enabled: false,
           provider: "openrouter",

@@ -33,7 +33,7 @@ interface AssistantPanelProps {
   model: string;
   statusState: StudioChatStatus;
   canDescribeSelection: boolean;
-  selectionLabel: string;
+  scopeLabel: string;
   status: StudioAssistantStatus | undefined;
   textareaRef?: Ref<HTMLTextAreaElement>;
   onDraftChange(value: string): void;
@@ -52,7 +52,7 @@ export function AssistantPanel({
   model,
   statusState,
   canDescribeSelection,
-  selectionLabel,
+  scopeLabel,
   status,
   textareaRef,
   onDraftChange,
@@ -107,9 +107,9 @@ export function AssistantPanel({
           <div className="min-w-0 space-y-1">
             <div
               className="truncate text-xs font-medium text-foreground"
-              title={selectionLabel}
+              title={scopeLabel}
             >
-              Current scope: {selectionLabel}
+              Current scope: {scopeLabel}
             </div>
             <div className="text-[11px] text-muted-foreground">
               The assistant starts from the current filter scope, then pulls
@@ -148,10 +148,10 @@ export function AssistantPanel({
             variant="outline"
             size="xs"
             disabled={busy}
-            onClick={() => onQuickAction("Find similar logs to the current selection.")}
+            onClick={() => onQuickAction("Find related logs in the current scope.")}
           >
             <Search />
-            Find similar logs
+            Find related logs
           </Button>
           <Button
             variant="outline"
@@ -190,7 +190,7 @@ export function AssistantPanel({
             {messages.length === 0 ? (
               <EmptyState
                 title="No assistant messages yet"
-                description="Describe the current selection or ask a question about the filtered logs."
+                description="Ask a question about the current assistant scope to start the conversation."
                 size="compact"
               />
             ) : (
@@ -225,8 +225,8 @@ export function AssistantPanel({
         />
         <div className="flex items-center justify-between gap-2">
           <div className="text-[11px] text-muted-foreground">
-            Responses stay grounded in the current selection, filter scope, and
-            related logs.
+            Responses stay grounded in the current assistant scope and related
+            logs.
           </div>
           <Button type="submit" disabled={busy || draft.trim().length === 0}>
             <Send />

@@ -40,6 +40,7 @@ const DEFAULT_FILTERS: StudioFilters = {
   from: "",
   to: "",
 };
+type AssistantScopeMode = "selection" | "standalone";
 
 function StudioRoute() {
   const trpc = useTRPC();
@@ -51,6 +52,8 @@ function StudioRoute() {
   const [offset, setOffset] = useState(0);
   const [grouping, setGrouping] = useState<StudioGroupingMode>("grouped");
   const [assistantOpen, setAssistantOpen] = useState(false);
+  const [assistantScopeMode, setAssistantScopeMode] =
+    useState<AssistantScopeMode>("selection");
   const [assistantDraft, setAssistantDraft] = useState("");
   const [selectedModel, setSelectedModel] = useState("");
   const deferredSearch = useDeferredValue(filters.search);
@@ -138,8 +141,14 @@ function StudioRoute() {
             from: filters.from || undefined,
             to: filters.to || undefined,
           },
-          selectedRecordId: selection?.kind === "record" ? selection.id : undefined,
-          selectedGroupId: selection?.kind === "group" ? selection.id : undefined,
+          selectedRecordId:
+            assistantScopeMode === "selection" && selection?.kind === "record"
+              ? selection.id
+              : undefined,
+          selectedGroupId:
+            assistantScopeMode === "selection" && selection?.kind === "group"
+              ? selection.id
+              : undefined,
           model: selectedModel || undefined,
         },
       }),
@@ -152,6 +161,7 @@ function StudioRoute() {
       filters.type,
       search.project,
       selectedModel,
+      assistantScopeMode,
       selection,
     ],
   );
@@ -178,13 +188,22 @@ function StudioRoute() {
     metaQuery.data?.project.error ?? "Studio could not inspect the requested path.";
   const hasLogsError = filesQuery.isError || logsQuery.isError || groupQuery.isError || recordQuery.isError;
   const hasBackendError = metaQuery.isError || configQuery.isError || hasLogsError;
-  const selectionLabel =
-    selection?.kind === "record"
-      ? "Selected log"
-      : selection?.kind === "group"
-        ? "Selected structured group"
-        : "No selection";
-  const openAssistant = () => setAssistantOpen(true);
+  const scopeLabel =
+    assistantScopeMode === "standalone"
+      ? "current filters"
+      : selection?.kind === "record"
+        ? "selected log"
+        : selection?.kind === "group"
+          ? "selected structured group"
+          : "no selection";
+  const openStandaloneAssistant = () => {
+    setAssistantScopeMode("standalone");
+    setAssistantOpen(true);
+  };
+  const openSelectionAssistant = () => {
+    setAssistantScopeMode("selection");
+    setAssistantOpen(true);
+  };
   const closeAssistant = () => setAssistantOpen(false);
 
   useEffect(() => {
@@ -204,6 +223,7 @@ function StudioRoute() {
     setMessages([]);
     setAssistantDraft("");
     setSelectedModel("");
+    setAssistantScopeMode("selection");
     setAssistantOpen(false);
   }, [search.project, setMessages]);
 
@@ -248,17 +268,38 @@ function StudioRoute() {
     });
   };
 
+  const resetAssistantConversation = (scopeMode: AssistantScopeMode) => {
+    setMessages([]);
+    setAssistantDraft("");
+    setAssistantScopeMode(scopeMode);
+  };
+
   const submitAssistantPrompt = async (
     content: string,
     mode: "chat" | "describe-selection" = "chat",
+    options?: {
+      scopeMode?: AssistantScopeMode;
+      resetConversation?: boolean;
+    },
   ) => {
     const value = content.trim();
     if (!value) {
       return;
     }
 
+    const scopeMode = options?.scopeMode ?? assistantScopeMode;
+    if (options?.resetConversation) {
+      resetAssistantConversation(scopeMode);
+    } else {
+      setAssistantScopeMode(scopeMode);
+    }
+
     clearAssistantError();
-    openAssistant();
+    if (scopeMode === "standalone") {
+      openStandaloneAssistant();
+    } else {
+      openSelectionAssistant();
+    }
     await sendMessage(
       {
         text: value,
@@ -271,6 +312,12 @@ function StudioRoute() {
       },
     );
     setAssistantDraft("");
+  };
+
+  const startStandaloneChat = () => {
+    clearAssistantError();
+    resetAssistantConversation("standalone");
+    openStandaloneAssistant();
   };
 
   return (
@@ -292,7 +339,7 @@ function StudioRoute() {
                 },
               })
             }
-            onOpenAssistant={openAssistant}
+            onStartStandaloneChat={startStandaloneChat}
             onFilterChange={setFilters}
             onGroupingChange={setGrouping}
             onResetFilters={() => setFilters(DEFAULT_FILTERS)}
@@ -373,6 +420,10 @@ function StudioRoute() {
                 void submitAssistantPrompt(
                   "Describe the selected structured group like an observability copilot. Explain what happened, likely cause, related signals, and what to inspect next.",
                   "describe-selection",
+                  {
+                    scopeMode: "selection",
+                    resetConversation: assistantScopeMode !== "selection",
+                  },
                 );
               }}
               onSelectRecord={(recordId) => {
@@ -390,6 +441,10 @@ function StudioRoute() {
                 void submitAssistantPrompt(
                   "Describe the selected log like an observability copilot. Explain what happened, likely cause, related signals, and what to inspect next.",
                   "describe-selection",
+                  {
+                    scopeMode: "selection",
+                    resetConversation: assistantScopeMode !== "selection",
+                  },
                 );
               }}
             />
@@ -404,7 +459,7 @@ function StudioRoute() {
           draft={assistantDraft}
           messages={messages}
           model={selectedModel}
-          selectionLabel={selectionLabel}
+          scopeLabel={scopeLabel}
           statusState={assistantStatus}
           status={assistantStatusQuery.data}
           onDraftChange={setAssistantDraft}
@@ -417,22 +472,34 @@ function StudioRoute() {
             void submitAssistantPrompt(
               "Describe the selected log or structured group like an observability copilot. Explain what happened, likely cause, related signals, and what to inspect next.",
               "describe-selection",
+              {
+                scopeMode: "selection",
+                resetConversation: assistantScopeMode !== "selection",
+              },
             );
           }}
           onOpenChange={(next) => {
             if (next) {
-              openAssistant();
+              if (assistantScopeMode === "standalone") {
+                openStandaloneAssistant();
+              } else {
+                openSelectionAssistant();
+              }
               return;
             }
 
             closeAssistant();
           }}
           onQuickAction={(prompt) => {
-            void submitAssistantPrompt(prompt);
+            void submitAssistantPrompt(prompt, "chat", {
+              scopeMode: assistantScopeMode,
+            });
           }}
           onReferenceSelect={handleReferenceSelect}
           onSend={() => {
-            void submitAssistantPrompt(assistantDraft);
+            void submitAssistantPrompt(assistantDraft, "chat", {
+              scopeMode: assistantScopeMode,
+            });
           }}
           onStop={stopAssistant}
         />

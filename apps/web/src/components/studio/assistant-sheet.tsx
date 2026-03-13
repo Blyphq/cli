@@ -40,7 +40,7 @@ interface AssistantSheetProps {
   model: string;
   statusState: StudioChatStatus;
   canDescribeSelection: boolean;
-  selectionLabel: string;
+  scopeLabel: string;
   status: StudioAssistantStatus | undefined;
   onDraftChange(value: string): void;
   onModelChange(value: string): void;
@@ -60,7 +60,7 @@ export function AssistantSheet({
   model,
   statusState,
   canDescribeSelection,
-  selectionLabel,
+  scopeLabel,
   status,
   onDraftChange,
   onModelChange,
@@ -142,7 +142,7 @@ export function AssistantSheet({
       draft={draft}
       messages={messages}
       model={model}
-      selectionLabel={selectionLabel}
+      scopeLabel={scopeLabel}
       status={status}
       statusState={statusState}
       textareaRef={composerRef}
@@ -168,7 +168,7 @@ export function AssistantSheet({
           <MobileAssistantChrome
             descriptionId={descriptionId}
             titleId={titleId}
-            selectionLabel={selectionLabel}
+            scopeLabel={scopeLabel}
             onClose={() => onOpenChange(false)}
           />
           {sharedPanel}
@@ -204,7 +204,7 @@ export function AssistantSheet({
         <AssistantChrome
           descriptionId={descriptionId}
           titleId={titleId}
-          selectionLabel={selectionLabel}
+          scopeLabel={scopeLabel}
           onClose={() => onOpenChange(false)}
         />
         {sharedPanel}
@@ -216,12 +216,12 @@ export function AssistantSheet({
 function AssistantChrome({
   descriptionId,
   titleId,
-  selectionLabel,
+  scopeLabel,
   onClose,
 }: {
   descriptionId: string;
   titleId: string;
-  selectionLabel: string;
+  scopeLabel: string;
   onClose(): void;
 }) {
   return (
@@ -242,9 +242,9 @@ function AssistantChrome({
           <Badge
             variant="default"
             className="max-w-[18rem] truncate"
-            title={selectionLabel}
+            title={scopeLabel}
           >
-            {selectionLabel}
+            {scopeLabel}
           </Badge>
           <Button
             aria-label="Close assistant"
@@ -263,12 +263,12 @@ function AssistantChrome({
 function MobileAssistantChrome({
   descriptionId,
   titleId,
-  selectionLabel,
+  scopeLabel,
   onClose,
 }: {
   descriptionId: string;
   titleId: string;
-  selectionLabel: string;
+  scopeLabel: string;
   onClose(): void;
 }) {
   return (
@@ -294,8 +294,8 @@ function MobileAssistantChrome({
         </Button>
       </div>
       <div className="pt-3">
-        <Badge variant="default" className="max-w-full truncate" title={selectionLabel}>
-          {selectionLabel}
+        <Badge variant="default" className="max-w-full truncate" title={scopeLabel}>
+          {scopeLabel}
         </Badge>
       </div>
     </div>

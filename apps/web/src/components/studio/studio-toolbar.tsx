@@ -50,7 +50,7 @@ interface StudioToolbarProps {
   onFilterChange(next: StudioFilters): void;
   onGroupingChange(value: StudioGroupingMode): void;
   onInspect(): void;
-  onOpenAssistant(): void;
+  onStartStandaloneChat(): void;
   onResetFilters(): void;
 }
 
@@ -65,7 +65,7 @@ export function StudioToolbar({
   onFilterChange,
   onGroupingChange,
   onInspect,
-  onOpenAssistant,
+  onStartStandaloneChat,
   onResetFilters,
 }: StudioToolbarProps) {
   const currentTarget = meta?.project.absolutePath || draftProjectPath;
@@ -99,13 +99,13 @@ export function StudioToolbar({
           </div>
           <div className="flex min-w-0 flex-wrap items-center gap-2 text-[10px] uppercase tracking-[0.18em]">
             <Button
-              aria-label="Open assistant"
+              aria-label="Chat with Blyp"
               variant="outline"
               size="sm"
-              onClick={onOpenAssistant}
+              onClick={onStartStandaloneChat}
             >
               <Bot />
-              Assistant
+              Chat with Blyp
             </Button>
             <StatusPill
               label="Project"

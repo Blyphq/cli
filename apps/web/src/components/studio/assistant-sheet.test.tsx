@@ -95,7 +95,7 @@ function TestAssistantSheet({
       draft=""
       messages={[] as StudioChatMessage[]}
       model="openai/gpt-5.4"
-      selectionLabel="Selected log"
+      scopeLabel="current filters"
       status={status}
       statusState={statusState}
       onDescribeSelection={vi.fn()}
