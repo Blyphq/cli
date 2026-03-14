@@ -2,6 +2,8 @@ import { access, readFile } from "node:fs/promises";
 import { constants as fsConstants } from "node:fs";
 import path from "node:path";
 
+import { resolvePackagedStudioPaths as resolvePackagedStudioPathsFromPackage } from "./studio-server.js";
+
 interface WorkspaceManifest {
   readonly name?: string;
   readonly workspaces?: unknown;
@@ -91,6 +93,10 @@ export async function resolveWebAppDir(cwd: string): Promise<string | null> {
   }
 
   return path.dirname(existingPackagePath);
+}
+
+export async function resolvePackagedStudioPaths() {
+  return resolvePackagedStudioPathsFromPackage();
 }
 
 export function getStudioUrl(projectPath?: string): string {

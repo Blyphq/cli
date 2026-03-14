@@ -28,6 +28,8 @@ When you run `blyphq studio [targetPath]`, the CLI:
 
 If the frontend is already running, the CLI reuses it and opens the target project directly.
 
+Studio can now be launched from any project through the published CLI package. When the command is run inside the `blyp-cli` repo it can still use the local Studio app during development, but published installs use the packaged Studio server bundled with `@blyp/cli`.
+
 ## What The CLI Does
 
 The `blyphq` CLI is the local entrypoint for Blyp workflows. It currently supports:
@@ -86,6 +88,12 @@ Launch Studio for the current directory:
 
 ```bash
 bun run cli -- studio
+```
+
+Launch Studio from another project with the published package:
+
+```bash
+bunx @blyp/cli studio
 ```
 
 Launch Studio for a subdirectory project:

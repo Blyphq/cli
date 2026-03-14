@@ -8,10 +8,12 @@ import { openBrowser } from "../lib/browser.js";
 import { CliError } from "../lib/errors.js";
 import {
   getStudioUrl,
+  resolvePackagedStudioPaths,
   resolveWebAppDir,
   resolveWorkspaceRoot,
 } from "../lib/runtime.js";
 import { ensureStudioAiSetup } from "../lib/studio-ai.js";
+import { getStudioHostScriptPath } from "../lib/studio-server.js";
 import {
   showInfo,
   showNote,
@@ -37,22 +39,13 @@ export const studioCommand: CommandDefinition = {
       );
     }
 
-    const workspaceRoot = await resolveWorkspaceRoot(context.cwd);
-
-    if (!workspaceRoot) {
-      throw new CliError("Workspace root could not be resolved from the current directory.");
-    }
-
-    const webAppDir = await resolveWebAppDir(context.cwd);
-
-    if (!webAppDir) {
-      throw new CliError("Studio frontend was not found at apps/web.");
-    }
-
     await ensureStudioAiSetup(targetProjectPath);
 
     const studioUrl = getStudioUrl(targetProjectPath);
     const status = spinner();
+    const workspaceRoot = await resolveWorkspaceRoot(context.cwd);
+    const webAppDir = workspaceRoot ? await resolveWebAppDir(context.cwd) : null;
+    const packagedStudio = await resolvePackagedStudioPaths();
 
     status.start("Checking Studio frontend");
     const frontendIsRunning = await isUrlReachable(studioUrl);
@@ -64,14 +57,11 @@ export const studioCommand: CommandDefinition = {
       return;
     }
 
-    status.message("Starting Studio frontend");
-    const child = spawn("bun", ["run", "dev"], {
-      cwd: webAppDir,
-      env: {
-        ...process.env,
-        BLYPQ_STUDIO_TARGET: targetProjectPath,
-      },
-      stdio: "inherit",
+    const child = startStudioProcess({
+      targetProjectPath,
+      webAppDir,
+      packagedStudioAvailable: packagedStudio !== null,
+      status,
     });
 
     try {
@@ -102,6 +92,42 @@ export const studioCommand: CommandDefinition = {
     }
   },
 };
+
+function startStudioProcess(input: {
+  readonly targetProjectPath: string;
+  readonly webAppDir: string | null;
+  readonly packagedStudioAvailable: boolean;
+  readonly status: ReturnType<typeof spinner>;
+}) {
+  if (input.webAppDir) {
+    input.status.message("Starting Studio frontend");
+    return spawn("bun", ["run", "dev"], {
+      cwd: input.webAppDir,
+      env: {
+        ...process.env,
+        BLYPQ_STUDIO_TARGET: input.targetProjectPath,
+      },
+      stdio: "inherit",
+    });
+  }
+
+  if (!input.packagedStudioAvailable) {
+    throw new CliError(
+      "Studio is not available from this installation. Reinstall the CLI package or run the command from the blyp-cli repo.",
+    );
+  }
+
+  input.status.message("Starting packaged Studio");
+  return spawn(process.execPath, [getStudioHostScriptPath()], {
+    env: {
+      ...process.env,
+      BLYPQ_STUDIO_TARGET: input.targetProjectPath,
+      BLYPQ_STUDIO_PORT: "3003",
+      BLYPQ_STUDIO_HOST: "127.0.0.1",
+    },
+    stdio: "inherit",
+  });
+}
 
 async function openStudioBrowser(studioUrl: string): Promise<void> {
   try {
