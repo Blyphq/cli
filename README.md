@@ -134,6 +134,26 @@ If you invoke the CLI from another project directly, you can run the source entr
 bun /absolute/path/to/blyp-cli/packages/cli/src/index.ts skills install
 ```
 
+## Publishing
+
+The CLI package is published as `@blyp/cli`.
+
+This repo includes a GitHub Actions workflow at [`.github/workflows/publish-cli.yml`](/home/doughnut/Documents/Github/opensource/blyp-cli/.github/workflows/publish-cli.yml) that publishes the CLI to npm when you push a tag like `v0.1.0` or trigger the workflow manually.
+
+Setup:
+
+- Add an npm access token to the repository secrets as `NPM_TOKEN`
+- Bump [`packages/cli/package.json`](/home/doughnut/Documents/Github/opensource/blyp-cli/packages/cli/package.json) to the version you want to release
+- Push a matching git tag, for example `v0.1.0`
+
+The workflow will:
+
+- install dependencies with Bun
+- run CLI typechecks
+- run CLI tests
+- build the CLI package
+- publish `@blyp/cli` to npm with public access
+
 ## Project Structure
 
 ```

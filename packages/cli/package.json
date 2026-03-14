@@ -2,6 +2,9 @@
   "name": "@blyp/cli",
   "version": "0.1.0",
   "type": "module",
+  "publishConfig": {
+    "access": "public"
+  },
   "bin": {
     "blyphq": "./dist/index.js"
   },
