@@ -14,7 +14,7 @@
     "access": "public"
   },
   "bin": {
-    "blyphq": "./dist/index.js"
+    "blyp": "./dist/index.js"
   },
   "files": [
     "dist",

@@ -38,7 +38,7 @@ blyp-cli/
 │   └── web/         # Frontend application
 ├── packages/
 │   ├── api/         # API layer
-│   ├── cli/         # @blyp/cli package for the blyphq CLI, including local skill installation
+│   ├── cli/         # @blyp/cli package for the blyp CLI, including local skill installation
 │   ├── config/      # Shared config
 │   └── env/         # Environment utilities
 ```

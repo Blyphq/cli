@@ -108,7 +108,7 @@ export interface BylpConfigWriteResult {
 }
 
 const LOGS_INIT_USAGE =
-  "Usage: blyphq logs init --adapter <prisma|drizzle> --dialect <postgres|mysql>";
+  "Usage: blyp logs init --adapter <prisma|drizzle> --dialect <postgres|mysql>";
 const BLYP_CONFIG_FILE_NAMES = [
   "blyp.config.ts",
   "blyp.config.mts",
@@ -148,10 +148,10 @@ export function buildLogsHelpText(): string {
     "",
     LOGS_INIT_USAGE,
     "Examples:",
-    "  blyphq logs init --adapter prisma --dialect postgres",
-    "  blyphq logs init --adapter prisma --dialect mysql",
-    "  blyphq logs init --adapter drizzle --dialect postgres",
-    "  blyphq logs init --adapter drizzle --dialect mysql",
+    "  blyp logs init --adapter prisma --dialect postgres",
+    "  blyp logs init --adapter prisma --dialect mysql",
+    "  blyp logs init --adapter drizzle --dialect postgres",
+    "  blyp logs init --adapter drizzle --dialect mysql",
     "",
     "Supported adapters: prisma, drizzle",
     "Supported dialects: postgres, mysql",
@@ -401,7 +401,7 @@ export async function detectConfiguredDatabaseAdapter(
   }
 
   throw new CliError(
-    "Could not determine the database adapter. Run blyphq db:init first or add a Blyp database config.",
+    "Could not determine the database adapter. Run blyp db:init first or add a Blyp database config.",
   );
 }
 

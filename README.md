@@ -2,7 +2,7 @@
 
 `blyp-cli` is a local developer workflow tool centered around two pieces:
 
-- `blyphq`, a CLI for launching Studio, checking the environment, and installing Blyp skills
+- `blyp`, a CLI for launching Studio, checking the environment, and installing Blyp skills
 - Studio, a local web UI for inspecting a project and working with its assistant tooling
 
 The repo is a Bun + TypeScript monorepo with a CLI package, a Studio web app, and supporting API/env packages.
@@ -18,7 +18,7 @@ Today, Studio is designed around:
 - connecting assistant workflows to a specific project path
 - using project-level AI settings, including `OPENROUTER_API_KEY` and `OPENROUTER_MODEL`
 
-When you run `blyphq studio [targetPath]`, the CLI:
+When you run `blyp studio [targetPath]`, the CLI:
 
 - resolves the target project inside your current directory
 - checks that the Studio frontend exists in this workspace
@@ -32,7 +32,7 @@ Studio can now be launched from any project through the published CLI package. W
 
 ## What The CLI Does
 
-The `blyphq` CLI is the local entrypoint for Blyp workflows. It currently supports:
+The `blyp` CLI is the local entrypoint for Blyp workflows. It currently supports:
 
 - launching Studio for a project
 - printing runtime and workspace diagnostics
@@ -40,7 +40,7 @@ The `blyphq` CLI is the local entrypoint for Blyp workflows. It currently suppor
 - guiding Prisma or Drizzle database logging setup for `blyp-js`
 - showing help and version information
 
-The CLI package in this repo is published as `@blyp/cli`, while the executable command remains `blyphq`.
+The CLI package in this repo is published as `@blyp/cli`, while the executable command remains `blyp`.
 
 ## Getting Started
 
@@ -68,21 +68,21 @@ bun run cli -- <command>
 
 The available commands are:
 
-- **`blyphq studio [targetPath]`**
+- **`blyp studio [targetPath]`**
   Starts or reuses the local Studio app for a target project. If `targetPath` is omitted, the current directory is used.
-- **`blyphq health`**
+- **`blyp health`**
   Prints runtime details such as the current directory, runtime versions, detected workspace root, and Studio web app path.
-- **`blyphq skills install [source-or-skill-name] [--force]`**
+- **`blyp skills install [source-or-skill-name] [--force]`**
   Installs a local skill folder, installs a bundled skill by name, or opens an interactive picker for bundled skills.
-- **`blyphq db:init`**
+- **`blyp db:init`**
   Walks through Blyp database logging setup, scaffolds schema, applies migrations, and writes `blyp.config.ts`.
-- **`blyphq db:migrate`**
+- **`blyp db:migrate`**
   Runs the configured Prisma or Drizzle migration workflow.
-- **`blyphq db:generate`**
+- **`blyp db:generate`**
   Runs Prisma client generation for configured Prisma projects.
-- **`blyphq help`**, **`blyphq -h`**, **`blyphq --help`**
+- **`blyp help`**, **`blyp -h`**, **`blyp --help`**
   Shows command usage.
-- **`blyphq --version`**, **`blyphq -V`**
+- **`blyp --version`**, **`blyp -V`**
   Prints the CLI version.
 
 ### Studio command
@@ -210,7 +210,7 @@ blyp-cli/
 │   └── web/         # Fullstack application (React + TanStack Start)
 ├── packages/
 │   ├── api/         # API layer / business logic
-│   ├── cli/         # @blyp/cli package powering blyphq (studio, health, skills, help, version)
+│   ├── cli/         # @blyp/cli package powering blyp (studio, health, skills, help, version)
 │   ├── config/      # Shared config utilities
 │   └── env/         # Environment utilities
 ```

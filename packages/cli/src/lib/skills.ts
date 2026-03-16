@@ -42,7 +42,7 @@ export interface InstallSkillFromDirectoryResult {
 }
 
 export function getSkillsInstallUsage(): string {
-  return "Usage: blyphq skills install [source-or-skill-name] [--force]";
+  return "Usage: blyp skills install [source-or-skill-name] [--force]";
 }
 
 export function parseSkillsInstallArgs(argv: readonly string[]): SkillsInstallArgs {

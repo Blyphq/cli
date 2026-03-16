@@ -13,10 +13,10 @@ describe("command registry", () => {
   it("includes database commands in global help output", () => {
     const helpText = buildHelpText(commandRegistry);
 
-    expect(helpText).toContain("blyphq skills install [source-or-skill-name] [--force]");
+    expect(helpText).toContain("blyp skills install [source-or-skill-name] [--force]");
     expect(helpText).toContain("db:init");
-    expect(helpText).toContain("blyphq db:init");
-    expect(helpText).toContain("blyphq db:migrate");
-    expect(helpText).toContain("blyphq db:generate");
+    expect(helpText).toContain("blyp db:init");
+    expect(helpText).toContain("blyp db:migrate");
+    expect(helpText).toContain("blyp db:generate");
   });
 });

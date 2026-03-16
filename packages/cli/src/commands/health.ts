@@ -7,7 +7,7 @@ import { collectRuntimeInfo, formatRuntimeSummary } from "../lib/runtime.js";
 export const healthCommand: CommandDefinition = {
   name: "health",
   description: "Print basic runtime and workspace diagnostics.",
-  usage: "blyphq health",
+  usage: "blyp health",
   async run(context: CommandContext): Promise<void> {
     const status = spinner();
 

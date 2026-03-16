@@ -28,7 +28,7 @@ const STUDIO_REQUEST_TIMEOUT_MS = 1_500;
 export const studioCommand: CommandDefinition = {
   name: "studio",
   description: "Start or manage the local Studio workflow.",
-  usage: "blyphq studio [targetPath]",
+  usage: "blyp studio [targetPath]",
   async run(context: CommandContext): Promise<void> {
     const targetProjectPath = path.resolve(context.cwd, context.argv[0] ?? context.cwd);
 

@@ -22,7 +22,7 @@ function buildSkillsHelpText(): string {
 export const skillsCommand: CommandDefinition = {
   name: "skills",
   description: "Install and manage Blyp skills.",
-  usage: "blyphq skills install [source-or-skill-name] [--force]",
+  usage: "blyp skills install [source-or-skill-name] [--force]",
   async run(context: CommandContext): Promise<void> {
     const [subcommand, ...subcommandArgs] = context.argv;
 

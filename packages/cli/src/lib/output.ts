@@ -1,7 +1,7 @@
 import { intro, log, note, outro } from "@clack/prompts";
 
 export function showIntro(): void {
-  intro("blyphq");
+  intro("blyp");
 }
 
 export function showOutro(message: string): void {

@@ -16,7 +16,7 @@ function buildDbInitHelpText(): string {
   return [
     "Guided Blyp database logging setup.",
     "",
-    "Usage: blyphq db:init",
+    "Usage: blyp db:init",
     "This command prompts for the adapter and dialect, scaffolds Blyp logging schema,",
     "runs migrations, and writes blyp.config.ts for you.",
   ].join("\n");
@@ -26,7 +26,7 @@ function buildDbMigrateHelpText(): string {
   return [
     "Run the configured database migration workflow.",
     "",
-    "Usage: blyphq db:migrate",
+    "Usage: blyp db:migrate",
   ].join("\n");
 }
 
@@ -34,7 +34,7 @@ function buildDbGenerateHelpText(): string {
   return [
     "Run Prisma client generation for the configured project.",
     "",
-    "Usage: blyphq db:generate",
+    "Usage: blyp db:generate",
     "This command only works for Prisma projects.",
   ].join("\n");
 }
@@ -42,7 +42,7 @@ function buildDbGenerateHelpText(): string {
 export const dbInitCommand: CommandDefinition = {
   name: "db:init",
   description: "Guided Blyp database logging setup.",
-  usage: "blyphq db:init",
+  usage: "blyp db:init",
   async run(context: CommandContext): Promise<void> {
     if (
       context.argv[0] === "-h" ||
@@ -53,7 +53,7 @@ export const dbInitCommand: CommandDefinition = {
     }
 
     if (context.argv.length > 0) {
-      throw new CliError("Usage: blyphq db:init");
+      throw new CliError("Usage: blyp db:init");
     }
 
     const adapterSelection = await select({
@@ -129,7 +129,7 @@ export const dbInitCommand: CommandDefinition = {
 export const dbMigrateCommand: CommandDefinition = {
   name: "db:migrate",
   description: "Run the configured database migration workflow.",
-  usage: "blyphq db:migrate",
+  usage: "blyp db:migrate",
   async run(context: CommandContext): Promise<void> {
     if (
       context.argv[0] === "-h" ||
@@ -140,7 +140,7 @@ export const dbMigrateCommand: CommandDefinition = {
     }
 
     if (context.argv.length > 0) {
-      throw new CliError("Usage: blyphq db:migrate");
+      throw new CliError("Usage: blyp db:migrate");
     }
 
     const status = spinner();
@@ -163,7 +163,7 @@ export const dbMigrateCommand: CommandDefinition = {
 export const dbGenerateCommand: CommandDefinition = {
   name: "db:generate",
   description: "Run Prisma client generation for the configured project.",
-  usage: "blyphq db:generate",
+  usage: "blyp db:generate",
   async run(context: CommandContext): Promise<void> {
     if (
       context.argv[0] === "-h" ||
@@ -174,7 +174,7 @@ export const dbGenerateCommand: CommandDefinition = {
     }
 
     if (context.argv.length > 0) {
-      throw new CliError("Usage: blyphq db:generate");
+      throw new CliError("Usage: blyp db:generate");
     }
 
     const status = spinner();

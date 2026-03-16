@@ -43,14 +43,14 @@ describe("logs init argument parsing", () => {
   it("fails on unknown or missing flags", () => {
     expect(() => parseLogsInitArgs(["--adapter", "prisma"])).toThrowError(
       new CliError(
-        "Both --adapter and --dialect are required.\nUsage: blyphq logs init --adapter <prisma|drizzle> --dialect <postgres|mysql>",
+        "Both --adapter and --dialect are required.\nUsage: blyp logs init --adapter <prisma|drizzle> --dialect <postgres|mysql>",
       ),
     );
     expect(() =>
       parseLogsInitArgs(["--adapter", "prisma", "--unknown"]),
     ).toThrowError(
       new CliError(
-        "Unknown flag: --unknown\nUsage: blyphq logs init --adapter <prisma|drizzle> --dialect <postgres|mysql>",
+        "Unknown flag: --unknown\nUsage: blyp logs init --adapter <prisma|drizzle> --dialect <postgres|mysql>",
       ),
     );
   });

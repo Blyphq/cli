@@ -7,7 +7,7 @@ export function createHelpCommand(
   return {
     name: "help",
     description: "Show available commands and usage.",
-    usage: "blyphq [command]",
+    usage: "blyp [command]",
     async run(_context: CommandContext): Promise<void> {
       showNote("Usage", buildHelpText(commands));
     },
@@ -23,10 +23,10 @@ export function buildHelpText(commands: readonly CommandDefinition[]): string {
     .join("\n");
 
   return [
-    "blyphq is the Blyp local workflow CLI.",
+    "blyp is the Blyp local workflow CLI.",
     "",
     "Usage:",
-    "  blyphq <command>",
+    "  blyp <command>",
     "",
     "Commands:",
     commandLines,

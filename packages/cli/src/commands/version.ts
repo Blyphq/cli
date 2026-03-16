@@ -21,7 +21,7 @@ function getCliVersion(): string {
 export const versionCommand: CommandDefinition = {
   name: "version",
   description: "Print CLI version.",
-  usage: "blyphq --version",
+  usage: "blyp --version",
   aliases: ["-V", "--version"],
   async run(_context: CommandContext): Promise<void> {
     showInfo(getCliVersion());
