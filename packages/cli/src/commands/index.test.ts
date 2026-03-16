@@ -15,5 +15,9 @@ describe("command registry", () => {
 
     expect(helpText).toContain("skills");
     expect(helpText).toContain("blyphq skills install [source-or-skill-name] [--force]");
+    expect(helpText).toContain("logs");
+    expect(helpText).toContain(
+      "blyphq logs init --adapter <prisma|drizzle> --dialect <postgres|mysql>",
+    );
   });
 });
