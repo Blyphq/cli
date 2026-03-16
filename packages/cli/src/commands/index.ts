@@ -1,7 +1,11 @@
+import {
+  dbGenerateCommand,
+  dbInitCommand,
+  dbMigrateCommand,
+} from "./db.js";
 import type { CommandDefinition } from "../types.js";
 import { createHelpCommand } from "./help.js";
 import { healthCommand } from "./health.js";
-import { logsCommand } from "./logs.js";
 import { skillsCommand } from "./skills.js";
 import { studioCommand } from "./studio.js";
 import { versionCommand } from "./version.js";
@@ -10,7 +14,9 @@ const baseCommands = [
   studioCommand,
   healthCommand,
   skillsCommand,
-  logsCommand,
+  dbInitCommand,
+  dbMigrateCommand,
+  dbGenerateCommand,
 ] as const;
 
 export const commandRegistry: readonly CommandDefinition[] = [

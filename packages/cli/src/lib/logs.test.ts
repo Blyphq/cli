@@ -6,8 +6,12 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { CliError } from "./errors.js";
 import {
+  detectConfiguredDatabaseAdapter,
   initializeLogsProject,
   parseLogsInitArgs,
+  runDatabaseGenerate,
+  runDatabaseMigrate,
+  writeBlypConfigFile,
 } from "./logs.js";
 
 const tempDirs: string[] = [];
@@ -426,6 +430,87 @@ describe("drizzle database logging bootstrap", () => {
         "Requested adapter drizzle, but no drizzle config or schema directory was found.",
       ),
     );
+  });
+});
+
+describe("database workflow helpers", () => {
+  it("writes blyp.config.ts when requested", async () => {
+    const cwd = await createTempDir();
+
+    const result = await writeBlypConfigFile({
+      cwd,
+      snippet: "export default {};",
+      overwrite: true,
+    });
+
+    expect(result.status).toBe("created");
+    await expect(readFile(path.join(cwd, "blyp.config.ts"), "utf8")).resolves.toContain(
+      "export default {};",
+    );
+  });
+
+  it("runs prisma generate for configured prisma projects", async () => {
+    const cwd = await createTempDir();
+    await createPackageManifest(cwd, {
+      dependencies: {
+        "@prisma/client": "^6.0.0",
+      },
+      devDependencies: {
+        prisma: "^6.0.0",
+      },
+    });
+    await writeFile(
+      path.join(cwd, "blyp.config.ts"),
+      "import { createPrismaDatabaseAdapter } from 'blyp-js/database';\nexport default { database: { adapter: createPrismaDatabaseAdapter({ client: prisma, model: 'blypLog' }) } };\n",
+      "utf8",
+    );
+
+    const commands: string[] = [];
+    const command = await runDatabaseGenerate(cwd, {
+      runCommand: async (input) => {
+        commands.push(input.command.join(" "));
+      },
+    });
+
+    expect(await detectConfiguredDatabaseAdapter(cwd)).toBe("prisma");
+    expect(command).toContain("prisma generate");
+    expect(commands).toHaveLength(1);
+  });
+
+  it("runs drizzle generate + migrate for configured drizzle projects", async () => {
+    const cwd = await createTempDir();
+    await createPackageManifest(cwd, {
+      dependencies: {
+        "drizzle-orm": "^0.0.0",
+      },
+      devDependencies: {
+        "drizzle-kit": "^0.0.0",
+      },
+    });
+    await writeFile(
+      path.join(cwd, "blyp.config.ts"),
+      "import { createDrizzleDatabaseAdapter } from 'blyp-js/database';\nexport default { database: { adapter: createDrizzleDatabaseAdapter({ db, table: blypLogs }) } };\n",
+      "utf8",
+    );
+    await writeFile(
+      path.join(cwd, "drizzle.config.ts"),
+      "export default { schema: './src/db/schema/*.ts', out: './drizzle', dialect: 'postgresql' };",
+      "utf8",
+    );
+    await mkdir(path.join(cwd, "src"), { recursive: true });
+    await writeFile(path.join(cwd, "src", "db.ts"), "export const db = {};\n", "utf8");
+
+    const commands: string[] = [];
+    await runDatabaseMigrate(cwd, {
+      runCommand: async (input) => {
+        commands.push(input.command.join(" "));
+      },
+    });
+
+    expect(await detectConfiguredDatabaseAdapter(cwd)).toBe("drizzle");
+    expect(commands).toHaveLength(2);
+    expect(commands[0]).toContain("drizzle-kit generate");
+    expect(commands[1]).toContain("drizzle-kit migrate");
   });
 });
 

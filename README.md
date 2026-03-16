@@ -37,7 +37,7 @@ The `blyphq` CLI is the local entrypoint for Blyp workflows. It currently suppor
 - launching Studio for a project
 - printing runtime and workspace diagnostics
 - installing Blyp skills into a project-local `.agents/skills` directory
-- bootstrapping Prisma or Drizzle database logging schema for `blyp-js`
+- guiding Prisma or Drizzle database logging setup for `blyp-js`
 - showing help and version information
 
 The CLI package in this repo is published as `@blyp/cli`, while the executable command remains `blyphq`.
@@ -74,8 +74,12 @@ The available commands are:
   Prints runtime details such as the current directory, runtime versions, detected workspace root, and Studio web app path.
 - **`blyphq skills install [source-or-skill-name] [--force]`**
   Installs a local skill folder, installs a bundled skill by name, or opens an interactive picker for bundled skills.
-- **`blyphq logs init --adapter <prisma|drizzle> --dialect <postgres|mysql>`**
-  Scaffolds the `blyp-js` database logging schema, generates and applies migrations, and prints the exact `blyp.config.ts` snippet to use at runtime.
+- **`blyphq db:init`**
+  Walks through Blyp database logging setup, scaffolds schema, applies migrations, and writes `blyp.config.ts`.
+- **`blyphq db:migrate`**
+  Runs the configured Prisma or Drizzle migration workflow.
+- **`blyphq db:generate`**
+  Runs Prisma client generation for configured Prisma projects.
 - **`blyphq help`**, **`blyphq -h`**, **`blyphq --help`**
   Shows command usage.
 - **`blyphq --version`**, **`blyphq -V`**
@@ -145,9 +149,9 @@ If you invoke the CLI from another project directly, you can run the source entr
 bun /absolute/path/to/blyp-cli/packages/cli/src/index.ts skills install
 ```
 
-### Logs command
+### Database commands
 
-Use this when a project is enabling `blyp-js` database logging with Prisma or Drizzle. The command validates the existing project setup, writes the fixed `blyp_logs` table contract, creates migration artifacts, applies them, and prints the exact runtime config snippet to place in `blyp.config.ts`.
+Use these when a project is enabling `blyp-js` database logging with Prisma or Drizzle. `db:init` is the guided setup command; once the project is configured, `db:migrate` and `db:generate` are the shorter follow-up commands.
 
 Supported combinations:
 
@@ -159,19 +163,15 @@ Supported combinations:
 Examples:
 
 ```bash
-bun run cli -- logs init --adapter prisma --dialect postgres
+bun run cli -- db:init
 ```
 
 ```bash
-bun run cli -- logs init --adapter prisma --dialect mysql
+bun run cli -- db:migrate
 ```
 
 ```bash
-bun run cli -- logs init --adapter drizzle --dialect postgres
-```
-
-```bash
-bun run cli -- logs init --adapter drizzle --dialect mysql
+bun run cli -- db:generate
 ```
 
 Runtime config belongs in:
@@ -180,7 +180,7 @@ Runtime config belongs in:
 ./blyp.config.ts
 ```
 
-This command does not do runtime table auto-creation. It only creates and applies migrations through the project’s Prisma or Drizzle tooling.
+These commands do not do runtime table auto-creation. They only create and apply migrations through the project’s Prisma or Drizzle tooling.
 
 ## Publishing
 

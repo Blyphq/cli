@@ -4,20 +4,19 @@ import { buildHelpText } from "./help.js";
 import { commandRegistry, resolveCommand } from "./index.js";
 
 describe("command registry", () => {
-  it("resolves the skills command", () => {
-    const command = resolveCommand("skills");
+  it("resolves the db:init command", () => {
+    const command = resolveCommand("db:init");
 
-    expect(command?.name).toBe("skills");
+    expect(command?.name).toBe("db:init");
   });
 
-  it("includes skills in global help output", () => {
+  it("includes database commands in global help output", () => {
     const helpText = buildHelpText(commandRegistry);
 
-    expect(helpText).toContain("skills");
     expect(helpText).toContain("blyphq skills install [source-or-skill-name] [--force]");
-    expect(helpText).toContain("logs");
-    expect(helpText).toContain(
-      "blyphq logs init --adapter <prisma|drizzle> --dialect <postgres|mysql>",
-    );
+    expect(helpText).toContain("db:init");
+    expect(helpText).toContain("blyphq db:init");
+    expect(helpText).toContain("blyphq db:migrate");
+    expect(helpText).toContain("blyphq db:generate");
   });
 });

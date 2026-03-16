@@ -102,8 +102,22 @@ interface SchemaUpdateResult {
   readonly filePath: string;
 }
 
+export interface BylpConfigWriteResult {
+  readonly path: string;
+  readonly status: "created" | "updated" | "unchanged" | "skipped";
+}
+
 const LOGS_INIT_USAGE =
   "Usage: blyphq logs init --adapter <prisma|drizzle> --dialect <postgres|mysql>";
+const BLYP_CONFIG_FILE_NAMES = [
+  "blyp.config.ts",
+  "blyp.config.mts",
+  "blyp.config.cts",
+  "blyp.config.js",
+  "blyp.config.mjs",
+  "blyp.config.cjs",
+  "blyp.config.json",
+] as const;
 const DRIZZLE_CONFIG_FILES = [
   "drizzle.config.ts",
   "drizzle.config.js",
@@ -319,6 +333,134 @@ export function formatLogsInitializationResult(
   }
 
   return lines.join("\n");
+}
+
+export async function writeBlypConfigFile(input: {
+  readonly cwd: string;
+  readonly snippet: string;
+  readonly overwrite: boolean;
+}): Promise<BylpConfigWriteResult> {
+  const existingPath = await resolveExistingBlypConfigPath(input.cwd);
+  const targetPath = existingPath ?? path.join(input.cwd, "blyp.config.ts");
+
+  if (await pathExists(targetPath)) {
+    const existingContents = await readFile(targetPath, "utf8");
+    if (existingContents.trim() === input.snippet.trim()) {
+      return {
+        path: targetPath,
+        status: "unchanged",
+      };
+    }
+
+    if (!input.overwrite) {
+      return {
+        path: targetPath,
+        status: "skipped",
+      };
+    }
+
+    await writeFile(targetPath, `${input.snippet}\n`, "utf8");
+    return {
+      path: targetPath,
+      status: "updated",
+    };
+  }
+
+  await writeFile(targetPath, `${input.snippet}\n`, "utf8");
+  return {
+    path: targetPath,
+    status: "created",
+  };
+}
+
+export async function detectConfiguredDatabaseAdapter(
+  cwd: string,
+): Promise<LogsAdapter> {
+  const configPath = await resolveExistingBlypConfigPath(cwd);
+
+  if (configPath) {
+    const configContents = await readFile(configPath, "utf8");
+    if (configContents.includes("createPrismaDatabaseAdapter")) {
+      return "prisma";
+    }
+
+    if (configContents.includes("createDrizzleDatabaseAdapter")) {
+      return "drizzle";
+    }
+  }
+
+  const hasPrisma = await pathExists(path.join(cwd, "prisma", "schema.prisma"));
+  const hasDrizzle = (await resolveDrizzleConfigPath(cwd)) !== null;
+
+  if (hasPrisma && !hasDrizzle) {
+    return "prisma";
+  }
+
+  if (hasDrizzle && !hasPrisma) {
+    return "drizzle";
+  }
+
+  throw new CliError(
+    "Could not determine the database adapter. Run blyphq db:init first or add a Blyp database config.",
+  );
+}
+
+export async function runDatabaseMigrate(
+  cwd: string,
+  options: InitializeLogsProjectOptions = {},
+): Promise<readonly string[]> {
+  const manifest = await readPackageManifest(cwd);
+  const packageManager = await detectPackageManager(cwd);
+  const runCommand = options.runCommand ?? defaultRunExternalCommand;
+  const adapter = await detectConfiguredDatabaseAdapter(cwd);
+  const dialect =
+    adapter === "prisma"
+      ? await detectExistingPrismaDialect(cwd)
+      : await detectExistingDrizzleDialect(cwd);
+  const project = await detectProject({
+    cwd,
+    adapter,
+    dialect,
+    manifest,
+    packageManager,
+  });
+
+  for (const plan of project.migrationPlan) {
+    await runCommand({
+      cwd,
+      label: plan.label,
+      command: plan.command,
+    });
+  }
+
+  return project.migrationPlan.map((plan) => formatCommand(plan.command));
+}
+
+export async function runDatabaseGenerate(
+  cwd: string,
+  options: InitializeLogsProjectOptions = {},
+): Promise<string> {
+  const manifest = await readPackageManifest(cwd);
+  const packageManager = await detectPackageManager(cwd);
+  const runCommand = options.runCommand ?? defaultRunExternalCommand;
+  const adapter = await detectConfiguredDatabaseAdapter(cwd);
+
+  if (adapter !== "prisma") {
+    throw new CliError("db:generate is only available for Prisma projects.");
+  }
+
+  const command = buildPrismaGenerateCommand({
+    manifest,
+    packageManager,
+  });
+
+  await runCommand({
+    cwd,
+    label: command.label,
+    command: command.command,
+  });
+
+  return formatCommand(command.command);
 }
 
 async function detectProject(input: {
@@ -972,6 +1114,26 @@ function mapPrismaProviderToDialect(provider: string): LogsDialect | null {
   return null;
 }
 
+async function detectExistingPrismaDialect(cwd: string): Promise<LogsDialect> {
+  const schemaPath = path.join(cwd, "prisma", "schema.prisma");
+
+  if (!(await pathExists(schemaPath))) {
+    throw new CliError("Prisma schema not found at prisma/schema.prisma.");
+  }
+
+  const contents = await readFile(schemaPath, "utf8");
+  const provider = parsePrismaProvider(contents);
+  const dialect = provider ? mapPrismaProviderToDialect(provider) : null;
+
+  if (!dialect) {
+    throw new CliError(
+      "Could not determine the Prisma datasource dialect. Expected postgresql or mysql.",
+    );
+  }
+
+  return dialect;
+}
+
 async function resolveDrizzleConfigPath(cwd: string): Promise<string | null> {
   for (const candidate of DRIZZLE_CONFIG_FILES) {
     const resolved = path.join(cwd, candidate);
@@ -981,6 +1143,40 @@ async function resolveDrizzleConfigPath(cwd: string): Promise<string | null> {
   }
 
   return null;
+}
+
+async function resolveExistingBlypConfigPath(cwd: string): Promise<string | null> {
+  for (const candidate of BLYP_CONFIG_FILE_NAMES) {
+    const resolved = path.join(cwd, candidate);
+    if (await pathExists(resolved)) {
+      return resolved;
+    }
+  }
+
+  return null;
+}
+
+async function detectExistingDrizzleDialect(cwd: string): Promise<LogsDialect> {
+  const configPath = await resolveDrizzleConfigPath(cwd);
+
+  if (!configPath) {
+    throw new CliError(
+      `Drizzle config not found. Expected one of ${DRIZZLE_CONFIG_FILES.join(", ")} at the project root.`,
+    );
+  }
+
+  const contents = await readFile(configPath, "utf8");
+  const dialect = mapDrizzleDialectToDialect(
+    parseConfigStringValue(contents, "dialect"),
+  );
+
+  if (!dialect) {
+    throw new CliError(
+      `Could not determine the Drizzle dialect from ${path.relative(cwd, configPath)}.`,
+    );
+  }
+
+  return dialect;
 }
 
 async function hasAnyDrizzleSchemaHint(cwd: string): Promise<boolean> {
@@ -1365,6 +1561,29 @@ function buildDrizzleApplyCommand(input: {
       "--config",
       path.relative(input.cwd, input.configPath) || input.configPath,
     ],
+  };
+}
+
+function buildPrismaGenerateCommand(input: {
+  readonly manifest: PackageManifest | null;
+  readonly packageManager: PackageManager;
+}): CommandPlan {
+  const script = findScript(
+    input.manifest?.scripts,
+    "prisma generate",
+    ["prisma:generate", "db:generate", "generate"],
+  );
+
+  if (script) {
+    return {
+      label: `Run ${script.name}`,
+      command: buildRunScriptCommand(input.packageManager, script.name),
+    };
+  }
+
+  return {
+    label: "Run prisma generate",
+    command: [...getExecPrefix(input.packageManager), "prisma", "generate"],
   };
 }
 
