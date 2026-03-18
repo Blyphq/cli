@@ -54,6 +54,7 @@ interface StudioToolbarProps {
   onResetFilters(): void;
 }
 
+
 export function StudioToolbar({
   draftProjectPath,
   facets,
@@ -120,7 +121,13 @@ export function StudioToolbar({
             <StatusPill
               label="Logs"
               status={meta?.logs.fileCount ? "found" : "not-found"}
-              value={meta ? `${meta.logs.fileCount} files` : "pending"}
+              value={
+                meta
+                  ? meta.logs.mode === "database"
+                    ? "database"
+                    : `${meta.logs.fileCount} files`
+                  : "pending"
+              }
             />
           </div>
         </div>
@@ -182,7 +189,7 @@ export function StudioToolbar({
               </SelectContent>
             </Select>
           </FilterBox>
-          <FilterBox label="File">
+          <FilterBox label={meta?.logs.mode === "database" ? "Source" : "File"}>
             <Select
               value={filters.fileId || ALL_FILES_VALUE}
               onValueChange={(value) =>
@@ -196,7 +203,9 @@ export function StudioToolbar({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value={ALL_FILES_VALUE}>All files</SelectItem>
+                <SelectItem value={ALL_FILES_VALUE}>
+                  {meta?.logs.mode === "database" ? "All sources" : "All files"}
+                </SelectItem>
                 {files.map((file) => (
                   <SelectItem key={file.id} value={file.id}>
                     {file.name}

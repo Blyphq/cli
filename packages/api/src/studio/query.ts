@@ -14,23 +14,32 @@ const MAX_LIMIT = 500;
 const MAX_SCANNED_RECORDS = 20_000;
 const MAX_DECOMPRESSED_BYTES = 25 * 1024 * 1024;
 
+export const MAX_DB_SCANNED_RECORDS = 5_000;
+
 interface QueryLogsOptions {
   files: StudioLogDiscovery["files"];
   input: StudioLogsQueryInput;
   projectPath?: string;
+  preloaded?: {
+    records: StudioNormalizedRecord[];
+    scannedRecords: number;
+    truncated: boolean;
+  };
 }
 
 export async function queryLogs({
   files,
   input,
   projectPath,
+  preloaded,
 }: QueryLogsOptions): Promise<StudioLogsPage> {
   const limit = clampLimit(input.limit);
   const offset = Math.max(0, input.offset ?? 0);
   const candidateFiles = input.fileId
     ? files.filter((file) => file.id === input.fileId)
     : files;
-  const loaded = await loadNormalizedRecords(candidateFiles, projectPath);
+  const loaded =
+    preloaded ?? (await loadNormalizedRecords(candidateFiles, projectPath));
   const allRecords = loaded.records.slice().sort(compareRecordsDescending);
   const matchedRecords = filterRecords(allRecords, input).sort(compareRecordsDescending);
   const grouping = input.grouping ?? "grouped";

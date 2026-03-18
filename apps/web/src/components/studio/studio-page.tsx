@@ -151,6 +151,7 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
               <LogFilesPanel
                 files={files}
                 activeFileId={filters.fileId}
+                mode={metaQuery.data?.logs.mode ?? "file"}
                 onSelectFile={(fileId) =>
                   setFilters((current: typeof filters) => ({ ...current, fileId }))
                 }

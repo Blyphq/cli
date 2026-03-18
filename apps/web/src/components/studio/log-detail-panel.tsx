@@ -34,6 +34,8 @@ export function LogDetailPanel({
     );
   }
 
+  const isDatabaseRecord = record.filePath?.startsWith("database://");
+
   return (
     <div className="min-w-0 space-y-4">
       <Card>
@@ -60,7 +62,7 @@ export function LogDetailPanel({
               { label: "Type", value: record.type ?? "n/a" },
               { label: "Caller", value: record.caller ?? "n/a" },
               {
-                label: "File",
+                label: isDatabaseRecord ? "Source" : "File",
                 value: (
                   <div className="space-y-1">
                     <TruncatedPath
@@ -68,7 +70,9 @@ export function LogDetailPanel({
                       variant="block"
                     />
                     <div className="text-xs text-muted-foreground">
-                      Line {record.lineNumber}
+                      {record.lineNumber === 0 && isDatabaseRecord
+                        ? "Database row"
+                        : `Line ${record.lineNumber}`}
                     </div>
                   </div>
                 ),

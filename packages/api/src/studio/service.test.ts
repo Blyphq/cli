@@ -8,6 +8,12 @@ import { afterEach, describe, expect, it } from "vitest";
 import { __setGenerateTextForTests } from "./assistant-provider";
 import { __setStreamTextForTests } from "./assistant";
 import { discoverStudioConfig } from "./config";
+import {
+  __setDatabaseQueryForTests,
+  buildSyntheticDatabaseFile,
+  loadDatabaseRecords,
+  MAX_DB_SCANNED_RECORDS,
+} from "./database";
 import { discoverLogFiles } from "./logs";
 import { resolveStudioProject } from "./project";
 import { queryLogs } from "./query";
@@ -31,8 +37,10 @@ afterEach(async () => {
   delete process.env.BLYPQ_STUDIO_TARGET;
   delete process.env.OPENROUTER_API_KEY;
   delete process.env.OPENROUTER_MODEL;
+  delete process.env.DATABASE_URL;
   __setGenerateTextForTests(null);
   __setStreamTextForTests(null);
+  __setDatabaseQueryForTests(null);
 
   await Promise.all(
     tempDirs.splice(0).map((directory) => rm(directory, { recursive: true, force: true })),
@@ -567,6 +575,467 @@ describe("studio service", () => {
     expect(streamedPrompt).toContain("throw new Error('stream failure');");
   });
 });
+
+describe("studio DB mode", () => {
+  it("config with destination=database and Prisma adapter resolves DB-ready summary", async () => {
+    const projectDir = await createProject();
+    await writeFile(
+      path.join(projectDir, "blyp.config.ts"),
+      [
+        "const client = {",
+        "  blypLog: {",
+        "    async findMany() {",
+        "      return [];",
+        "    },",
+        "  },",
+        "};",
+        "",
+        "export default {",
+        "  destination: 'database',",
+        "  database: {",
+        "    dialect: 'postgres',",
+        "    adapter: {",
+        "      type: 'prisma',",
+        "      client,",
+        "      model: 'blypLog',",
+        "    },",
+        "  },",
+        "};",
+      ].join("\n"),
+    );
+
+    const project = await resolveStudioProject(projectDir);
+    const config = await discoverStudioConfig(project);
+
+    expect(config.resolved.destination).toBe("database");
+    expect(config.resolved.database.enabled).toBe(true);
+    expect(config.resolved.database.ready).toBe(true);
+    expect(config.resolved.database.adapterKind).toBe("prisma");
+    expect(config.resolved.database.dialect).toBe("postgres");
+    expect(config.resolved.database.model).toBe("blypLog");
+    expect(config.resolved.database.status).toBe("enabled");
+  });
+
+  it("JSON config with database fields resolves DB mode when dialect is present", async () => {
+    const projectDir = await createProject();
+
+    await writeFile(
+      path.join(projectDir, "blyp.config.json"),
+      JSON.stringify({
+        destination: "database",
+        database: { dialect: "postgres", adapter: { type: "prisma" } },
+      }),
+    );
+
+    const project = await resolveStudioProject(projectDir);
+    const config = await discoverStudioConfig(project);
+
+    expect(config.resolved.destination).toBe("database");
+    expect(config.resolved.database.adapterKind).toBe("prisma");
+    expect(config.resolved.database.status).toBe("enabled");
+    expect(config.resolved.database.ready).toBe(true);
+  });
+
+  it("getStudioMeta reports file mode for normal file-based projects", async () => {
+    const projectDir = await createProject();
+    const logDir = path.join(projectDir, "logs");
+
+    await mkdir(logDir, { recursive: true });
+    await writeFile(
+      path.join(projectDir, "blyp.config.json"),
+      JSON.stringify({ file: { dir: "./logs" } }),
+    );
+    await writeFile(path.join(logDir, "log.ndjson"), createLogLine({ message: "hello" }));
+
+    const meta = await getStudioMeta(projectDir);
+
+    expect(meta.logs.mode).toBe("file");
+    expect(meta.logs.database).toBeNull();
+    expect(meta.logs.fileCount).toBe(1);
+  });
+
+  it("getStudioFiles returns synthetic DB source when destination=database with ready adapter", async () => {
+    const projectDir = await createProject();
+    process.env.DATABASE_URL = "postgresql://user:pass@localhost:5432/test";
+    __setDatabaseQueryForTests(async () => [
+      {
+        id: "row-1",
+        timestamp: new Date("2026-03-13T10:00:00.000Z"),
+        createdAt: new Date("2026-03-13T10:00:00.000Z"),
+        level: "info",
+        message: "hello from db",
+        type: "test_event",
+        caller: null,
+        bindings: null,
+        data: null,
+        error: null,
+        record: null,
+      },
+    ]);
+    const configWithDb = buildDbConfig({
+      adapterKind: "prisma",
+      dialect: "postgres",
+      model: "blypLog",
+    });
+
+    const syntheticFile = buildSyntheticDatabaseFile(configWithDb.resolved);
+    expect(syntheticFile.id).toBe("database:primary");
+    expect(syntheticFile.name).toBe("blypLog");
+    expect(syntheticFile.absolutePath).toBe("database://blyp_logs");
+
+    const result = await loadDatabaseRecords({
+      projectPath: projectDir,
+      config: configWithDb,
+      input: {},
+    });
+
+    expect(result.records).toHaveLength(1);
+    expect(result.records[0]?.message).toBe("hello from db");
+    expect(result.records[0]?.level).toBe("info");
+    expect(result.records[0]?.fileId).toBe("database:primary");
+    expect(result.records[0]?.lineNumber).toBe(0);
+    expect(result.records[0]?.malformed).toBe(false);
+    expect(result.truncated).toBe(false);
+  });
+
+  it("DB mode with missing DATABASE_URL errors cleanly", async () => {
+    const projectDir = await createProject();
+    const configWithDb = buildDbConfig({
+      adapterKind: "prisma",
+      dialect: "postgres",
+      model: "blypLog",
+    });
+
+    await expect(
+      loadDatabaseRecords({
+        projectPath: projectDir,
+        config: configWithDb,
+        input: {},
+      }),
+    ).rejects.toThrow("requires DATABASE_URL");
+  });
+
+  it("DB mode with missing dialect errors cleanly", async () => {
+    const projectDir = await createProject();
+
+    const configWithNoAdapter = {
+      parsedConfig: {
+        destination: "database",
+        database: { adapter: { type: "prisma" } },
+      },
+      resolved: {
+        destination: "database" as const,
+        database: {
+          enabled: true,
+          ready: false,
+          dialect: null,
+          adapterKind: "prisma" as const,
+          model: "blypLog",
+          label: "blypLog",
+          status: "invalid" as const,
+        },
+        file: { dir: "", archiveDir: "", format: "ndjson" as const, enabled: true, rotation: { enabled: true, maxSizeBytes: 0, maxArchives: 0, compress: false } },
+        pretty: true,
+        level: "info",
+        logDir: "",
+        clientLogging: { enabled: false, path: "" },
+        ai: { apiKeyConfigured: false, apiKeySource: "missing" as const, model: null, modelSource: "missing" as const, enabled: false },
+        connectors: { posthog: { enabled: false, mode: "auto", host: "", serviceName: "", errorTracking: { enabled: false, mode: "auto", enableExceptionAutocapture: false, ready: false, status: "missing" as const } }, sentry: { enabled: false, mode: "auto", ready: false, status: "missing" as const }, otlp: [] },
+      },
+      status: "found" as const,
+      winner: null,
+      ignored: [],
+      rawContent: null,
+      loadError: null,
+    };
+
+    await expect(
+      loadDatabaseRecords({
+        projectPath: projectDir,
+        config: configWithNoAdapter,
+        input: {},
+      }),
+    ).rejects.toThrow("requires database.dialect");
+  });
+
+  it("SQL loading applies level/type predicates and search remains in-memory", async () => {
+    const projectDir = await createProject();
+    process.env.DATABASE_URL = "postgresql://user:pass@localhost:5432/test";
+
+    let capturedQuery = "";
+    let capturedValues: unknown[] = [];
+    const rows = [
+      {
+        id: "row-1",
+        timestamp: new Date("2026-03-13T10:00:00.000Z"),
+        createdAt: new Date("2026-03-13T10:00:00.000Z"),
+        level: "error",
+        message: "payment failed",
+        type: "payment_event",
+        caller: null,
+        bindings: null,
+        data: null,
+        error: null,
+        record: null,
+      },
+      {
+        id: "row-2",
+        timestamp: new Date("2026-03-13T10:00:01.000Z"),
+        createdAt: new Date("2026-03-13T10:00:01.000Z"),
+        level: "info",
+        message: "payment retry",
+        type: "payment_event",
+        caller: null,
+        bindings: null,
+        data: null,
+        error: null,
+        record: null,
+      },
+    ];
+    __setDatabaseQueryForTests(async ({ query, values }) => {
+      capturedQuery = query;
+      capturedValues = values;
+      return rows;
+    });
+
+    const configWithPrisma = buildDbConfig({
+      adapterKind: "prisma",
+      dialect: "postgres",
+      model: "blypLog",
+    });
+
+    const result = await loadDatabaseRecords({
+      projectPath: projectDir,
+      config: configWithPrisma,
+      input: { level: "error", type: "payment_event" },
+    });
+
+    expect(capturedQuery).toContain(`"level" = $1`);
+    expect(capturedQuery).toContain(`"type" = $2`);
+    expect(capturedValues.slice(0, 2)).toEqual(["error", "payment_event"]);
+    expect(result.records).toHaveLength(2);
+    expect(result.records[0]?.level).toBe("error");
+  });
+
+  it("SQL loading keeps scalar fallback fields and supports mysql dialect", async () => {
+    const projectDir = await createProject();
+    process.env.DATABASE_URL = "mysql://user:pass@localhost:3306/test";
+    let capturedQuery = "";
+
+    __setDatabaseQueryForTests(async ({ query }) => {
+      capturedQuery = query;
+      return [
+      {
+        id: "row-1",
+        timestamp: new Date("2026-03-13T10:00:00.000Z"),
+        createdAt: new Date("2026-03-13T10:00:00.000Z"),
+        level: "error",
+        message: "checkout failed",
+        type: "http_error",
+        caller: "src/routes/checkout.ts:4",
+        method: "POST",
+        path: "/checkout",
+        status: 500,
+        duration: 42,
+        bindings: null,
+        data: { orderId: "ord_1" },
+        error: { message: "boom", stack: "Error\n    at src/routes/checkout.ts:4:1" },
+        events: [{ step: "request" }],
+        record: null,
+      },
+    ];
+    });
+
+    const configWithDrizzle = buildDbConfig({
+      adapterKind: "drizzle",
+      dialect: "mysql",
+    });
+
+    const result = await loadDatabaseRecords({
+      projectPath: projectDir,
+      config: configWithDrizzle,
+      input: { level: "error", type: "http_error" },
+    });
+
+    expect(capturedQuery).toContain("`level` = ?");
+    expect(capturedQuery).toContain("`type` = ?");
+    expect(result.records).toHaveLength(1);
+    expect(result.records[0]?.message).toBe("checkout failed");
+    expect(result.records[0]?.http).toMatchObject({
+      method: "POST",
+      path: "/checkout",
+      statusCode: 500,
+      durationMs: 42,
+    });
+    expect(result.records[0]?.raw).toMatchObject({
+      path: "/checkout",
+      status: 500,
+      duration: 42,
+      events: [{ step: "request" }],
+    });
+  });
+
+  it("sanitizes circular DB payloads before returning Studio records", async () => {
+    const projectDir = await createProject();
+    process.env.DATABASE_URL = "postgresql://user:pass@localhost:5432/test";
+
+    const circularData: Record<string, unknown> = { label: "payload" };
+    circularData.self = circularData;
+
+    const circularRecord: Record<string, unknown> = {
+      timestamp: "2026-03-13T10:00:00.000Z",
+      level: "error",
+      message: "circular payload",
+    };
+    circularRecord.loop = circularRecord;
+    __setDatabaseQueryForTests(async () => [
+      {
+        id: "row-circular",
+        timestamp: new Date("2026-03-13T10:00:00.000Z"),
+        createdAt: new Date("2026-03-13T10:00:00.000Z"),
+        level: "error",
+        message: "circular payload",
+        type: "test_event",
+        caller: null,
+        bindings: circularData,
+        data: circularData,
+        error: circularData,
+        record: circularRecord,
+      },
+    ]);
+
+    const configWithPrisma = buildDbConfig({
+      adapterKind: "prisma",
+      dialect: "postgres",
+      model: "blypLog",
+    });
+    const result = await loadDatabaseRecords({
+      projectPath: projectDir,
+      config: configWithPrisma,
+      input: {},
+    });
+
+    expect(result.records[0]?.data).toMatchObject({
+      label: "payload",
+      self: "[Circular]",
+    });
+    expect(result.records[0]?.raw).toMatchObject({
+      message: "circular payload",
+      loop: "[Circular]",
+    });
+    expect(() => JSON.stringify(result.records[0])).not.toThrow();
+  });
+
+  it("Prisma DB truncated flag works when rows exceed cap", async () => {
+    const projectDir = await createProject();
+    process.env.DATABASE_URL = "postgresql://user:pass@localhost:5432/test";
+
+    const manyRows = Array.from({ length: MAX_DB_SCANNED_RECORDS + 1 }, (_, i) => ({
+      id: `row-${i}`,
+      timestamp: new Date("2026-03-13T10:00:00.000Z"),
+      createdAt: new Date("2026-03-13T10:00:00.000Z"),
+      level: "info",
+      message: `record ${i}`,
+      type: null,
+      caller: null,
+      bindings: null,
+      data: null,
+      error: null,
+      record: null,
+    }));
+    __setDatabaseQueryForTests(async () => manyRows);
+
+    const configWithPrisma = buildDbConfig({
+      adapterKind: "prisma",
+      dialect: "postgres",
+      model: "blypLog",
+    });
+
+    const result = await loadDatabaseRecords({
+      projectPath: projectDir,
+      config: configWithPrisma,
+      input: {},
+    });
+
+    expect(result.truncated).toBe(true);
+    expect(result.records).toHaveLength(MAX_DB_SCANNED_RECORDS);
+  });
+});
+
+function buildDbConfig({
+  adapterKind,
+  dialect = "postgres",
+  model,
+}: {
+  adapterKind: "prisma" | "drizzle";
+  dialect?: "postgres" | "mysql";
+  model?: string;
+}) {
+  return {
+    parsedConfig: {
+      destination: "database",
+      database: {
+        dialect,
+        adapter: {
+          type: adapterKind,
+          model,
+        },
+      },
+    },
+    resolved: {
+      destination: "database" as const,
+      database: {
+        enabled: true,
+        ready: true,
+        dialect,
+        adapterKind,
+        model: adapterKind === "prisma" ? (model ?? "blypLog") : null,
+        label: adapterKind === "prisma" ? (model ?? "blypLog") : "blyp_logs",
+        status: "enabled" as const,
+      },
+      file: {
+        dir: "",
+        archiveDir: "",
+        format: "ndjson" as const,
+        enabled: true,
+        rotation: { enabled: true, maxSizeBytes: 0, maxArchives: 0, compress: false },
+      },
+      pretty: true,
+      level: "info",
+      logDir: "",
+      clientLogging: { enabled: false, path: "" },
+      ai: {
+        apiKeyConfigured: false,
+        apiKeySource: "missing" as const,
+        model: null,
+        modelSource: "missing" as const,
+        enabled: false,
+      },
+      connectors: {
+        posthog: {
+          enabled: false,
+          mode: "auto",
+          host: "",
+          serviceName: "",
+          errorTracking: {
+            enabled: false,
+            mode: "auto",
+            enableExceptionAutocapture: false,
+            ready: false,
+            status: "missing" as const,
+          },
+        },
+        sentry: { enabled: false, mode: "auto", ready: false, status: "missing" as const },
+        otlp: [],
+      },
+    },
+    status: "found" as const,
+    winner: null,
+    ignored: [],
+    rawContent: null,
+    loadError: null,
+  };
+}
 
 async function createProject(): Promise<string> {
   const directory = await mkdtemp(path.join(os.tmpdir(), "blyp-studio-"));

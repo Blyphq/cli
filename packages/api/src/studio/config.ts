@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 
 import { createJiti } from "jiti";
@@ -18,6 +18,11 @@ import type {
   StudioResolvedPostHogConnectorSummary,
   StudioResolvedSentryConnectorSummary,
 } from "./types";
+
+// Cache jiti-loaded configs by absolute config path + mtime so that concurrent
+// tRPC queries on page load share the same loaded module (and the same ORM
+// runtime objects like PrismaClient) instead of each spawning a fresh one.
+const jitiConfigCache = new Map<string, { mtime: number; result: unknown }>();
 
 const CONFIG_FILE_NAMES = [
   "blyp.config.ts",
@@ -78,6 +83,18 @@ interface StudioConfigInput {
         enabled?: boolean;
         path?: string;
       };
+  destination?: "file" | "database";
+  database?: {
+    dialect?: string;
+    adapter?: {
+      type?: string;
+      client?: unknown;
+      model?: string;
+      db?: unknown;
+      table?: unknown;
+      dialect?: string;
+    };
+  };
   connectors?: {
     posthog?: {
       enabled?: boolean;
@@ -158,9 +175,9 @@ export async function discoverStudioConfig(
       winner,
       ignored,
       rawContent,
-      parsedConfig,
+      parsedConfig: sanitizeConfigForStudio(parsedConfig),
       loadError: null,
-      resolved: buildResolvedConfig(parsedConfig, project.absolutePath),
+      resolved: buildResolvedConfig(parsedConfig, project.absolutePath, winner.type),
     };
   } catch (error) {
     return {
@@ -224,13 +241,50 @@ function loadConfigFile(match: StudioConfigFileMatch, projectPath: string): unkn
     return JSON.parse(readFileSync(match.path, "utf8"));
   }
 
+  // Return cached result when the config file hasn't changed on disk.
+  // This prevents each parallel tRPC query from re-executing the module via
+  // jiti, which would create multiple ORM client instances (e.g. PrismaClient)
+  // and exhaust the database connection pool.
+  try {
+    const mtime = statSync(match.path).mtimeMs;
+    const cached = jitiConfigCache.get(match.path);
+
+    if (cached && cached.mtime === mtime) {
+      return cached.result;
+    }
+  } catch {
+    // statSync failed — fall through to a fresh load
+  }
+
+  // Inject the project's .env into process.env before jiti executes the config.
+  // This lets runtime adapters (e.g. new PrismaClient(), drizzle()) pick up
+  // DATABASE_URL and other connection vars without the user having to set them
+  // globally. We only set keys that aren't already present so we never override
+  // the caller's own environment.
+  const projectEnv = readProjectEnv(projectPath);
+
+  for (const [key, value] of Object.entries(projectEnv)) {
+    if (process.env[key] === undefined) {
+      process.env[key] = value;
+    }
+  }
+
   const jiti = createJiti(projectPath, {
     interopDefault: true,
     moduleCache: false,
     fsCache: false,
   });
 
-  return jiti(match.path);
+  const result = jiti(match.path);
+
+  try {
+    const mtime = statSync(match.path).mtimeMs;
+    jitiConfigCache.set(match.path, { mtime, result });
+  } catch {
+    // couldn't stat after load — skip caching, not fatal
+  }
+
+  return result;
 }
 
 function normalizeLoadedConfig(value: unknown): StudioConfigInput {
@@ -249,13 +303,93 @@ function normalizeLoadedConfig(value: unknown): StudioConfigInput {
   return normalized as StudioConfigInput;
 }
 
+function sanitizeConfigForStudio(value: StudioConfigInput): StudioConfigInput {
+  return {
+    ...value,
+    database: value.database
+      ? {
+          ...value.database,
+          adapter: value.database.adapter
+            ? {
+                type: value.database.adapter.type,
+                model: value.database.adapter.model,
+                dialect: value.database.adapter.dialect,
+              }
+            : undefined,
+        }
+      : undefined,
+  };
+}
+
 function isStudioConfigInput(value: unknown): value is StudioConfigInput {
   return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function mergeDatabaseConfig(
+  input: StudioConfigInput,
+  configFileType: StudioConfigFileType | null,
+): import("./types").StudioDatabaseConfigSummary {
+  void configFileType;
+  const destination = input.destination ?? "file";
+
+  if (destination !== "database") {
+    return {
+      enabled: false,
+      ready: false,
+      dialect: null,
+      adapterKind: null,
+      model: null,
+      label: null,
+      status: "missing",
+    };
+  }
+
+  const adapter = input.database?.adapter;
+  const rawAdapterType = typeof adapter?.type === "string" && adapter.type ? adapter.type : null;
+  const adapterKind: "prisma" | "drizzle" | null =
+    rawAdapterType === "prisma" || rawAdapterType === "drizzle" ? rawAdapterType : null;
+  const rawDialect = firstNonEmptyString(input.database?.dialect, adapter?.dialect);
+  const dialect: "postgres" | "mysql" | null =
+    rawDialect === "postgres" || rawDialect === "mysql" ? rawDialect : null;
+  const ready = dialect !== null;
+
+  if (!adapterKind) {
+    return {
+      enabled: true,
+      ready,
+      dialect,
+      adapterKind: null,
+      model: null,
+      label: null,
+      status: ready ? "enabled" : "invalid",
+    };
+  }
+
+  const model =
+    adapterKind === "prisma"
+      ? (typeof adapter?.model === "string" && adapter.model ? adapter.model : "blypLog")
+      : null;
+  const label = adapterKind === "prisma" ? (model ?? "blypLog") : "blyp_logs";
+  const status: import("./types").StudioDatabaseConfigSummary["status"] =
+    ready
+      ? "enabled"
+      : "invalid";
+
+  return {
+    enabled: true,
+    ready,
+    dialect,
+    adapterKind,
+    model,
+    label,
+    status,
+  };
 }
 
 function buildResolvedConfig(
   input: StudioConfigInput,
   projectPath: string,
+  configFileType: StudioConfigFileType | null = null,
 ): StudioResolvedConfigSummary {
   const file = mergeFileConfig(input.file, input.logDir, projectPath);
   const logDir = file.dir || path.join(projectPath, "logs");
@@ -268,6 +402,8 @@ function buildResolvedConfig(
     clientLogging: mergeClientLoggingConfig(input.clientLogging),
     ai: mergeAiConfig(input.ai, projectPath),
     connectors: mergeConnectorsConfig(input.connectors, projectPath),
+    destination: input.destination ?? "file",
+    database: mergeDatabaseConfig(input, configFileType),
   };
 }
 
@@ -471,7 +607,7 @@ function firstNonEmptyString(...values: Array<string | undefined>): string | und
   return undefined;
 }
 
-function readProjectEnv(projectPath: string): Record<string, string> {
+export function readProjectEnv(projectPath: string): Record<string, string> {
   const envPath = path.join(projectPath, ".env");
 
   if (!existsSync(envPath)) {

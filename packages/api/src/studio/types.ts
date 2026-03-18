@@ -11,6 +11,18 @@ export type StudioGroupingReason =
   | "heuristic";
 export type StudioAssistantRole = "user" | "assistant";
 
+export type StudioLogMode = "file" | "database";
+
+export interface StudioDatabaseConfigSummary {
+  enabled: boolean;
+  ready: boolean;
+  dialect: "postgres" | "mysql" | null;
+  adapterKind: "prisma" | "drizzle" | null;
+  model: string | null;
+  label: string | null;
+  status: "enabled" | "missing" | "invalid";
+}
+
 export interface StudioProjectResolution {
   requestedPath: string | null;
   resolvedFrom: "input" | "env" | "cwd";
@@ -107,6 +119,8 @@ export interface StudioResolvedConfigSummary {
   clientLogging: StudioClientLoggingSummary;
   ai: StudioAiSummary;
   connectors: StudioResolvedConnectorsSummary;
+  destination: "file" | "database";
+  database: StudioDatabaseConfigSummary;
 }
 
 export interface StudioConfigDiscovery {
@@ -136,6 +150,8 @@ export interface StudioLogDiscovery {
   logDirExists: boolean;
   archiveDirExists: boolean;
   files: StudioLogFile[];
+  mode: StudioLogMode;
+  database: StudioDatabaseConfigSummary | null;
 }
 
 export interface StudioHttpDetails {
@@ -310,6 +326,8 @@ export interface StudioMeta {
   project: StudioProjectResolution;
   config: StudioConfigDiscovery;
   logs: {
+    mode: StudioLogMode;
+    database: StudioDatabaseConfigSummary | null;
     logDir: string;
     archiveDir: string;
     logDirExists: boolean;

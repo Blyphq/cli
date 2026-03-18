@@ -26,10 +26,10 @@ export async function normalizeRecord({
   const http = inferHttpDetails(objectRecord);
   const source = inferSource(objectRecord, http);
   const bindings = isPlainObject(objectRecord.bindings)
-    ? (objectRecord.bindings as Record<string, unknown>)
+    ? (sanitizeForTransport(objectRecord.bindings) as Record<string, unknown>)
     : null;
   const caller = getOptionalString(objectRecord.caller) ?? null;
-  const error = objectRecord.error ?? null;
+  const error = sanitizeForTransport(objectRecord.error ?? null);
   const stack = resolveRecordStack(objectRecord);
   const sourceResolution = projectPath
     ? await resolveRecordSourceLocation(projectPath, { caller, stack })
@@ -44,7 +44,7 @@ export async function normalizeRecord({
     type,
     caller,
     bindings,
-    data: objectRecord.data,
+    data: sanitizeForTransport(objectRecord.data),
     fileId: file.id,
     fileName: file.name,
     filePath: file.absolutePath,
@@ -55,7 +55,7 @@ export async function normalizeRecord({
     stack,
     sourceLocation:
       sourceResolution?.status === "resolved" ? sourceResolution.location : null,
-    raw: malformed ? { rawLine } : parsed,
+    raw: malformed ? { rawLine } : sanitizeForTransport(parsed),
   };
 }
 
@@ -71,7 +71,7 @@ export function serializeForSearch(value: unknown): string {
   }
 }
 
-function inferSource(record: Record<string, unknown>, http: StudioHttpDetails | null): StudioRecordSource {
+export function inferSource(record: Record<string, unknown>, http: StudioHttpDetails | null): StudioRecordSource {
   if (getOptionalString(record.source) === "client" || getOptionalString(record.type) === "client_log") {
     return "client";
   }
@@ -91,7 +91,7 @@ function inferSource(record: Record<string, unknown>, http: StudioHttpDetails | 
   return "server";
 }
 
-function inferHttpDetails(record: Record<string, unknown>): StudioHttpDetails | null {
+export function inferHttpDetails(record: Record<string, unknown>): StudioHttpDetails | null {
   const type = getOptionalString(record.type) ?? null;
   const method = getOptionalString(record.method) ?? null;
   const url = getOptionalString(record.url) ?? null;
@@ -141,7 +141,7 @@ function getMessage(
   return "Unknown log record";
 }
 
-function resolveRecordStack(record: Record<string, unknown>): string | null {
+export function resolveRecordStack(record: Record<string, unknown>): string | null {
   const topLevelStack = getOptionalString(record.stack);
 
   if (topLevelStack) {
@@ -165,4 +165,66 @@ function getOptionalNumber(value: unknown): number | null {
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+export function sanitizeForTransport(
+  value: unknown,
+  seen: WeakSet<object> = new WeakSet(),
+  depth = 0,
+): unknown {
+  if (value == null || typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    return value;
+  }
+
+  if (typeof value === "bigint") {
+    return value.toString();
+  }
+
+  if (typeof value === "function" || typeof value === "symbol") {
+    return String(value);
+  }
+
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+
+  if (value instanceof Error) {
+    const serializedError: Record<string, unknown> = {
+      name: value.name,
+      message: value.message,
+      stack: value.stack ?? null,
+    };
+
+    for (const [key, nested] of Object.entries(value)) {
+      serializedError[key] = sanitizeForTransport(nested, seen, depth + 1);
+    }
+
+    return serializedError;
+  }
+
+  if (typeof value !== "object") {
+    return String(value);
+  }
+
+  if (seen.has(value)) {
+    return "[Circular]";
+  }
+
+  if (depth >= 8) {
+    return "[MaxDepth]";
+  }
+
+  seen.add(value);
+
+  if (Array.isArray(value)) {
+    return value.map((item) => sanitizeForTransport(item, seen, depth + 1));
+  }
+
+  const serialized: Record<string, unknown> = {};
+
+  for (const [key, nested] of Object.entries(value)) {
+    serialized[key] = sanitizeForTransport(nested, seen, depth + 1);
+  }
+
+  return serialized;
 }

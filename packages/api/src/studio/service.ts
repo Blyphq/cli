@@ -6,6 +6,10 @@ import {
 } from "./assistant";
 import { generateAssistantText, getAssistantStatus } from "./assistant-provider";
 import { discoverStudioConfig, resolveStudioAiCredentials } from "./config";
+import {
+  buildSyntheticDatabaseFile,
+  loadDatabaseRecords,
+} from "./database";
 import { getLogFacets } from "./facets";
 import { buildGroupDetails } from "./grouping";
 import { discoverLogFiles } from "./logs";
@@ -23,21 +27,62 @@ import type {
   StudioLogsPage,
   StudioLogsQueryInput,
   StudioMeta,
+  StudioNormalizedRecord,
   StudioSourceContext,
   StudioStructuredGroupDetail,
 } from "./types";
+
+async function discoverLogSource(
+  projectPath: string,
+  config: StudioConfigDiscovery,
+): Promise<StudioLogDiscovery> {
+  if (config.resolved.destination === "database") {
+    const syntheticFile = buildSyntheticDatabaseFile(config.resolved);
+
+    return {
+      logDir: config.resolved.file.dir,
+      archiveDir: config.resolved.file.archiveDir,
+      logDirExists: false,
+      archiveDirExists: false,
+      files: [syntheticFile],
+      mode: "database",
+      database: config.resolved.database,
+    };
+  }
+
+  return discoverLogFiles(projectPath, config);
+}
+
+async function loadProjectRecords(
+  projectPath: string,
+  config: StudioConfigDiscovery,
+  files: StudioLogDiscovery,
+  filters: Pick<StudioLogsQueryInput, "level" | "type" | "from" | "to" | "search"> = {},
+): Promise<{
+  records: StudioNormalizedRecord[];
+  scannedRecords: number;
+  truncated: boolean;
+}> {
+  if (files.mode === "database") {
+    return loadDatabaseRecords({ projectPath, config, input: filters });
+  }
+
+  return loadNormalizedRecords(files.files, projectPath);
+}
 
 export async function getStudioMeta(projectPath?: string): Promise<StudioMeta> {
   const project = await resolveStudioProject(projectPath);
   const config = await discoverStudioConfig(project);
   const logs = project.valid
-    ? await discoverLogFiles(project.absolutePath, config)
+    ? await discoverLogSource(project.absolutePath, config)
     : emptyLogDiscovery(config);
 
   return {
     project,
-    config,
+    config: stripParsedConfig(config),
     logs: {
+      mode: logs.mode,
+      database: logs.database,
       logDir: logs.logDir,
       archiveDir: logs.archiveDir,
       logDirExists: logs.logDirExists,
@@ -51,7 +96,8 @@ export async function getStudioMeta(projectPath?: string): Promise<StudioMeta> {
 
 export async function getStudioConfig(projectPath?: string): Promise<StudioConfigDiscovery> {
   const project = await resolveStudioProject(projectPath);
-  return discoverStudioConfig(project);
+  const config = await discoverStudioConfig(project);
+  return stripParsedConfig(config);
 }
 
 export async function getStudioFiles(projectPath?: string): Promise<StudioLogDiscovery> {
@@ -62,11 +108,27 @@ export async function getStudioFiles(projectPath?: string): Promise<StudioLogDis
     return emptyLogDiscovery(config);
   }
 
-  return discoverLogFiles(project.absolutePath, config);
+  return discoverLogSource(project.absolutePath, config);
 }
 
 export async function getStudioLogs(input: StudioLogsQueryInput): Promise<StudioLogsPage> {
-  const { files, project } = await getStudioProjectFiles(input.projectPath);
+  const { files, project, config } = await getStudioProjectFiles(input.projectPath);
+
+  if (files.mode === "database") {
+    const dbLoaded = await loadDatabaseRecords({
+      projectPath: project.absolutePath,
+      config,
+      input,
+    });
+
+    return queryLogs({
+      files: files.files,
+      input,
+      projectPath: project.absolutePath,
+      preloaded: dbLoaded,
+    });
+  }
+
   return queryLogs({
     files: files.files,
     input,
@@ -80,8 +142,8 @@ export async function getStudioFacets(
     "projectPath" | "level" | "search" | "fileId" | "from" | "to"
   >,
 ): Promise<StudioLogFacets> {
-  const { files, project } = await getStudioProjectFiles(input.projectPath);
-  const loaded = await loadNormalizedRecords(files.files, project.absolutePath);
+  const { files, project, config } = await getStudioProjectFiles(input.projectPath);
+  const loaded = await loadProjectRecords(project.absolutePath, config, files, input);
 
   return getLogFacets(loaded.records, input);
 }
@@ -90,8 +152,8 @@ export async function getStudioGroup(input: {
   projectPath?: string;
   groupId: string;
 }): Promise<StudioStructuredGroupDetail | null> {
-  const { files, project } = await getStudioProjectFiles(input.projectPath);
-  const loaded = await loadNormalizedRecords(files.files, project.absolutePath);
+  const { files, project, config } = await getStudioProjectFiles(input.projectPath);
+  const loaded = await loadProjectRecords(project.absolutePath, config, files);
   const groups = buildGroupDetails(loaded.records);
 
   return groups.get(input.groupId) ?? null;
@@ -101,8 +163,8 @@ export async function getStudioRecord(input: {
   projectPath?: string;
   recordId: string;
 }) {
-  const { files, project } = await getStudioProjectFiles(input.projectPath);
-  const loaded = await loadNormalizedRecords(files.files, project.absolutePath);
+  const { files, project, config } = await getStudioProjectFiles(input.projectPath);
+  const loaded = await loadProjectRecords(project.absolutePath, config, files);
 
   return loaded.records.find((record) => record.id === input.recordId) ?? null;
 }
@@ -111,8 +173,8 @@ export async function getStudioRecordSource(input: {
   projectPath?: string;
   recordId: string;
 }): Promise<StudioSourceContext> {
-  const { files, project } = await getStudioProjectFiles(input.projectPath);
-  const loaded = await loadNormalizedRecords(files.files, project.absolutePath);
+  const { files, project, config } = await getStudioProjectFiles(input.projectPath);
+  const loaded = await loadProjectRecords(project.absolutePath, config, files);
   const record = loaded.records.find((candidate) => candidate.id === input.recordId);
 
   if (!record) {
@@ -155,15 +217,23 @@ export async function replyWithStudioAssistant(
   const project = await resolveStudioProject(input.projectPath);
   const config = await discoverStudioConfig(project);
   const files = project.valid
-    ? await discoverLogFiles(project.absolutePath, config)
+    ? await discoverLogSource(project.absolutePath, config)
     : emptyLogDiscovery(config);
   const ai = resolveStudioAiCredentials(config, project.absolutePath);
+
+  let preloadedRecords: StudioNormalizedRecord[] | undefined;
+
+  if (files.mode === "database" && project.valid) {
+    const loaded = await loadProjectRecords(project.absolutePath, config, files);
+    preloadedRecords = loaded.records;
+  }
 
   return replyWithAssistant({
     ...input,
     projectPath: project.absolutePath,
     ai,
     files: files.files,
+    preloadedRecords,
   });
 }
 
@@ -173,15 +243,23 @@ export async function describeStudioSelection(
   const project = await resolveStudioProject(input.projectPath);
   const config = await discoverStudioConfig(project);
   const files = project.valid
-    ? await discoverLogFiles(project.absolutePath, config)
+    ? await discoverLogSource(project.absolutePath, config)
     : emptyLogDiscovery(config);
   const ai = resolveStudioAiCredentials(config, project.absolutePath);
+
+  let preloadedRecords: StudioNormalizedRecord[] | undefined;
+
+  if (files.mode === "database" && project.valid) {
+    const loaded = await loadProjectRecords(project.absolutePath, config, files);
+    preloadedRecords = loaded.records;
+  }
 
   return describeSelectionWithAssistant({
     ...input,
     projectPath: project.absolutePath,
     ai,
     files: files.files,
+    preloadedRecords,
   });
 }
 
@@ -197,9 +275,16 @@ export async function streamStudioAssistant(input: {
   const project = await resolveStudioProject(input.projectPath);
   const config = await discoverStudioConfig(project);
   const files = project.valid
-    ? await discoverLogFiles(project.absolutePath, config)
+    ? await discoverLogSource(project.absolutePath, config)
     : emptyLogDiscovery(config);
   const ai = resolveStudioAiCredentials(config, project.absolutePath);
+
+  let preloadedRecords: StudioNormalizedRecord[] | undefined;
+
+  if (files.mode === "database" && project.valid) {
+    const loaded = await loadProjectRecords(project.absolutePath, config, files);
+    preloadedRecords = loaded.records;
+  }
 
   return streamAssistant({
     projectPath: project.absolutePath,
@@ -209,6 +294,7 @@ export async function streamStudioAssistant(input: {
     selectedGroupId: input.selectedGroupId,
     messages: input.messages,
     mode: input.mode,
+    preloadedRecords,
     ai: {
       apiKey: ai.apiKey,
       model: ai.model,
@@ -224,6 +310,11 @@ function emptyLogDiscovery(config: StudioConfigDiscovery): StudioLogDiscovery {
     logDirExists: false,
     archiveDirExists: false,
     files: [],
+    mode: config.resolved.destination === "database" ? "database" : "file",
+    database:
+      config.resolved.destination === "database"
+        ? config.resolved.database
+        : null,
   };
 }
 
@@ -239,9 +330,17 @@ async function getStudioProjectFiles(projectPath?: string): Promise<{
     project,
     config,
     files: project.valid
-      ? await discoverLogFiles(project.absolutePath, config)
+      ? await discoverLogSource(project.absolutePath, config)
       : emptyLogDiscovery(config),
   };
+}
+
+// parsedConfig may contain live ORM runtime objects (PrismaClient, Drizzle db)
+// that cannot be JSON-serialized. Strip it before any tRPC response leaves the
+// service layer. Internal service helpers use discoverStudioConfig() directly
+// and retain the full object for DB queries.
+function stripParsedConfig(config: StudioConfigDiscovery): StudioConfigDiscovery {
+  return { ...config, parsedConfig: null };
 }
 
 function sanitizeGeneratedChatTitle(value: string): string {

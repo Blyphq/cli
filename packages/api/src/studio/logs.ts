@@ -28,6 +28,8 @@ export async function discoverLogFiles(
     logDirExists,
     archiveDirExists,
     files,
+    mode: "file" as const,
+    database: null,
   };
 }
 

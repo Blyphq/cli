@@ -16,13 +16,15 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@openrouter/ai-sdk-provider": "^2.3.0",
     "@blyp-cli/env": "workspace:*",
+    "@openrouter/ai-sdk-provider": "^2.3.0",
     "@trpc/client": "catalog:",
     "@trpc/server": "catalog:",
     "ai": "^6.0.116",
     "dotenv": "catalog:",
     "jiti": "^2.6.1",
+    "mysql2": "^3.20.0",
+    "postgres": "^3.4.8",
     "zod": "catalog:"
   },
   "devDependencies": {

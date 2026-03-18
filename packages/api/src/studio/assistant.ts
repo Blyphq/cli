@@ -22,6 +22,7 @@ import type {
   StudioAssistantMessage,
   StudioAssistantReplyInput,
   StudioLogDiscovery,
+  StudioNormalizedRecord,
 } from "./types";
 
 interface AiConfigInput {
@@ -43,6 +44,7 @@ interface RunAssistantInput extends StudioAssistantReplyInput {
   files: StudioLogDiscovery["files"];
   projectPath: string;
   ai: AiConfigInput;
+  preloadedRecords?: StudioNormalizedRecord[];
 }
 
 export interface StreamAssistantInput {
@@ -58,6 +60,7 @@ export interface StreamAssistantInput {
     model: string | null;
     overrideModel?: string | null;
   };
+  preloadedRecords?: StudioNormalizedRecord[];
 }
 
 export interface StudioAssistantStreamResult {
@@ -69,7 +72,9 @@ export interface StudioAssistantStreamResult {
 export async function replyWithAssistant(
   input: RunAssistantInput,
 ): Promise<StudioAssistantMessage> {
-  const loaded = await loadNormalizedRecords(input.files, input.projectPath);
+  const loaded = input.preloadedRecords
+    ? { records: input.preloadedRecords }
+    : await loadNormalizedRecords(input.files, input.projectPath);
   const history = input.history.slice(-8);
   const latestUserMessage = history
     .slice()
@@ -111,7 +116,9 @@ export async function replyWithAssistant(
 export async function describeSelectionWithAssistant(
   input: RunAssistantInput,
 ): Promise<StudioAssistantMessage> {
-  const loaded = await loadNormalizedRecords(input.files, input.projectPath);
+  const loaded = input.preloadedRecords
+    ? { records: input.preloadedRecords }
+    : await loadNormalizedRecords(input.files, input.projectPath);
   const context = await buildAssistantContext({
     allRecords: loaded.records,
     filters: input.filters,
@@ -148,7 +155,9 @@ export async function describeSelectionWithAssistant(
 export async function streamAssistant(
   input: StreamAssistantInput,
 ): Promise<StudioAssistantStreamResult> {
-  const loaded = await loadNormalizedRecords(input.files, input.projectPath);
+  const loaded = input.preloadedRecords
+    ? { records: input.preloadedRecords }
+    : await loadNormalizedRecords(input.files, input.projectPath);
   const latestUserMessage =
     input.messages
       .slice()

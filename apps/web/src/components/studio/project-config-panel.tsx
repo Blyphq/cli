@@ -61,6 +61,10 @@ export function ProjectConfigPanel({ meta, config }: ProjectConfigPanelProps) {
               ),
             },
             {
+              label: "Destination",
+              value: config?.resolved.destination ?? "file",
+            },
+            {
               label: "Client logging",
               value: config?.resolved.clientLogging.enabled ? (
                 <TruncatedPath value={config.resolved.clientLogging.path} />
@@ -78,44 +82,84 @@ export function ProjectConfigPanel({ meta, config }: ProjectConfigPanelProps) {
             },
           ]}
         />
-        <Section
-          title="Logging"
-          items={[
-            {
-              label: "Resolved log dir",
-              value: (
-                <TruncatedPath
-                  value={config?.resolved.file.dir ?? meta.logs.logDir}
-                  variant="block"
-                />
-              ),
-            },
-            {
-              label: "Archive dir",
-              value: (
-                <TruncatedPath
-                  value={config?.resolved.file.archiveDir ?? meta.logs.archiveDir}
-                  variant="block"
-                />
-              ),
-            },
-            {
-              label: "Level",
-              value: config?.resolved.level ?? "info",
-            },
-            {
-              label: "Pretty",
-              value: config?.resolved.pretty ? "Enabled" : "Disabled",
-            },
-            {
-              label: "Rotation",
-              value: formatRotation(
-                config?.resolved.file.rotation.maxSizeBytes ?? 0,
-                config?.resolved.file.rotation.maxArchives ?? 0,
-              ),
-            },
-          ]}
-        />
+        {config?.resolved.destination === "database" ? (
+          <Section
+            title="Database"
+            items={[
+              {
+                label: "Destination",
+                value: (
+                  <Badge className={getStatusClasses("found")}>database</Badge>
+                ),
+              },
+              {
+                label: "Status",
+                value: (
+                  <Badge
+                    className={getStatusClasses(
+                      config.resolved.database.status === "enabled"
+                        ? "found"
+                        : config.resolved.database.status === "invalid"
+                          ? "error"
+                          : "not-found",
+                    )}
+                  >
+                    {config.resolved.database.status}
+                  </Badge>
+                ),
+              },
+              {
+                label: "Adapter",
+                value: config.resolved.database.adapterKind ?? "unknown",
+              },
+              ...(config.resolved.database.dialect
+                ? [{ label: "Dialect", value: config.resolved.database.dialect }]
+                : []),
+              ...(config.resolved.database.adapterKind === "prisma" && config.resolved.database.model
+                ? [{ label: "Prisma model", value: config.resolved.database.model }]
+                : []),
+            ]}
+          />
+        ) : (
+          <Section
+            title="Logging"
+            items={[
+              {
+                label: "Resolved log dir",
+                value: (
+                  <TruncatedPath
+                    value={config?.resolved.file.dir ?? meta.logs.logDir}
+                    variant="block"
+                  />
+                ),
+              },
+              {
+                label: "Archive dir",
+                value: (
+                  <TruncatedPath
+                    value={config?.resolved.file.archiveDir ?? meta.logs.archiveDir}
+                    variant="block"
+                  />
+                ),
+              },
+              {
+                label: "Level",
+                value: config?.resolved.level ?? "info",
+              },
+              {
+                label: "Pretty",
+                value: config?.resolved.pretty ? "Enabled" : "Disabled",
+              },
+              {
+                label: "Rotation",
+                value: formatRotation(
+                  config?.resolved.file.rotation.maxSizeBytes ?? 0,
+                  config?.resolved.file.rotation.maxArchives ?? 0,
+                ),
+              },
+            ]}
+          />
+        )}
         {config?.ignored.length ? (
           <div className="space-y-2 border border-border/60 bg-muted/20 p-3">
             <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
