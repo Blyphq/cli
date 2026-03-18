@@ -280,6 +280,13 @@ function toStructuredGroupDetail(
   const sortedFullRecords = fullGroupRecords.slice().sort(compareRecordsDescending);
   const sortedMatchedRecords = matchedGroup.records.slice().sort(compareRecordsDescending);
   const representative = sortedMatchedRecords[0] ?? sortedFullRecords[0];
+  const previewMessages = Array.from(
+    new Set(
+      sortedMatchedRecords
+        .flatMap((record) => extractStructuredPreviewMessages(record))
+        .filter((message) => message.length > 0),
+    ),
+  ).slice(0, 3);
   const timestamps = fullGroupRecords
     .map((record) => record.timestamp)
     .filter((value): value is string => typeof value === "string");
@@ -288,6 +295,10 @@ function toStructuredGroupDetail(
   const levels = Array.from(
     new Set(fullGroupRecords.map((record) => record.level).filter(Boolean)),
   );
+  const nestedEventCount = fullGroupRecords.reduce(
+    (count, record) => count + getNestedStructuredEventCount(record),
+    0,
+  );
 
   return {
     group: {
@@ -295,8 +306,11 @@ function toStructuredGroupDetail(
       id: matchedGroup.id,
       groupKey: matchedGroup.key,
       groupingReason: matchedGroup.reason,
-      title: buildGroupTitle(representative ?? null),
-      type: representative?.type ?? null,
+      title: buildGroupTitle(representative ?? null, matchedGroup.key, previewMessages),
+      type:
+        representative?.type && !isGenericStructuredType(representative.type)
+          ? representative.type
+          : null,
       source: "structured",
       recordCount: fullGroupRecords.length,
       matchedRecordCount: matchedGroup.records.length,
@@ -307,26 +321,41 @@ function toStructuredGroupDetail(
       fileIds: files,
       fileNames,
       representativeRecordId: representative?.id ?? matchedGroup.id,
-      previewMessages: sortedMatchedRecords
-        .map((record) => record.message)
-        .filter((message) => message.length > 0)
-        .slice(0, 3),
+      nestedEventCount,
+      previewMessages,
     },
     records: sortedFullRecords,
   };
 }
 
-function buildGroupTitle(record: StudioNormalizedRecord | null): string {
+function buildGroupTitle(
+  record: StudioNormalizedRecord | null,
+  groupKey: string,
+  previewMessages: string[],
+): string {
   if (!record) {
     return "Structured log group";
   }
 
-  if (record.type) {
+  if (record.http?.method && (record.http.path ?? record.http.url)) {
+    return `${record.http.method} ${record.http.path ?? record.http.url}`;
+  }
+
+  const previewTitle = previewMessages[0];
+  if (previewTitle) {
+    return previewTitle;
+  }
+
+  if (record.message && !isGenericStructuredLabel(record.message, record.type)) {
+    return record.message;
+  }
+
+  if (record.type && !isGenericStructuredType(record.type)) {
     return record.type;
   }
 
-  if (record.http?.method && (record.http?.path ?? record.http?.url)) {
-    return `${record.http.method} ${record.http.path ?? record.http.url}`;
+  if (groupKey.trim().length > 0) {
+    return groupKey;
   }
 
   if (record.message) {
@@ -334,6 +363,174 @@ function buildGroupTitle(record: StudioNormalizedRecord | null): string {
   }
 
   return "Structured log group";
+}
+
+function extractStructuredPreviewMessages(record: StudioNormalizedRecord): string[] {
+  const previews: string[] = [];
+
+  const eventMessages = extractNestedEventMessages(record);
+  if (eventMessages.length > 0) {
+    previews.push(...eventMessages);
+  }
+
+  const httpPreview = buildHttpPreview(record);
+  if (httpPreview) {
+    previews.push(httpPreview);
+  }
+
+  if (record.message && !isGenericStructuredLabel(record.message, record.type)) {
+    previews.push(record.message);
+  }
+
+  if (record.type && !isGenericStructuredType(record.type)) {
+    previews.push(record.type);
+  }
+
+  return Array.from(new Set(previews)).slice(0, 3);
+}
+
+function getNestedStructuredEventCount(record: StudioNormalizedRecord): number {
+  const raw = asPlainObject(record.raw);
+  const events = readStructuredEvents(raw);
+  return events.length;
+}
+
+function extractNestedEventMessages(record: StudioNormalizedRecord): string[] {
+  const raw = asPlainObject(record.raw);
+  const events = readStructuredEvents(raw);
+
+  return events
+    .map((event) => summarizeStructuredEvent(event))
+    .filter((message): message is string => typeof message === "string" && message.length > 0);
+}
+
+function readStructuredEvents(value: Record<string, unknown> | null): unknown[] {
+  if (!value) {
+    return [];
+  }
+
+  if (Array.isArray(value.events)) {
+    return value.events;
+  }
+
+  const data = asPlainObject(value.data);
+  if (data && Array.isArray(data.events)) {
+    return data.events;
+  }
+
+  return [];
+}
+
+function summarizeStructuredEvent(value: unknown): string | null {
+  if (typeof value === "string") {
+    return value.trim().length > 0 ? value.trim() : null;
+  }
+
+  const event = asPlainObject(value);
+  if (!event) {
+    return null;
+  }
+
+  const message = readFirstString(event, ["message", "summary", "title", "name", "event", "action", "step"]);
+  const type = readFirstString(event, ["type", "kind"]);
+  const method = readFirstString(event, ["method"]);
+  const path = readFirstString(event, ["path", "url", "route"]);
+  const status =
+    typeof event.status === "number"
+      ? String(event.status)
+      : typeof event.statusCode === "number"
+        ? String(event.statusCode)
+        : null;
+  const duration =
+    typeof event.duration === "number"
+      ? `${event.duration}ms`
+      : typeof event.durationMs === "number"
+        ? `${event.durationMs}ms`
+        : null;
+
+  if (method && path) {
+    return [method, path, status, duration].filter(Boolean).join(" ");
+  }
+
+  if (message && type && !isGenericStructuredLabel(message, type)) {
+    return `${message}`;
+  }
+
+  if (message) {
+    return message;
+  }
+
+  if (type && !isGenericStructuredType(type)) {
+    return type;
+  }
+
+  const keyValues = Object.entries(event)
+    .filter(([, nested]) => typeof nested === "string" || typeof nested === "number")
+    .slice(0, 3)
+    .map(([key, nested]) => `${key}: ${String(nested)}`);
+
+  return keyValues.length > 0 ? keyValues.join(" • ") : null;
+}
+
+function buildHttpPreview(record: StudioNormalizedRecord): string | null {
+  if (!record.http?.method) {
+    return null;
+  }
+
+  const target = record.http.path ?? record.http.url;
+  if (!target) {
+    return null;
+  }
+
+  const status = record.http.statusCode ? `${record.http.statusCode}` : null;
+  const duration = record.http.durationMs ? `${record.http.durationMs}ms` : null;
+
+  return [record.http.method, target, status, duration].filter(Boolean).join(" ");
+}
+
+function isGenericStructuredType(value: string | null | undefined): boolean {
+  if (!value) {
+    return false;
+  }
+
+  return ["structured_log", "structured", "log"].includes(value.trim().toLowerCase());
+}
+
+function isGenericStructuredLabel(message: string | null | undefined, type: string | null | undefined): boolean {
+  if (!message) {
+    return false;
+  }
+
+  const normalizedMessage = message.trim().toLowerCase();
+  if (isGenericStructuredType(normalizedMessage)) {
+    return true;
+  }
+
+  if (!type) {
+    return false;
+  }
+
+  return normalizedMessage === type.trim().toLowerCase();
+}
+
+function asPlainObject(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function readFirstString(
+  value: Record<string, unknown>,
+  keys: string[],
+): string | null {
+  for (const key of keys) {
+    const candidate = value[key];
+    if (typeof candidate === "string" && candidate.trim().length > 0) {
+      return candidate.trim();
+    }
+  }
+
+  return null;
 }
 
 function toRecordEntry(record: StudioNormalizedRecord): StudioNormalizedRecordListItem {
@@ -344,10 +541,6 @@ function toRecordEntry(record: StudioNormalizedRecord): StudioNormalizedRecordLi
 }
 
 function resolveExplicitGroupInfo(record: StudioNormalizedRecord): GroupedRecordInfo | null {
-  if (record.source !== "structured") {
-    return null;
-  }
-
   for (const candidate of [record.raw, record.bindings, record.data]) {
     const keyMatch = findGroupKey(candidate);
     if (!keyMatch) {

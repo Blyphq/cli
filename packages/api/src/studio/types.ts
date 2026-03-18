@@ -239,6 +239,7 @@ export interface StudioStructuredGroupSummary {
   fileIds: string[];
   fileNames: string[];
   representativeRecordId: string;
+  nestedEventCount: number;
   previewMessages: string[];
 }
 

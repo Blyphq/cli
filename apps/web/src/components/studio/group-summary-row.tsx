@@ -47,12 +47,12 @@ export function GroupSummaryRow({
               {formatCompactDateTime(group.timestampEnd)}
             </div>
           </div>
-          <Badge variant="secondary">{group.recordCount} logs</Badge>
+          <Badge variant="secondary">{group.recordCount} log{group.recordCount === 1 ? "" : "s"}</Badge>
         </div>
         <div className="flex min-w-0 flex-wrap gap-2 text-[11px] text-muted-foreground">
           {group.type ? <Badge variant="outline">{group.type}</Badge> : null}
           <Badge variant="muted">{reasonLabel}</Badge>
-          <span>{group.fileNames.length} files</span>
+          <span>{group.fileNames.length} source{group.fileNames.length === 1 ? "" : "s"}</span>
         </div>
         <div className="space-y-1 text-[11px] text-muted-foreground">
           {group.previewMessages.map((message) => (
@@ -80,7 +80,7 @@ export function GroupSummaryRow({
         {formatDateTime(group.timestampEnd)}
       </td>
       <td className="w-24 px-3 py-2 align-top">
-        <Badge variant="secondary">{group.recordCount} logs</Badge>
+        <Badge variant="secondary">{group.recordCount} log{group.recordCount === 1 ? "" : "s"}</Badge>
       </td>
       <td className="min-w-0 px-3 py-2 align-top">
         <div className="min-w-0 space-y-1">
@@ -90,7 +90,7 @@ export function GroupSummaryRow({
           <div className="flex min-w-0 flex-wrap gap-2 text-[11px] text-muted-foreground">
             {group.type ? <Badge variant="outline">{group.type}</Badge> : null}
             <Badge variant="muted">{reasonLabel}</Badge>
-            <span>{group.fileNames.length} files</span>
+            <span>{group.fileNames.length} source{group.fileNames.length === 1 ? "" : "s"}</span>
           </div>
           <div className="space-y-1 text-[11px] text-muted-foreground">
             {group.previewMessages.map((message) => (

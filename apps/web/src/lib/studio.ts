@@ -332,3 +332,158 @@ export function isRecordEntry(
 ): entry is Extract<StudioLogEntry, { kind: "record" }> {
   return entry.kind === "record";
 }
+
+export function getStructuredRecordLabel(record: StudioRecord): string {
+  const eventSummary = getStructuredEventSummaries(record)[0];
+  if (eventSummary) {
+    return eventSummary;
+  }
+
+  if (!isGenericStructuredLabel(record.message, record.type)) {
+    return record.message;
+  }
+
+  if (record.http?.method && (record.http.path ?? record.http.url)) {
+    const target = record.http.path ?? record.http.url;
+    const status = record.http.statusCode ? ` ${record.http.statusCode}` : "";
+    return `${record.http.method} ${target}${status}`;
+  }
+
+  if (record.type && !isGenericStructuredType(record.type)) {
+    return record.type;
+  }
+
+  return record.message;
+}
+
+export function getStructuredEventSummaries(record: StudioRecord): string[] {
+  const raw = asPlainObject(record.raw);
+  if (!raw) {
+    return [];
+  }
+
+  const events = readStructuredEvents(raw);
+  return events
+    .map((event) => summarizeStructuredEvent(event))
+    .filter((value): value is string => typeof value === "string" && value.length > 0);
+}
+
+export function getStructuredEvents(record: StudioRecord): unknown[] {
+  const raw = asPlainObject(record.raw);
+  if (!raw) {
+    return [];
+  }
+
+  return readStructuredEvents(raw);
+}
+
+function readStructuredEvents(value: Record<string, unknown>): unknown[] {
+  if (Array.isArray(value.events)) {
+    return value.events;
+  }
+
+  const data = asPlainObject(value.data);
+  if (data && Array.isArray(data.events)) {
+    return data.events;
+  }
+
+  return [];
+}
+
+function summarizeStructuredEvent(value: unknown): string | null {
+  if (typeof value === "string") {
+    const next = value.trim();
+    return next.length > 0 ? next : null;
+  }
+
+  const event = asPlainObject(value);
+  if (!event) {
+    return null;
+  }
+
+  const message = readFirstString(event, [
+    "message",
+    "summary",
+    "title",
+    "name",
+    "event",
+    "action",
+    "step",
+  ]);
+  const type = readFirstString(event, ["type", "kind"]);
+  const method = readFirstString(event, ["method"]);
+  const path = readFirstString(event, ["path", "url", "route"]);
+  const status =
+    typeof event.status === "number"
+      ? String(event.status)
+      : typeof event.statusCode === "number"
+        ? String(event.statusCode)
+        : null;
+  const duration =
+    typeof event.duration === "number"
+      ? `${event.duration}ms`
+      : typeof event.durationMs === "number"
+        ? `${event.durationMs}ms`
+        : null;
+
+  if (method && path) {
+    return [method, path, status, duration].filter(Boolean).join(" ");
+  }
+
+  if (message && !isGenericStructuredLabel(message, type)) {
+    return message;
+  }
+
+  if (type && !isGenericStructuredType(type)) {
+    return type;
+  }
+
+  const keyValues = Object.entries(event)
+    .filter(([, nested]) => typeof nested === "string" || typeof nested === "number")
+    .slice(0, 3)
+    .map(([key, nested]) => `${key}: ${String(nested)}`);
+
+  return keyValues.length > 0 ? keyValues.join(" • ") : null;
+}
+
+function isGenericStructuredType(value: string | null | undefined): boolean {
+  if (!value) {
+    return false;
+  }
+
+  return ["structured_log", "structured", "log"].includes(value.trim().toLowerCase());
+}
+
+function isGenericStructuredLabel(message: string | null | undefined, type: string | null | undefined): boolean {
+  if (!message) {
+    return false;
+  }
+
+  const normalizedMessage = message.trim().toLowerCase();
+  if (isGenericStructuredType(normalizedMessage)) {
+    return true;
+  }
+
+  if (!type) {
+    return false;
+  }
+
+  return normalizedMessage === type.trim().toLowerCase();
+}
+
+function asPlainObject(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function readFirstString(value: Record<string, unknown>, keys: string[]): string | null {
+  for (const key of keys) {
+    const candidate = value[key];
+    if (typeof candidate === "string" && candidate.trim().length > 0) {
+      return candidate.trim();
+    }
+  }
+
+  return null;
+}

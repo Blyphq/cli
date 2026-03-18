@@ -216,6 +216,17 @@ describe("studio log discovery and queries", () => {
           events: ["start"],
         }),
         createLogLine({
+          timestamp: "2026-03-13T10:00:00.500Z",
+          level: "info",
+          message: "POST /checkout",
+          type: "http_request",
+          method: "POST",
+          path: "/checkout",
+          statusCode: 200,
+          responseTime: 32,
+          groupId: "checkout-1",
+        }),
+        createLogLine({
           timestamp: "2026-03-13T10:00:01.000Z",
           level: "error",
           message: "checkout failed",
@@ -251,17 +262,18 @@ describe("studio log discovery and queries", () => {
     expect(flat.entries.every((entry) => entry.kind === "record")).toBe(true);
 
     const group = grouped.entries.find((entry) => entry.kind === "structured-group");
-    expect(group?.recordCount).toBe(2);
+    expect(group?.recordCount).toBe(3);
 
     const detail = await getStudioGroup({
       projectPath: projectDir,
       groupId: group?.id ?? "",
     });
 
-    expect(detail?.records).toHaveLength(2);
+    expect(detail?.records).toHaveLength(3);
+    expect(detail?.records.some((record) => record.message === "POST /checkout")).toBe(true);
 
     const facets = await getStudioFacets({ projectPath: projectDir });
-    expect(facets.types).toEqual(["checkout_flow", "plain_log"]);
+    expect(facets.types).toEqual(["checkout_flow", "http_request", "plain_log"]);
     expect(facets.levels).toEqual(["error", "info"]);
   });
 
@@ -301,6 +313,50 @@ describe("studio log discovery and queries", () => {
     const group = grouped.entries.find((entry) => entry.kind === "structured-group");
     expect(group?.groupingReason).toBe("heuristic");
     expect(group?.recordCount).toBe(2);
+  });
+
+  it("summarizes nested structured events instead of generic structured_log labels", async () => {
+    const projectDir = await createProject();
+    const logDir = path.join(projectDir, "logs");
+
+    await mkdir(logDir, { recursive: true });
+    await writeFile(
+      path.join(logDir, "log.ndjson"),
+      createLogLine({
+        timestamp: "2026-03-13T10:00:00.000Z",
+        level: "error",
+        message: "structured_log",
+        type: "structured_log",
+        groupId: "route.get.products",
+        events: [
+          {
+            message: "GET /products/123",
+            method: "GET",
+            path: "/products/123",
+            status: 404,
+            duration: 3532,
+          },
+          {
+            message: "Product not found: 123",
+            kind: "domain_error",
+          },
+        ],
+      }),
+    );
+
+    const grouped = await getStudioLogs({
+      projectPath: projectDir,
+      limit: 50,
+      grouping: "grouped",
+    });
+
+    const group = grouped.entries.find((entry) => entry.kind === "structured-group");
+    expect(group?.title).toBe("GET /products/123 404 3532ms");
+    expect(group?.previewMessages).toEqual([
+      "GET /products/123 404 3532ms",
+      "Product not found: 123",
+    ]);
+    expect(group?.nestedEventCount).toBe(2);
   });
 
   it("marks queries truncated when scan budgets are exceeded", async () => {
@@ -873,6 +929,64 @@ describe("studio DB mode", () => {
       duration: 42,
       events: [{ step: "request" }],
     });
+  });
+
+  it("DB mode groups related rows by scalar groupId when record payload omits it", async () => {
+    const projectDir = await createProject();
+    process.env.DATABASE_URL = "postgresql://user:pass@localhost:5432/test";
+
+    __setDatabaseQueryForTests(async () => [
+      {
+        id: "row-1",
+        timestamp: new Date("2026-03-13T10:00:00.000Z"),
+        createdAt: new Date("2026-03-13T10:00:00.000Z"),
+        level: "info",
+        message: "fetching product",
+        type: "structured_log",
+        groupId: "product.getBySku",
+        caller: "src/services/product-service.ts:27",
+        record: {
+          message: "fetching product",
+          type: "structured_log",
+          events: [{ message: "fetching product" }],
+        },
+      },
+      {
+        id: "row-2",
+        timestamp: new Date("2026-03-13T10:00:01.000Z"),
+        createdAt: new Date("2026-03-13T10:00:01.000Z"),
+        level: "error",
+        message: "Product not found: 123",
+        type: "server_log",
+        groupId: "product.getBySku",
+        caller: "src/services/product-service.ts:28",
+        record: {
+          message: "Product not found: 123",
+          type: "server_log",
+        },
+      },
+    ]);
+
+    await writeFile(
+      path.join(projectDir, "blyp.config.ts"),
+      `export default {
+        destination: "database",
+        database: {
+          dialect: "postgres",
+          adapter: { type: "prisma", model: "blypLog" },
+        },
+      };`,
+    );
+
+    const grouped = await getStudioLogs({
+      projectPath: projectDir,
+      limit: 20,
+      grouping: "grouped",
+    });
+
+    const group = grouped.entries.find((entry) => entry.kind === "structured-group");
+    expect(group?.recordCount).toBe(2);
+    expect(grouped.entries.filter((entry) => entry.kind === "structured-group")).toHaveLength(1);
   });
 
   it("sanitizes circular DB payloads before returning Studio records", async () => {

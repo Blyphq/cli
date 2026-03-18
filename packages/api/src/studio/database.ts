@@ -270,10 +270,12 @@ async function normalizeDatabaseRow({
   const data = toTransportValue(rowObj.data);
   const error = toTransportValue(rowObj.error ?? null);
   const storedRecord = toRecordValue(rowObj.record) ?? {};
-  const normalizedRecord =
+  const normalizedRecord = applyScalarFallbacks(
     Object.keys(storedRecord).length > 0
       ? storedRecord
-      : buildRawFromScalars(rowObj, id, timestamp, level, message, type, caller);
+      : buildRawFromScalars(rowObj, id, timestamp, level, message, type, caller),
+    rowObj,
+  );
   const http = inferHttpDetails(normalizedRecord);
   const source = inferSource(normalizedRecord, http);
   const stack = resolveRecordStack(normalizedRecord) ?? resolveStackFromError(error);
@@ -316,6 +318,7 @@ function buildRawFromScalars(
   if (timestamp) raw.timestamp = timestamp;
   if (type) raw.type = type;
   if (caller) raw.caller = caller;
+  if (typeof row.groupId === "string" && row.groupId.length > 0) raw.groupId = row.groupId;
   if (typeof row.method === "string") raw.method = row.method;
   if (typeof row.path === "string") raw.path = row.path;
 
@@ -338,6 +341,48 @@ function buildRawFromScalars(
   if (Array.isArray(events)) raw.events = events;
 
   return raw;
+}
+
+function applyScalarFallbacks(
+  record: Record<string, unknown>,
+  row: Record<string, unknown>,
+): Record<string, unknown> {
+  const next = { ...record };
+
+  if (typeof next.groupId !== "string" && typeof row.groupId === "string" && row.groupId.length > 0) {
+    next.groupId = row.groupId;
+  }
+
+  if (typeof next.method !== "string" && typeof row.method === "string") {
+    next.method = row.method;
+  }
+
+  if (typeof next.path !== "string" && typeof row.path === "string") {
+    next.path = row.path;
+  }
+
+  if (typeof next.status !== "number") {
+    const statusNumber = toFiniteNumber(row.status);
+    if (statusNumber !== null) {
+      next.status = statusNumber;
+    }
+  }
+
+  if (typeof next.duration !== "number") {
+    const durationNumber = toFiniteNumber(row.duration);
+    if (durationNumber !== null) {
+      next.duration = durationNumber;
+    }
+  }
+
+  if (!Array.isArray(next.events)) {
+    const events = toTransportValue(row.events);
+    if (Array.isArray(events)) {
+      next.events = events;
+    }
+  }
+
+  return next;
 }
 
 function toRecordValue(value: unknown): Record<string, unknown> | null {
