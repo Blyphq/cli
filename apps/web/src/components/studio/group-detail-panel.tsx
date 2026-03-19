@@ -128,10 +128,11 @@ export function GroupDetailPanel({
             description="Bundled event summaries extracted from the grouped trace."
           />
           <CardContent className="space-y-2">
-            {structuredTimeline.map((event) => (
+            {structuredTimeline.map((event, index) => (
               <Collapsible
                 key={event.id}
                 className="border-border/60 bg-background/30 border"
+                defaultOpen={index === 0}
               >
                 <CollapsibleTrigger className="hover:bg-muted/40 flex w-full min-w-0 items-start justify-between gap-3 p-3 text-left">
                   <div className="min-w-0 space-y-2">
