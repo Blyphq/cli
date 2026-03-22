@@ -73,7 +73,7 @@ The available commands are:
 - **`blyp health`**
   Prints runtime details such as the current directory, runtime versions, detected workspace root, and Studio web app path.
 - **`blyp skills install [source-or-skill-name] [--force]`**
-  Installs a local skill folder, installs a bundled skill by name, or opens an interactive picker for bundled skills.
+  Installs a skill from `https://github.com/Blyphq/skills` by name, or opens an interactive picker for skills from that repo.
 - **`blyp db:init`**
   Walks through Blyp database logging setup, scaffolds schema, applies migrations, and writes `blyp.config.ts`.
 - **`blyp db:migrate`**
@@ -113,19 +113,13 @@ Studio uses project config files such as `blyp.config.ts` and project `.env` val
 
 ### Skills command
 
-Install a local skill directory:
+Install a skill by name from `Blyphq/skills`:
 
 ```bash
-bun run cli -- skills install ./skills/ai-sdk
+bun run cli -- skills install studio-debugger
 ```
 
-Install a bundled skill by name:
-
-```bash
-bun run cli -- skills install ai-sdk
-```
-
-Open the bundled skill picker:
+Open the remote skill picker:
 
 ```bash
 bun run cli -- skills install
@@ -140,7 +134,7 @@ Installed skills are copied into:
 If the destination already exists, re-run with `--force` to replace it:
 
 ```bash
-bun run cli -- skills install ai-sdk --force
+bun run cli -- skills install studio-debugger --force
 ```
 
 If you invoke the CLI from another project directly, you can run the source entrypoint:
@@ -148,6 +142,8 @@ If you invoke the CLI from another project directly, you can run the source entr
 ```bash
 bun /absolute/path/to/blyp-cli/packages/cli/src/index.ts skills install
 ```
+
+`blyp skills install` requires `git` and network access to GitHub because it fetches the latest `main` revision of `Blyphq/skills` at install time.
 
 ### Database commands
 

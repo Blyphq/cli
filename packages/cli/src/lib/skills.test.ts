@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -8,26 +9,29 @@ import { CliError } from "./errors.js";
 import {
   getSkillsInstallUsage,
   installSkillFromDirectory,
-  listBundledSkills,
+  listRemoteSkills,
   parseSkillsInstallArgs,
   resolveInstallSources,
+  resolveRemoteSkillRepoHead,
   resolveSkillInstallPaths,
   validateSkillSource,
 } from "./skills.js";
 
 const tempDirs: string[] = [];
-const originalSkillsDir = process.env.BLYP_CLI_SKILLS_DIR;
+const originalRepo = process.env.BLYP_CLI_SKILLS_REPO;
+const originalBranch = process.env.BLYP_CLI_SKILLS_BRANCH;
+const originalGitBin = process.env.BLYP_CLI_GIT_BIN;
 
 beforeEach(() => {
-  delete process.env.BLYP_CLI_SKILLS_DIR;
+  delete process.env.BLYP_CLI_SKILLS_REPO;
+  delete process.env.BLYP_CLI_SKILLS_BRANCH;
+  delete process.env.BLYP_CLI_GIT_BIN;
 });
 
 afterEach(async () => {
-  if (originalSkillsDir) {
-    process.env.BLYP_CLI_SKILLS_DIR = originalSkillsDir;
-  } else {
-    delete process.env.BLYP_CLI_SKILLS_DIR;
-  }
+  restoreEnv("BLYP_CLI_SKILLS_REPO", originalRepo);
+  restoreEnv("BLYP_CLI_SKILLS_BRANCH", originalBranch);
+  restoreEnv("BLYP_CLI_GIT_BIN", originalGitBin);
 
   await Promise.all(
     tempDirs.splice(0).map((directory) => rm(directory, { recursive: true, force: true })),
@@ -153,64 +157,98 @@ describe("skills installer", () => {
   });
 });
 
-describe("bundled skills", () => {
-  it("lists bundled skills from the configured skills directory", async () => {
-    const skillsDir = await createTempDir();
-    await createSkillSource(skillsDir, "ai-sdk", "Current APIs only");
-    await createSkillSource(skillsDir, "frontend-design", "Design systems");
-    process.env.BLYP_CLI_SKILLS_DIR = skillsDir;
+describe("remote skills", () => {
+  it("lists remote skills from the configured git repo", async () => {
+    const repoDir = await createRemoteSkillsRepo([
+      { directory: "studio-debugger", skillName: "blyp-studio-debugger", description: "Debug traces" },
+      { directory: "runtime-targeting", skillName: "blyp-runtime-targeting", description: "Runtime guides" },
+      { directory: "docs-only", includeSkillMarkdown: false },
+    ]);
 
-    const skills = await listBundledSkills();
+    process.env.BLYP_CLI_SKILLS_REPO = repoDir;
 
-    expect(skills.map((skill) => skill.name)).toEqual(["ai-sdk", "frontend-design"]);
-    expect(skills[0]?.description).toBe("Example skill");
+    const result = await listRemoteSkills();
+
+    try {
+      expect(result.shouldPrompt).toBe(true);
+      expect(result.skills.map((skill) => skill.name)).toEqual([
+        "runtime-targeting",
+        "studio-debugger",
+      ]);
+      expect(result.skills[0]?.description).toBe("Runtime guides");
+      expect(result.skills[0]?.commitSha).toMatch(/^[0-9a-f]{40}$/);
+    } finally {
+      await result.cleanup();
+    }
   });
 
-  it("resolves a local path before falling back to bundled skills", async () => {
-    const cwd = await createTempDir();
-    const localSkillDir = await createSkillSource(cwd, "ai-sdk");
-    const bundledDir = await createTempDir();
-    await createSkillSource(bundledDir, "ai-sdk");
-    process.env.BLYP_CLI_SKILLS_DIR = bundledDir;
+  it("resolves a named skill from the remote repo", async () => {
+    const repoDir = await createRemoteSkillsRepo([
+      { directory: "studio-debugger", skillName: "blyp-studio-debugger", description: "Debug traces" },
+      { directory: "trace-annotation", skillName: "blyp-trace-annotation", description: "Annotate traces" },
+    ]);
+    process.env.BLYP_CLI_SKILLS_REPO = repoDir;
 
-    const skills = await resolveInstallSources(cwd, "./ai-sdk");
+    const result = await resolveInstallSources("trace-annotation");
 
-    expect(skills.shouldPrompt).toBe(false);
-    expect(skills.skills).toHaveLength(1);
-    expect(skills.skills[0]?.sourceDir).toBe(localSkillDir);
+    try {
+      expect(result.shouldPrompt).toBe(false);
+      expect(result.skills).toHaveLength(1);
+      expect(result.skills[0]?.name).toBe("trace-annotation");
+      expect(result.skills[0]?.sourceDir).toContain(`${path.sep}trace-annotation`);
+    } finally {
+      await result.cleanup();
+    }
   });
 
-  it("falls back to bundled skill name lookup", async () => {
-    const cwd = await createTempDir();
-    const bundledDir = await createTempDir();
-    const bundledSkillDir = await createSkillSource(bundledDir, "ai-sdk");
-    process.env.BLYP_CLI_SKILLS_DIR = bundledDir;
+  it("rejects local path arguments", async () => {
+    const repoDir = await createRemoteSkillsRepo([
+      { directory: "studio-debugger", skillName: "blyp-studio-debugger", description: "Debug traces" },
+    ]);
+    process.env.BLYP_CLI_SKILLS_REPO = repoDir;
 
-    const skills = await resolveInstallSources(cwd, "ai-sdk");
-
-    expect(skills.shouldPrompt).toBe(false);
-    expect(skills.skills).toHaveLength(1);
-    expect(skills.skills[0]?.sourceDir).toBe(bundledSkillDir);
+    await expect(resolveInstallSources("./studio-debugger")).rejects.toThrowError(
+      new CliError(
+        'Local skill paths are no longer supported. Use a skill name from Blyphq/skills instead of "./studio-debugger".',
+      ),
+    );
   });
 
-  it("returns the bundled skill list when the provided source cannot be resolved", async () => {
-    const cwd = await createTempDir();
-    const bundledDir = await createTempDir();
-    await createSkillSource(bundledDir, "ai-sdk");
-    await createSkillSource(bundledDir, "frontend-design");
-    process.env.BLYP_CLI_SKILLS_DIR = bundledDir;
+  it("fails when the named remote skill does not exist", async () => {
+    const repoDir = await createRemoteSkillsRepo([
+      { directory: "studio-debugger", skillName: "blyp-studio-debugger", description: "Debug traces" },
+      { directory: "trace-annotation", skillName: "blyp-trace-annotation", description: "Annotate traces" },
+    ]);
+    process.env.BLYP_CLI_SKILLS_REPO = repoDir;
 
-    const skills = await resolveInstallSources(cwd, "./missing-skill");
+    await expect(resolveInstallSources("missing-skill")).rejects.toThrowError(
+      new CliError(
+        'Skill "missing-skill" was not found in Blyphq/skills. Available skills: studio-debugger, trace-annotation',
+      ),
+    );
+  });
 
-    expect(skills.shouldPrompt).toBe(true);
-    expect(skills.skills.map((skill) => skill.name)).toEqual(["ai-sdk", "frontend-design"]);
+  it("fails when the remote repo cannot be cloned", async () => {
+    process.env.BLYP_CLI_SKILLS_REPO = path.join(os.tmpdir(), "blyp-cli-missing-repo");
+
+    await expect(listRemoteSkills()).rejects.toThrowError(/Failed to reach .* latest skills revision/);
+  });
+
+  it("fails when git is not available", async () => {
+    process.env.BLYP_CLI_GIT_BIN = "git-does-not-exist";
+
+    await expect(resolveRemoteSkillRepoHead()).rejects.toThrowError(
+      new CliError(
+        'Git is required to install skills from Blyphq/skills, but "git-does-not-exist" was not found in PATH.',
+      ),
+    );
   });
 });
 
 describe("skills install argument parsing", () => {
   it("parses an optional source argument without force", () => {
-    expect(parseSkillsInstallArgs(["./ai-sdk"])).toEqual({
-      sourceArg: "./ai-sdk",
+    expect(parseSkillsInstallArgs(["studio-debugger"])).toEqual({
+      sourceArg: "studio-debugger",
       force: false,
     });
     expect(parseSkillsInstallArgs([])).toEqual({
@@ -220,30 +258,39 @@ describe("skills install argument parsing", () => {
   });
 
   it("parses --force before or after the source", () => {
-    expect(parseSkillsInstallArgs(["--force", "./ai-sdk"])).toEqual({
-      sourceArg: "./ai-sdk",
+    expect(parseSkillsInstallArgs(["--force", "studio-debugger"])).toEqual({
+      sourceArg: "studio-debugger",
       force: true,
     });
-    expect(parseSkillsInstallArgs(["./ai-sdk", "--force"])).toEqual({
-      sourceArg: "./ai-sdk",
+    expect(parseSkillsInstallArgs(["studio-debugger", "--force"])).toEqual({
+      sourceArg: "studio-debugger",
       force: true,
     });
   });
 
   it("fails on unknown flags", () => {
-    expect(() => parseSkillsInstallArgs(["./ai-sdk", "--unknown"])).toThrowError(
+    expect(() => parseSkillsInstallArgs(["studio-debugger", "--unknown"])).toThrowError(
       new CliError(`Unknown flag: --unknown\n${getSkillsInstallUsage()}`),
     );
   });
 
   it("fails on extra positional arguments", () => {
-    expect(() => parseSkillsInstallArgs(["./one", "./two"])).toThrowError(
+    expect(() => parseSkillsInstallArgs(["one", "two"])).toThrowError(
       new CliError(
         `Expected at most one source argument, but received multiple.\n${getSkillsInstallUsage()}`,
       ),
     );
   });
 });
+
+function restoreEnv(name: string, value: string | undefined) {
+  if (value === undefined) {
+    delete process.env[name];
+    return;
+  }
+
+  process.env[name] = value;
+}
 
 async function createTempDir(): Promise<string> {
   const directory = await mkdtemp(path.join(os.tmpdir(), "blyp-cli-skills-"));
@@ -268,4 +315,74 @@ async function createSkillSource(
   await writeFile(path.join(referencesDir, "common-errors.md"), referenceContent, "utf8");
 
   return sourceDir;
+}
+
+async function createRemoteSkillsRepo(
+  skills: Array<{
+    readonly directory: string;
+    readonly skillName?: string;
+    readonly description?: string;
+    readonly includeSkillMarkdown?: boolean;
+  }>,
+): Promise<string> {
+  const repoDir = await createTempDir();
+
+  await runGit(["init", "-b", "main"], repoDir);
+  await runGit(["config", "user.name", "blyp-cli-tests"], repoDir);
+  await runGit(["config", "user.email", "blyp-cli@example.com"], repoDir);
+
+  for (const skill of skills) {
+    const skillDir = path.join(repoDir, skill.directory);
+    await mkdir(path.join(skillDir, "references"), { recursive: true });
+    await writeFile(
+      path.join(skillDir, "references", "common-errors.md"),
+      `${skill.directory} reference`,
+      "utf8",
+    );
+
+    if (skill.includeSkillMarkdown !== false) {
+      const skillName = skill.skillName ?? skill.directory;
+      const description = skill.description ?? "Example skill";
+      await writeFile(
+        path.join(skillDir, "SKILL.md"),
+        `---\nname: ${skillName}\ndescription: >\n  ${description}\n---\n`,
+        "utf8",
+      );
+    }
+  }
+
+  await runGit(["add", "."], repoDir);
+  await runGit(["commit", "-m", "Initial skills"], repoDir);
+
+  return repoDir;
+}
+
+async function runGit(args: readonly string[], cwd: string): Promise<string> {
+  return await new Promise((resolve, reject) => {
+    const child = spawn("git", args, {
+      cwd,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
+    let stdout = "";
+    let stderr = "";
+
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk.toString();
+    });
+
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk.toString();
+    });
+
+    child.on("error", reject);
+    child.on("close", (code) => {
+      if (code === 0) {
+        resolve(stdout.trim());
+        return;
+      }
+
+      reject(new Error(stderr.trim() || stdout.trim() || `git ${args.join(" ")} failed`));
+    });
+  });
 }

@@ -18,8 +18,7 @@
   },
   "files": [
     "dist",
-    "studio",
-    "skills"
+    "studio"
   ],
   "exports": {
     ".": {
