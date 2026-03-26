@@ -29,6 +29,7 @@ import type {
   StudioFilters,
   StudioGroupingMode,
   StudioMeta,
+  StudioSectionId,
 } from "@/lib/studio";
 import {
   formatCalendarDate,
@@ -46,6 +47,7 @@ interface StudioToolbarProps {
   filters: StudioFilters;
   grouping: StudioGroupingMode;
   meta: StudioMeta | undefined;
+  section: StudioSectionId;
   onDraftProjectPathChange(value: string): void;
   onFilterChange(next: StudioFilters): void;
   onGroupingChange(value: StudioGroupingMode): void;
@@ -62,6 +64,7 @@ export function StudioToolbar({
   filters,
   grouping,
   meta,
+  section,
   onDraftProjectPathChange,
   onFilterChange,
   onGroupingChange,
@@ -70,6 +73,9 @@ export function StudioToolbar({
   onResetFilters,
 }: StudioToolbarProps) {
   const currentTarget = meta?.project.absolutePath || draftProjectPath;
+  const authMode = section === "auth";
+  const overviewMode = section === "overview";
+  const disableClassificationControls = authMode || overviewMode;
 
   return (
     <Card className="overflow-visible border-border/70 bg-card">
@@ -142,52 +148,60 @@ export function StudioToolbar({
             />
           </FilterBox>
           <FilterBox icon={<SlidersHorizontal className="size-3.5" />} label="Level">
-            <Select
-              value={filters.level || ALL_LEVELS_VALUE}
-              onValueChange={(value) =>
-                onFilterChange({
-                  ...filters,
-                  level: value === ALL_LEVELS_VALUE ? "" : String(value ?? ""),
-                })
-              }
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={ALL_LEVELS_VALUE}>All levels</SelectItem>
-                {facets?.levels.length
-                  ? facets.levels.map((level) => (
-                      <SelectItem key={level} value={level}>
-                        {level}
-                      </SelectItem>
-                    ))
-                  : null}
-              </SelectContent>
-            </Select>
+            {disableClassificationControls ? (
+              <Input value="Auth view controls classification" readOnly disabled />
+            ) : (
+              <Select
+                value={filters.level || ALL_LEVELS_VALUE}
+                onValueChange={(value) =>
+                  onFilterChange({
+                    ...filters,
+                    level: value === ALL_LEVELS_VALUE ? "" : String(value ?? ""),
+                  })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ALL_LEVELS_VALUE}>All levels</SelectItem>
+                  {facets?.levels.length
+                    ? facets.levels.map((level) => (
+                        <SelectItem key={level} value={level}>
+                          {level}
+                        </SelectItem>
+                      ))
+                    : null}
+                </SelectContent>
+              </Select>
+            )}
           </FilterBox>
           <FilterBox label="Type">
-            <Select
-              value={filters.type || ALL_TYPES_VALUE}
-              onValueChange={(value) =>
-                onFilterChange({
-                  ...filters,
-                  type: value === ALL_TYPES_VALUE ? "" : String(value ?? ""),
-                })
-              }
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={ALL_TYPES_VALUE}>All types</SelectItem>
-                {facets?.types.map((type) => (
-                  <SelectItem key={type} value={type}>
-                    {type}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {disableClassificationControls ? (
+              <Input value="Auth view uses domain event types" readOnly disabled />
+            ) : (
+              <Select
+                value={filters.type || ALL_TYPES_VALUE}
+                onValueChange={(value) =>
+                  onFilterChange({
+                    ...filters,
+                    type: value === ALL_TYPES_VALUE ? "" : String(value ?? ""),
+                  })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ALL_TYPES_VALUE}>All types</SelectItem>
+                  {facets?.types.map((type) => (
+                    <SelectItem key={type} value={type}>
+                      {type}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
           </FilterBox>
           <FilterBox label={meta?.logs.mode === "database" ? "Source" : "File"}>
             <Select
@@ -215,15 +229,19 @@ export function StudioToolbar({
             </Select>
           </FilterBox>
           <FilterBox icon={<LayoutPanelTop className="size-3.5" />} label="View">
-            <Select value={grouping} onValueChange={(value) => onGroupingChange(value as StudioGroupingMode)}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="grouped">Grouped</SelectItem>
-                <SelectItem value="flat">Flat</SelectItem>
-              </SelectContent>
-            </Select>
+            {disableClassificationControls ? (
+              <Input value="Auth timeline" readOnly disabled />
+            ) : (
+              <Select value={grouping} onValueChange={(value) => onGroupingChange(value as StudioGroupingMode)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="grouped">Grouped</SelectItem>
+                  <SelectItem value="flat">Flat</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
           </FilterBox>
           <FilterBox label="From">
             <DateFilterPicker

@@ -8,6 +8,10 @@ export type StudioConfig = RouterOutputs["studio"]["config"];
 export type StudioFiles = RouterOutputs["studio"]["files"];
 export type StudioFile = StudioFiles["files"][number];
 export type StudioLogsPage = RouterOutputs["studio"]["logs"];
+export type StudioAuthOverview = RouterOutputs["studio"]["auth"];
+export type StudioAuthEvent = StudioAuthOverview["timeline"][number];
+export type StudioAuthSuspiciousPattern = StudioAuthOverview["suspiciousPatterns"][number];
+export type StudioAuthUserSummary = StudioAuthOverview["users"][number];
 export type StudioRecord = StudioLogsPage["records"][number];
 export type StudioRecordSourceContext = RouterOutputs["studio"]["recordSource"];
 export type StudioLogEntry = StudioLogsPage["entries"][number];
@@ -17,6 +21,8 @@ export type StudioAssistantStatus = RouterOutputs["studio"]["assistantStatus"];
 export type StudioAssistantMessage = RouterOutputs["studio"]["assistantReply"];
 export type StudioAssistantReference = StudioAssistantMessage["references"][number];
 export type StudioGroupingMode = "grouped" | "flat";
+export type StudioDetectedSection = StudioMeta["sections"][number];
+export type StudioSectionId = StudioDetectedSection["id"] | "overview" | "all-logs";
 export type StudioChatStatus = "submitted" | "streaming" | "ready" | "error";
 export type StudioBadgeVariant =
   | "default"
@@ -44,6 +50,16 @@ export interface StudioFilters {
   fileId: string;
   from: string;
   to: string;
+}
+
+export interface StudioAuthUiState {
+  selectedUserId: string | null;
+  selectedPatternId: string | null;
+}
+
+export interface StudioSidebarState {
+  selectedSection: StudioSectionId;
+  visitedAtBySection: Record<string, string>;
 }
 
 export const LEVEL_OPTIONS = [
@@ -381,6 +397,48 @@ export function getStructuredEvents(record: StudioRecord): unknown[] {
   }
 
   return readStructuredEvents(raw);
+}
+
+export function getAuthEventKindLabel(kind: StudioAuthEvent["kind"]): string {
+  switch (kind) {
+    case "login":
+      return "Login";
+    case "session":
+      return "Session";
+    case "token":
+      return "Token";
+    case "permission":
+      return "Permission";
+    case "oauth":
+      return "OAuth";
+    default:
+      return "Auth";
+  }
+}
+
+export function getAuthOutcomeBadgeVariant(
+  outcome: StudioAuthEvent["outcome"],
+): StudioBadgeVariant {
+  switch (outcome) {
+    case "success":
+      return "default";
+    case "failure":
+      return "destructive";
+    default:
+      return "muted";
+  }
+}
+
+export function isOverviewSection(section: StudioSectionId): boolean {
+  return section === "overview";
+}
+
+export function isAllLogsSection(section: StudioSectionId): boolean {
+  return section === "all-logs";
+}
+
+export function isAuthSection(section: StudioSectionId): boolean {
+  return section === "auth";
 }
 
 function readStructuredEvents(value: Record<string, unknown>): unknown[] {

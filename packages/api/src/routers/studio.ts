@@ -7,6 +7,8 @@ import {
   describeStudioSelection,
   generateStudioChatTitle,
   getStudioAssistantStatus,
+  addStudioCustomSection,
+  getStudioAuth,
   getStudioConfig,
   getStudioFacets,
   getStudioFiles,
@@ -29,6 +31,19 @@ const studioLogsInput = z.object({
   from: z.string().optional(),
   to: z.string().optional(),
   grouping: z.enum(["flat", "grouped"]).optional(),
+  sectionId: z.string().optional(),
+});
+
+const studioAuthInput = z.object({
+  projectPath: z.string().optional(),
+  fileId: z.string().optional(),
+  from: z.string().optional(),
+  to: z.string().optional(),
+  search: z.string().optional(),
+  offset: z.number().int().min(0).optional(),
+  limit: z.number().int().positive().max(500).optional(),
+  userId: z.string().optional(),
+  sectionId: z.string().optional(),
 });
 
 const assistantInput = z.object({
@@ -64,6 +79,9 @@ export const studioRouter = router({
   logs: publicProcedure
     .input(studioLogsInput.optional())
     .query(({ input }) => getStudioLogs(input ?? {})),
+  auth: publicProcedure
+    .input(studioAuthInput.optional())
+    .query(({ input }) => getStudioAuth(input ?? {})),
   fileLogs: publicProcedure
     .input(
       z.object({
@@ -90,10 +108,25 @@ export const studioRouter = router({
           fileId: z.string().optional(),
           from: z.string().optional(),
           to: z.string().optional(),
+          sectionId: z.string().optional(),
         })
         .optional(),
     )
     .query(({ input }) => getStudioFacets(input ?? {})),
+  addCustomSection: publicProcedure
+    .input(
+      z.object({
+        projectPath: z.string().optional(),
+        name: z.string().min(1),
+        icon: z.string().min(1),
+        match: z.object({
+          fields: z.array(z.string()).optional(),
+          routes: z.array(z.string()).optional(),
+          messages: z.array(z.string()).optional(),
+        }),
+      }),
+    )
+    .mutation(({ input }) => addStudioCustomSection(input)),
   group: publicProcedure
     .input(
       z.object({
