@@ -237,6 +237,12 @@ export function getAssistantStatusLabel(status: StudioAssistantStatus): string {
   }
 }
 
+export function shouldShowProjectContextAdvisory(
+  status: StudioAssistantStatus | undefined,
+): boolean {
+  return Boolean(status?.enabled && !status.projectContext.claudeMdPresent);
+}
+
 export function getMessageText(message: StudioChatMessage): string {
   return message.parts
     .filter((part) => part.type === "text")

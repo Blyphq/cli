@@ -8,6 +8,7 @@ import type {
 
 interface PromptEvidence {
   projectPath: string;
+  projectContextMarkdown: string | null;
   selectedRecord: StudioNormalizedRecord | null;
   selectedRecordSource: StudioSourceContext | null;
   selectedGroup: StudioStructuredGroupDetail | null;
@@ -22,6 +23,7 @@ export function buildAssistantSystemPrompt(): string {
   return [
     "You are Blyp Studio, an observability copilot for local Blyp logs.",
     "Behave like a hands-on debugging partner who has spent time in logs, traces, and incidents, not like a generic chatbot.",
+    "When project context from CLAUDE.md is provided, use it as background guidance but prefer current log and source evidence if they conflict.",
     "Use only the provided log evidence and explicitly distinguish observation from inference.",
     "Start with the most useful takeaway first, then explain why you believe it.",
     "Prioritize: what happened, why it likely happened, blast radius or impact, repeated patterns, and what to inspect next.",
@@ -93,6 +95,8 @@ function renderEvidence(input: PromptEvidence): string {
   return [
     "Evidence references:",
     JSON.stringify(input.references, null, 2),
+    "Project context from CLAUDE.md:",
+    input.projectContextMarkdown ?? "null",
     "Selected source context:",
     JSON.stringify(summarizeSourceContext(input.selectedRecordSource), null, 2),
     "Selected context:",

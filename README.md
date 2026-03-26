@@ -72,8 +72,8 @@ The available commands are:
   Starts or reuses the local Studio app for a target project. If `targetPath` is omitted, the current directory is used.
 - **`blyp health`**
   Prints runtime details such as the current directory, runtime versions, detected workspace root, and Studio web app path.
-- **`blyp skills install [source-or-skill-name] [--force]`**
-  Installs a skill from `https://github.com/Blyphq/skills` by name, or opens an interactive picker for skills from that repo.
+- **`blyp skills install [source-or-skill-name|claude] [--force]`**
+  Installs a skill from `https://github.com/Blyphq/skills` by name, opens an interactive picker for skills from that repo, or generates a project `CLAUDE.md` with the reserved `claude` target.
 - **`blyp db:init`**
   Walks through Blyp database logging setup, scaffolds schema, applies migrations, and writes `blyp.config.ts`.
 - **`blyp db:migrate`**
@@ -125,7 +125,23 @@ Open the remote skill picker:
 bun run cli -- skills install
 ```
 
-Installed skills are copied into:
+Generate a project `CLAUDE.md`:
+
+```bash
+bun run cli -- skills install claude
+```
+
+`blyp skills install claude` can use these existing API keys from your shell env or project `.env`:
+
+```text
+OPENROUTER_API_KEY
+OPENAI_API_KEY
+ANTHROPIC_API_KEY
+```
+
+If more than one is available, the CLI asks which provider to use. If none are available, it prompts for a provider and a session-only API key, then uses AI plus repo context to draft the narrative sections of `CLAUDE.md`.
+
+Installed remote skills are copied into:
 
 ```text
 ./.agents/skills/<skill-name>
@@ -143,7 +159,7 @@ If you invoke the CLI from another project directly, you can run the source entr
 bun /absolute/path/to/blyp-cli/packages/cli/src/index.ts skills install
 ```
 
-`blyp skills install` requires `git` and network access to GitHub because it fetches the latest `main` revision of `Blyphq/skills` at install time.
+`blyp skills install` requires `git` and network access to GitHub when you are installing remote skills because it fetches the latest `main` revision of `Blyphq/skills` at install time. `blyp skills install claude` runs in the target project and uses network access only for the selected AI provider.
 
 ### Database commands
 

@@ -28,6 +28,10 @@ export function getAssistantStatus(ai: StudioAiSummary): StudioAssistantStatus {
       apiKeySource: ai.apiKeySource,
       modelSource: ai.modelSource,
       reason: "missing_api_key",
+      projectContext: {
+        claudeMdPresent: false,
+        claudeMdPath: null,
+      },
     };
   }
 
@@ -40,6 +44,10 @@ export function getAssistantStatus(ai: StudioAiSummary): StudioAssistantStatus {
       apiKeySource: ai.apiKeySource,
       modelSource: ai.modelSource,
       reason: "missing_model",
+      projectContext: {
+        claudeMdPresent: false,
+        claudeMdPath: null,
+      },
     };
   }
 
@@ -51,6 +59,10 @@ export function getAssistantStatus(ai: StudioAiSummary): StudioAssistantStatus {
     apiKeySource: ai.apiKeySource,
     modelSource: ai.modelSource,
     reason: null,
+    projectContext: {
+      claudeMdPresent: false,
+      claudeMdPath: null,
+    },
   };
 }
 

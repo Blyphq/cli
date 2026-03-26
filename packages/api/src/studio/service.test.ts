@@ -630,6 +630,58 @@ describe("studio service", () => {
     expect(streamedPrompt).toContain("src/routes/stream.ts");
     expect(streamedPrompt).toContain("throw new Error('stream failure');");
   });
+
+  it("reports CLAUDE.md presence in assistant status", async () => {
+    const projectDir = await createProject();
+    await writeFile(path.join(projectDir, "CLAUDE.md"), "# Context\n\nProject details.\n");
+
+    process.env.OPENROUTER_API_KEY = "test-key";
+    process.env.OPENROUTER_MODEL = "openai/gpt-5.4";
+
+    const status = await getStudioAssistantStatus(projectDir);
+
+    expect(status.enabled).toBe(true);
+    expect(status.projectContext.claudeMdPresent).toBe(true);
+    expect(status.projectContext.claudeMdPath).toBe(path.join(projectDir, "CLAUDE.md"));
+  });
+
+  it("includes CLAUDE.md context in assistant prompts when present", async () => {
+    const projectDir = await createProject();
+    const logDir = path.join(projectDir, "logs");
+
+    await mkdir(logDir, { recursive: true });
+    await writeFile(
+      path.join(projectDir, "CLAUDE.md"),
+      [
+        "# Project Context for Blyp Debugger",
+        "",
+        "<!-- blyp:claude-md:start -->",
+        "## What this project does",
+        "Checkout service.",
+        "<!-- blyp:claude-md:end -->",
+      ].join("\n"),
+    );
+    await writeFile(path.join(logDir, "log.ndjson"), createLogLine({ message: "payment failed" }));
+
+    process.env.OPENROUTER_API_KEY = "test-key";
+    process.env.OPENROUTER_MODEL = "openai/gpt-5.4";
+
+    let capturedPrompt = "";
+    __setGenerateTextForTests(async ({ prompt }) => {
+      capturedPrompt = prompt;
+      return { text: "ok" };
+    });
+
+    await replyWithStudioAssistant({
+      projectPath: projectDir,
+      history: [{ role: "user", content: "What happened?" }],
+      filters: {},
+    });
+
+    expect(capturedPrompt).toContain("Project context from CLAUDE.md:");
+    expect(capturedPrompt).toContain("## What this project does");
+    expect(capturedPrompt).toContain("Checkout service.");
+  });
 });
 
 describe("studio DB mode", () => {

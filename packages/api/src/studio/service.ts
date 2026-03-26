@@ -1,3 +1,5 @@
+import path from "node:path";
+
 import {
   replyWithAssistant,
   describeSelectionWithAssistant,
@@ -13,6 +15,7 @@ import {
 import { getLogFacets } from "./facets";
 import { buildGroupDetails } from "./grouping";
 import { discoverLogFiles } from "./logs";
+import { loadProjectClaudeMd } from "./project-context";
 import { resolveStudioProject } from "./project";
 import { loadNormalizedRecords, queryLogs } from "./query";
 import { createUnavailableSourceContext, resolveRecordSourceContext } from "./source";
@@ -187,8 +190,16 @@ export async function getStudioRecordSource(input: {
 export async function getStudioAssistantStatus(projectPath?: string): Promise<StudioAssistantStatus> {
   const project = await resolveStudioProject(projectPath);
   const config = await discoverStudioConfig(project);
+  const status = getAssistantStatus(config.resolved.ai);
+  const claudeMd = await loadProjectClaudeMd(project.absolutePath);
 
-  return getAssistantStatus(config.resolved.ai);
+  return {
+    ...status,
+    projectContext: {
+      claudeMdPresent: claudeMd.exists,
+      claudeMdPath: claudeMd.exists ? path.join(project.absolutePath, "CLAUDE.md") : null,
+    },
+  };
 }
 
 export async function generateStudioChatTitle(input: {
@@ -222,6 +233,7 @@ export async function replyWithStudioAssistant(
   const ai = resolveStudioAiCredentials(config, project.absolutePath);
 
   let preloadedRecords: StudioNormalizedRecord[] | undefined;
+  const claudeMd = await loadProjectClaudeMd(project.absolutePath);
 
   if (files.mode === "database" && project.valid) {
     const loaded = await loadProjectRecords(project.absolutePath, config, files);
@@ -231,6 +243,7 @@ export async function replyWithStudioAssistant(
   return replyWithAssistant({
     ...input,
     projectPath: project.absolutePath,
+    projectContextMarkdown: claudeMd.managedContent ?? claudeMd.content,
     ai,
     files: files.files,
     preloadedRecords,
@@ -248,6 +261,7 @@ export async function describeStudioSelection(
   const ai = resolveStudioAiCredentials(config, project.absolutePath);
 
   let preloadedRecords: StudioNormalizedRecord[] | undefined;
+  const claudeMd = await loadProjectClaudeMd(project.absolutePath);
 
   if (files.mode === "database" && project.valid) {
     const loaded = await loadProjectRecords(project.absolutePath, config, files);
@@ -257,6 +271,7 @@ export async function describeStudioSelection(
   return describeSelectionWithAssistant({
     ...input,
     projectPath: project.absolutePath,
+    projectContextMarkdown: claudeMd.managedContent ?? claudeMd.content,
     ai,
     files: files.files,
     preloadedRecords,
@@ -280,6 +295,7 @@ export async function streamStudioAssistant(input: {
   const ai = resolveStudioAiCredentials(config, project.absolutePath);
 
   let preloadedRecords: StudioNormalizedRecord[] | undefined;
+  const claudeMd = await loadProjectClaudeMd(project.absolutePath);
 
   if (files.mode === "database" && project.valid) {
     const loaded = await loadProjectRecords(project.absolutePath, config, files);
@@ -288,6 +304,7 @@ export async function streamStudioAssistant(input: {
 
   return streamAssistant({
     projectPath: project.absolutePath,
+    projectContextMarkdown: claudeMd.managedContent ?? claudeMd.content,
     files: files.files,
     filters: input.filters,
     selectedRecordId: input.selectedRecordId,

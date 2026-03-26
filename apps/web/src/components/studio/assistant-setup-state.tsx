@@ -33,6 +33,12 @@ export function AssistantSetupState({ status }: AssistantSetupStateProps) {
           Studio AI needs an <code>OPENROUTER_API_KEY</code> and a selected model. The
           CLI onboarding can write these into the target project for you.
         </p>
+        {!status.projectContext.claudeMdPresent ? (
+          <p>
+            Add a <code>CLAUDE.md</code> for better project context with{" "}
+            <code>blyp skills install claude</code>.
+          </p>
+        ) : null}
         <p>Studio log browsing and filtering will continue to work without AI.</p>
       </CardContent>
     </Card>

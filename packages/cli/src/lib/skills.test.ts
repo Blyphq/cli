@@ -251,6 +251,10 @@ describe("skills install argument parsing", () => {
       sourceArg: "studio-debugger",
       force: false,
     });
+    expect(parseSkillsInstallArgs(["claude"])).toEqual({
+      sourceArg: "claude",
+      force: false,
+    });
     expect(parseSkillsInstallArgs([])).toEqual({
       sourceArg: null,
       force: false,

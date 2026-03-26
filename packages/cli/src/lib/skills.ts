@@ -55,7 +55,7 @@ interface RemoteRepoCheckout {
 }
 
 export function getSkillsInstallUsage(): string {
-  return "Usage: blyp skills install [source-or-skill-name] [--force]";
+  return "Usage: blyp skills install [source-or-skill-name|claude] [--force]";
 }
 
 export function parseSkillsInstallArgs(argv: readonly string[]): SkillsInstallArgs {

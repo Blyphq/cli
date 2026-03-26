@@ -43,12 +43,14 @@ let testStreamText: TestStreamTextFn | null = null;
 interface RunAssistantInput extends StudioAssistantReplyInput {
   files: StudioLogDiscovery["files"];
   projectPath: string;
+  projectContextMarkdown: string | null;
   ai: AiConfigInput;
   preloadedRecords?: StudioNormalizedRecord[];
 }
 
 export interface StreamAssistantInput {
   projectPath: string;
+  projectContextMarkdown: string | null;
   files: StudioLogDiscovery["files"];
   filters: StudioAssistantReplyInput["filters"];
   selectedRecordId?: string;
@@ -94,6 +96,7 @@ export async function replyWithAssistant(
     system: buildAssistantSystemPrompt(),
     prompt: buildAssistantReplyPrompt({
       projectPath: input.projectPath,
+      projectContextMarkdown: input.projectContextMarkdown,
       selectedRecord: context.selectedRecord,
       selectedRecordSource: context.selectedRecordSource,
       selectedGroup: context.selectedGroup,
@@ -133,6 +136,7 @@ export async function describeSelectionWithAssistant(
     system: buildAssistantSystemPrompt(),
     prompt: buildDescribeSelectionPrompt({
       projectPath: input.projectPath,
+      projectContextMarkdown: input.projectContextMarkdown,
       selectedRecord: context.selectedRecord,
       selectedRecordSource: context.selectedRecordSource,
       selectedGroup: context.selectedGroup,
@@ -176,6 +180,7 @@ export async function streamAssistant(
     input.mode === "describe-selection"
       ? buildDescribeSelectionPrompt({
           projectPath: input.projectPath,
+          projectContextMarkdown: input.projectContextMarkdown,
           selectedRecord: context.selectedRecord,
           selectedRecordSource: context.selectedRecordSource,
           selectedGroup: context.selectedGroup,
@@ -187,6 +192,7 @@ export async function streamAssistant(
         })
       : buildAssistantReplyPrompt({
           projectPath: input.projectPath,
+          projectContextMarkdown: input.projectContextMarkdown,
           selectedRecord: context.selectedRecord,
           selectedRecordSource: context.selectedRecordSource,
           selectedGroup: context.selectedGroup,

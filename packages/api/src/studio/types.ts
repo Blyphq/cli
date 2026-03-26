@@ -303,6 +303,10 @@ export interface StudioAssistantStatus {
   apiKeySource: StudioAiSummary["apiKeySource"];
   modelSource: StudioAiSummary["modelSource"];
   reason: "missing_api_key" | "missing_model" | null;
+  projectContext: {
+    claudeMdPresent: boolean;
+    claudeMdPath: string | null;
+  };
 }
 
 export interface StudioAssistantMessage {

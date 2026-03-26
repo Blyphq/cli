@@ -1,6 +1,7 @@
 import { cancel, isCancel, multiselect, spinner } from "@clack/prompts";
 
 import type { CommandContext, CommandDefinition } from "../types.js";
+import { generateClaudeMd } from "../lib/claude-md.js";
 import { CliError } from "../lib/errors.js";
 import {
   getSkillsInstallUsage,
@@ -16,13 +17,15 @@ function buildSkillsHelpText(): string {
     "",
     getSkillsInstallUsage(),
     "If no source is provided, skills from Blyphq/skills are listed for selection.",
+    'Use "blyp skills install claude" to generate a project CLAUDE.md file.',
+    "The CLAUDE.md generator can use OPENROUTER_API_KEY, OPENAI_API_KEY, or ANTHROPIC_API_KEY.",
   ].join("\n");
 }
 
 export const skillsCommand: CommandDefinition = {
   name: "skills",
   description: "Install and manage Blyp skills.",
-  usage: "blyp skills install [source-or-skill-name] [--force]",
+  usage: "blyp skills install [source-or-skill-name|claude] [--force]",
   async run(context: CommandContext): Promise<void> {
     const [subcommand, ...subcommandArgs] = context.argv;
 
@@ -36,6 +39,20 @@ export const skillsCommand: CommandDefinition = {
     }
 
     const installArgs = parseSkillsInstallArgs(subcommandArgs);
+
+    if (installArgs.sourceArg === "claude") {
+      const result = await generateClaudeMd({
+        cwd: context.cwd,
+        force: installArgs.force,
+      });
+
+      showSuccess(
+        result.created ? "Created CLAUDE.md." : "Updated CLAUDE.md.",
+      );
+      showNote("Destination", result.path);
+      return;
+    }
+
     const installSources = await resolveInstallSources(installArgs.sourceArg);
 
     try {

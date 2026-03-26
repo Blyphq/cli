@@ -7,6 +7,7 @@ import { AssistantMessage } from "@/components/studio/assistant-message";
 import { AssistantShimmer } from "@/components/studio/assistant-shimmer";
 import { AssistantSetupState } from "@/components/studio/assistant-setup-state";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   Select,
   SelectContent,
@@ -20,7 +21,7 @@ import type {
   StudioChatMessage,
   StudioChatStatus,
 } from "@/lib/studio";
-import { isMessageStreaming } from "@/lib/studio";
+import { isMessageStreaming, shouldShowProjectContextAdvisory } from "@/lib/studio";
 import { cn } from "@/lib/utils";
 
 import { EmptyState } from "./empty-state";
@@ -105,6 +106,17 @@ export function AssistantPanel({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="space-y-4 border-b border-border/60 px-4 py-4">
+        {shouldShowProjectContextAdvisory(status) ? (
+          <Card size="sm" className="border-dashed">
+            <CardContent className="space-y-1 px-4 py-3 text-xs text-muted-foreground">
+              <div className="font-medium text-foreground">Add project context</div>
+              <p>
+                Add a <code>CLAUDE.md</code> to improve debugging context. Run{" "}
+                <code>blyp skills install claude</code> in this project.
+              </p>
+            </CardContent>
+          </Card>
+        ) : null}
         <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_12rem]">
           <div className="min-w-0 space-y-1">
             <div
