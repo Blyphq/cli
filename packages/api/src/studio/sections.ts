@@ -217,6 +217,11 @@ function buildDomainMatch(
   const status = record.http?.statusCode ?? getNumber(record, ["statusCode", "status"]);
   const statusHit = typeof status === "number" && input.statuses.includes(status);
   const messageHit = hasMessagePattern(record, input.messages);
+  const corroborated = fieldHit || routeHit || messageHit;
+
+  if (statusHit && !corroborated) {
+    return null;
+  }
 
   const score = (fieldHit ? 5 : 0) + (routeHit ? 4 : 0) + (statusHit ? 3 : 0) + (messageHit ? 2 : 0);
   return score > 0 ? { score, unreadError: isErrorRecord(record) } : null;

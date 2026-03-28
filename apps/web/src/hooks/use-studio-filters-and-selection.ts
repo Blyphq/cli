@@ -89,7 +89,7 @@ function readSidebarState(projectPath: string): StudioSidebarState {
     if (!raw) {
       return { selectedSection: "overview", visitedAtBySection: {} };
     }
-    return JSON.parse(raw) as StudioSidebarState;
+    return parseSidebarState(JSON.parse(raw));
   } catch {
     return { selectedSection: "overview", visitedAtBySection: {} };
   }
@@ -101,6 +101,31 @@ function writeSidebarState(projectPath: string, value: StudioSidebarState) {
   }
 
   window.localStorage.setItem(getSidebarStorageKey(projectPath), JSON.stringify(value));
+}
+
+function parseSidebarState(value: unknown): StudioSidebarState {
+  if (
+    value &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    typeof (value as { selectedSection?: unknown }).selectedSection === "string" &&
+    (value as { visitedAtBySection?: unknown }).visitedAtBySection &&
+    typeof (value as { visitedAtBySection: unknown }).visitedAtBySection === "object" &&
+    !Array.isArray((value as { visitedAtBySection: unknown }).visitedAtBySection)
+  ) {
+    const visitedAtBySection = Object.fromEntries(
+      Object.entries(
+        (value as { visitedAtBySection: Record<string, unknown> }).visitedAtBySection,
+      ).filter((entry): entry is [string, string] => typeof entry[1] === "string"),
+    );
+
+    return {
+      selectedSection: (value as { selectedSection: StudioSidebarState["selectedSection"] }).selectedSection,
+      visitedAtBySection,
+    };
+  }
+
+  return { selectedSection: "overview", visitedAtBySection: {} };
 }
 
 export function useSyncSelectionFromEntries(

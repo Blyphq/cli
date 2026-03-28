@@ -63,7 +63,9 @@ export function analyzeAuthRecords(
   const scopedEvents = input.userId
     ? events.filter((event) => event.userId === input.userId)
     : events;
-  const suspiciousPatterns = detectSuspiciousPatterns(events);
+  const suspiciousPatterns = detectSuspiciousPatterns(events).filter((pattern) =>
+    input.userId ? pattern.affectedUserId === input.userId : true,
+  );
   const stats = buildStats(scopedEvents, suspiciousPatterns);
   const users = buildUserSummaries(scopedEvents);
   const offset = Math.max(0, input.offset ?? 0);
@@ -73,9 +75,7 @@ export function analyzeAuthRecords(
     stats,
     timeline: scopedEvents.slice(offset, offset + limit),
     totalTimelineEvents: scopedEvents.length,
-    suspiciousPatterns: suspiciousPatterns.filter((pattern) =>
-      input.userId ? pattern.affectedUserId === input.userId : true,
-    ),
+    suspiciousPatterns,
     users,
   };
 }
@@ -678,7 +678,19 @@ function maxTimestamp(left: string | null, right: string | null): string | null 
   if (!right) {
     return left;
   }
-  return Date.parse(left) >= Date.parse(right) ? left : right;
+  const leftTime = Date.parse(left);
+  const rightTime = Date.parse(right);
+
+  if (Number.isFinite(leftTime) && Number.isFinite(rightTime)) {
+    return leftTime >= rightTime ? left : right;
+  }
+  if (Number.isFinite(leftTime)) {
+    return left;
+  }
+  if (Number.isFinite(rightTime)) {
+    return right;
+  }
+  return left;
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {

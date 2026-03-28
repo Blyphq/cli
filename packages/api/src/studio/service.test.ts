@@ -617,6 +617,89 @@ describe("studio service", () => {
     ]);
   });
 
+  it("does not classify bare 401 records as auth without corroborating signals", async () => {
+    const projectDir = await createProject();
+    const logDir = path.join(projectDir, "logs");
+
+    await mkdir(logDir, { recursive: true });
+    await writeFile(
+      path.join(logDir, "log.ndjson"),
+      createLogLine({
+        timestamp: "2026-03-13T11:05:00.000Z",
+        level: "warn",
+        message: "upstream returned 401",
+        type: "http_request",
+        path: "/api/data",
+        statusCode: 401,
+      }),
+    );
+
+    const auth = await getStudioAuth({ projectPath: projectDir, limit: 10 });
+    expect(auth.totalTimelineEvents).toBe(0);
+  });
+
+  it("scopes suspicious activity counts to the selected user", async () => {
+    const projectDir = await createProject();
+    const logDir = path.join(projectDir, "logs");
+
+    await mkdir(logDir, { recursive: true });
+    await writeFile(
+      path.join(logDir, "log.ndjson"),
+      [
+        createLogLine({
+          timestamp: "2026-03-13T10:00:00.000Z",
+          level: "warn",
+          message: "login failed",
+          type: "auth_login",
+          path: "/auth/login",
+          statusCode: 401,
+          user: { id: "user-a" },
+          ip: "10.0.0.9",
+        }),
+        createLogLine({
+          timestamp: "2026-03-13T10:02:00.000Z",
+          level: "warn",
+          message: "login failed",
+          type: "auth_login",
+          path: "/auth/login",
+          statusCode: 401,
+          user: { id: "user-a" },
+          ip: "10.0.0.9",
+        }),
+        createLogLine({
+          timestamp: "2026-03-13T10:03:00.000Z",
+          level: "warn",
+          message: "login failed",
+          type: "auth_login",
+          path: "/auth/login",
+          statusCode: 401,
+          user: { id: "user-a" },
+          ip: "10.0.0.9",
+        }),
+        createLogLine({
+          timestamp: "2026-03-13T10:04:00.000Z",
+          level: "info",
+          message: "login succeeded",
+          type: "auth_login",
+          path: "/auth/login",
+          statusCode: 200,
+          user: { id: "user-b" },
+          ip: "10.0.0.10",
+        }),
+      ].join(""),
+    );
+
+    const auth = await getStudioAuth({
+      projectPath: projectDir,
+      userId: "user-b",
+      limit: 10,
+    });
+
+    expect(auth.stats.suspiciousActivityCount).toBe(0);
+    expect(auth.suspiciousPatterns).toEqual([]);
+    expect(auth.timeline.every((event) => event.userId === "user-b")).toBe(true);
+  });
+
   it("persists custom sections to blyp config and detects them", async () => {
     const projectDir = await createProject();
     const logDir = path.join(projectDir, "logs");

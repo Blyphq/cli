@@ -101,6 +101,10 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
   ]);
 
   useEffect(() => {
+    if (!studioData.metaQuery.isSuccess) {
+      return;
+    }
+
     const validSections = new Set([
       "overview",
       "all-logs",
@@ -109,7 +113,7 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
     if (!validSections.has(section)) {
       setSection("overview");
     }
-  }, [section, setSection, studioData.metaQuery.data?.sections]);
+  }, [section, setSection, studioData.metaQuery.isSuccess, studioData.metaQuery.data?.sections]);
 
   const assistant = useAssistantChat({
     projectPath,

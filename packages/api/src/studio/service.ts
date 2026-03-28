@@ -22,7 +22,7 @@ import { buildGroupDetails } from "./grouping";
 import { discoverLogFiles } from "./logs";
 import { loadProjectClaudeMd } from "./project-context";
 import { resolveStudioProject } from "./project";
-import { loadNormalizedRecords, queryLogs } from "./query";
+import { filterRecords, loadNormalizedRecords, queryLogs } from "./query";
 import { buildDetectedSections } from "./sections";
 import { createUnavailableSourceContext, resolveRecordSourceContext } from "./source";
 
@@ -172,11 +172,19 @@ export async function getStudioAuth(input: StudioAuthQueryInput): Promise<Studio
     to: input.to,
     search: input.search,
   });
-  const filteredByFile = input.fileId
-    ? loaded.records.filter((record) => record.fileId === input.fileId)
-    : loaded.records;
+  const filtered = filterRecords(
+    loaded.records,
+    {
+      fileId: input.fileId,
+      from: input.from,
+      to: input.to,
+      search: input.search,
+      sectionId: input.sectionId,
+    },
+    config.resolved.studio.sections,
+  );
 
-  return analyzeAuthRecords(filteredByFile, input);
+  return analyzeAuthRecords(filtered, input);
 }
 
 export async function addStudioCustomSection(input: {
