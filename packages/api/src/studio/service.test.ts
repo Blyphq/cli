@@ -798,6 +798,51 @@ describe("studio service", () => {
     expect(written).toContain("messages: [\"kyc\"]");
   });
 
+  it("rewrites studio.sections instead of an unrelated earlier sections array", async () => {
+    const projectDir = await createProject();
+    const configPath = path.join(projectDir, "blyp.config.ts");
+
+    await writeFile(
+      configPath,
+      [
+        "export default {",
+        "  docs: {",
+        "    sections: ['intro', 'advanced'],",
+        "  },",
+        "  studio: {",
+        "    sections: [",
+        "      {",
+        "        name: 'KYC',",
+        "        icon: '🪪',",
+        "        match: {",
+        "          fields: ['kyc.old'],",
+        "          routes: ['/kyc/old'],",
+        "          messages: ['legacy'],",
+        "        },",
+        "      },",
+        "    ],",
+        "  },",
+        "};",
+      ].join("\n"),
+    );
+
+    await addStudioCustomSection({
+      projectPath: projectDir,
+      name: "KYC",
+      icon: "🪪",
+      match: {
+        fields: ["kyc.*"],
+        routes: ["/kyc/*"],
+        messages: ["kyc"],
+      },
+    });
+
+    const written = await readFile(configPath, "utf8");
+    expect(written).toContain("sections: ['intro', 'advanced']");
+    expect(written).toContain("fields: [\"kyc.*\"]");
+    expect(written).not.toContain("fields: ['intro', 'advanced']");
+  });
+
   it("returns an empty auth overview for invalid projects", async () => {
     const missingProject = path.join(process.cwd(), "missing-project-for-auth");
 

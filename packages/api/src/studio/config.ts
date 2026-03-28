@@ -579,7 +579,25 @@ function serializeSectionsForJs(sections: StudioCustomSectionDefinition[]): stri
 }
 
 function replaceStudioSectionsArray(source: string, sectionsSnippet: string): string {
-  const sectionsKey = source.search(/sections\s*:/m);
+  const studioKey = source.search(/studio\s*:/m);
+  if (studioKey < 0) {
+    throw new Error("Studio config rewrite could not find studio.");
+  }
+
+  const studioObjectStart = source.indexOf("{", studioKey);
+  if (studioObjectStart < 0) {
+    throw new Error("Studio config rewrite could not find studio object.");
+  }
+
+  const studioObjectEnd = findMatchingBracket(source, studioObjectStart, "{", "}");
+  if (studioObjectEnd < 0) {
+    throw new Error("Studio config rewrite could not find the end of studio.");
+  }
+
+  const studioSource = source.slice(studioObjectStart, studioObjectEnd + 1);
+  const localSectionsKey = studioSource.search(/sections\s*:/m);
+  const sectionsKey =
+    localSectionsKey < 0 ? -1 : studioObjectStart + localSectionsKey;
   if (sectionsKey < 0) {
     throw new Error("Studio config rewrite could not find studio.sections.");
   }
