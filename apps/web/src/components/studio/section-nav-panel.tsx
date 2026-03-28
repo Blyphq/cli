@@ -42,17 +42,25 @@ export function SectionNavPanel({
   const [messages, setMessages] = useState("");
   const trpc = useTRPC();
   const queryClient = useQueryClient();
+  const resetForm = () => {
+    setName("");
+    setIcon("✨");
+    setFields("");
+    setRoutes("");
+    setMessages("");
+  };
+  const handleDialogOpenChange = (nextOpen: boolean) => {
+    setDialogOpen(nextOpen);
+    if (!nextOpen) {
+      resetForm();
+    }
+  };
 
   const addSection = useMutation({
     ...trpc.studio.addCustomSection.mutationOptions({
       onSuccess: async () => {
         await queryClient.invalidateQueries();
-        setDialogOpen(false);
-        setName("");
-        setIcon("✨");
-        setFields("");
-        setRoutes("");
-        setMessages("");
+        handleDialogOpenChange(false);
       },
     }),
   });
@@ -129,7 +137,7 @@ export function SectionNavPanel({
           </Button>
         </CardContent>
       </Card>
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <Dialog open={dialogOpen} onOpenChange={handleDialogOpenChange}>
         <DialogContent className="max-w-xl p-0">
           <div className="border-b border-border/60 px-4 py-4">
             <DialogTitle>Add custom section</DialogTitle>
@@ -157,7 +165,7 @@ export function SectionNavPanel({
                     },
                   })
                 }
-                disabled={!name.trim()}
+                disabled={!name.trim() || addSection.isPending}
               >
                 Save section
               </Button>

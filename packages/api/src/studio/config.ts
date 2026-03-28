@@ -539,41 +539,115 @@ export async function saveStudioCustomSection(input: {
   }
 
   const raw = discovered.rawContent?.trim() || "export default {}";
-  const sectionSnippet = serializeSectionForJs(nextSection);
+  const sectionsSnippet = serializeSectionsForJs(nextSections);
   let updated = raw;
 
-  if (/studio\s*:\s*\{[\s\S]*sections\s*:\s*\[/m.test(raw)) {
-    updated = raw.replace(/(studio\s*:\s*\{[\s\S]*sections\s*:\s*\[)([\s\S]*?)(\])/m, (_match, start, body, end) => {
-      const items = body.trim().replace(/,\s*$/, "");
-      const nextBody = items ? `${items},\n      ${sectionSnippet}` : `\n      ${sectionSnippet}\n    `;
-      return `${start}${nextBody}${end}`;
-    });
+  if (/studio\s*:\s*\{/m.test(raw) && /sections\s*:\s*\[/m.test(raw)) {
+    updated = replaceStudioSectionsArray(raw, sectionsSnippet);
   } else if (/studio\s*:\s*\{/m.test(raw)) {
-    updated = raw.replace(/studio\s*:\s*\{/m, `studio: {\n    sections: [\n      ${sectionSnippet}\n    ],`);
+    updated = raw.replace(/studio\s*:\s*\{/m, `studio: {\n    sections: ${sectionsSnippet},`);
   } else if (/export\s+default\s*\{/m.test(raw)) {
-    updated = raw.replace(/export\s+default\s*\{/m, `export default {\n  studio: {\n    sections: [\n      ${sectionSnippet}\n    ],\n  },`);
+    updated = raw.replace(/export\s+default\s*\{/m, `export default {\n  studio: {\n    sections: ${sectionsSnippet},\n  },`);
   } else {
-    updated = `export default {\n  studio: {\n    sections: [\n      ${sectionSnippet}\n    ],\n  },\n};\n`;
+    updated = `export default {\n  studio: {\n    sections: ${sectionsSnippet},\n  },\n};\n`;
   }
 
   await writeFile(targetPath, `${updated.replace(/\n*$/, "")}\n`, "utf8");
   return nextSections;
 }
 
-function serializeSectionForJs(section: StudioCustomSectionDefinition): string {
-  const lines = [
-    "{",
-    `name: ${JSON.stringify(section.name)},`,
-    `icon: ${JSON.stringify(section.icon)},`,
-    "match: {",
-    `fields: ${JSON.stringify(section.match.fields)},`,
-    `routes: ${JSON.stringify(section.match.routes)},`,
-    `messages: ${JSON.stringify(section.match.messages)},`,
-    "},",
-    "}",
-  ];
+function serializeSectionsForJs(sections: StudioCustomSectionDefinition[]): string {
+  if (sections.length === 0) {
+    return "[]";
+  }
 
-  return lines.join(" ");
+  const items = sections.map((section) =>
+    [
+      "      {",
+      `        name: ${JSON.stringify(section.name)},`,
+      `        icon: ${JSON.stringify(section.icon)},`,
+      "        match: {",
+      `          fields: ${JSON.stringify(section.match.fields)},`,
+      `          routes: ${JSON.stringify(section.match.routes)},`,
+      `          messages: ${JSON.stringify(section.match.messages)},`,
+      "        },",
+      "      }",
+    ].join("\n"),
+  );
+
+  return `[\n${items.join(",\n")}\n    ]`;
+}
+
+function replaceStudioSectionsArray(source: string, sectionsSnippet: string): string {
+  const sectionsKey = source.search(/sections\s*:/m);
+  if (sectionsKey < 0) {
+    throw new Error("Studio config rewrite could not find studio.sections.");
+  }
+
+  const arrayStart = source.indexOf("[", sectionsKey);
+  if (arrayStart < 0) {
+    throw new Error("Studio config rewrite could not find studio.sections array.");
+  }
+
+  const arrayEnd = findMatchingBracket(source, arrayStart, "[", "]");
+  if (arrayEnd < 0) {
+    throw new Error("Studio config rewrite could not find the end of studio.sections.");
+  }
+
+  return `${source.slice(0, arrayStart)}${sectionsSnippet}${source.slice(arrayEnd + 1)}`;
+}
+
+function findMatchingBracket(
+  source: string,
+  startIndex: number,
+  openChar: "[" | "{",
+  closeChar: "]" | "}",
+): number {
+  let depth = 0;
+  let quote: "'" | "\"" | "`" | null = null;
+  let escaping = false;
+
+  for (let index = startIndex; index < source.length; index += 1) {
+    const char = source[index];
+
+    if (!char) {
+      continue;
+    }
+
+    if (quote) {
+      if (escaping) {
+        escaping = false;
+        continue;
+      }
+      if (char === "\\") {
+        escaping = true;
+        continue;
+      }
+      if (char === quote) {
+        quote = null;
+      }
+      continue;
+    }
+
+    if (char === "'" || char === "\"" || char === "`") {
+      quote = char;
+      continue;
+    }
+
+    if (char === openChar) {
+      depth += 1;
+      continue;
+    }
+
+    if (char === closeChar) {
+      depth -= 1;
+      if (depth === 0) {
+        return index;
+      }
+    }
+  }
+
+  return -1;
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {

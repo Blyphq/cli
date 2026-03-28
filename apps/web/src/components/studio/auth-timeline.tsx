@@ -90,7 +90,7 @@ export function AuthTimeline({
             <Button
               variant="outline"
               size="sm"
-              disabled={offset === 0}
+              disabled={loading || offset === 0}
               onClick={() => onPageChange(Math.max(0, offset - limit))}
             >
               <ChevronLeft />
@@ -99,7 +99,7 @@ export function AuthTimeline({
             <Button
               variant="outline"
               size="sm"
-              disabled={offset + limit >= total}
+              disabled={loading || offset + limit >= total}
               onClick={() => onPageChange(offset + limit)}
             >
               Next

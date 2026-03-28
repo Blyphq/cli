@@ -1,5 +1,5 @@
 import { gzipSync } from "node:zlib";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -751,6 +751,130 @@ describe("studio service", () => {
         },
       },
     ]);
+  });
+
+  it("replaces existing custom sections in ts config without duplication or bracket corruption", async () => {
+    const projectDir = await createProject();
+    const logDir = path.join(projectDir, "logs");
+    const configPath = path.join(projectDir, "blyp.config.ts");
+
+    await mkdir(logDir, { recursive: true });
+    await writeFile(
+      configPath,
+      [
+        "export default {",
+        "  studio: {",
+        "    sections: [",
+        "      {",
+        "        name: 'KYC',",
+        "        icon: '🪪',",
+        "        match: {",
+        "          fields: ['kyc.old'],",
+        "          routes: ['/kyc/old'],",
+        "          messages: ['legacy'],",
+        "        },",
+        "      },",
+        "    ],",
+        "  },",
+        "};",
+      ].join("\n"),
+    );
+
+    await addStudioCustomSection({
+      projectPath: projectDir,
+      name: "KYC",
+      icon: "🪪",
+      match: {
+        fields: ["kyc.*"],
+        routes: ["/kyc/*"],
+        messages: ["kyc"],
+      },
+    });
+
+    const written = await readFile(configPath, "utf8");
+    expect(written.match(/name:\s*['"]KYC['"]/g)?.length ?? 0).toBe(1);
+    expect(written).toContain("fields: [\"kyc.*\"]");
+    expect(written).toContain("routes: [\"/kyc/*\"]");
+    expect(written).toContain("messages: [\"kyc\"]");
+  });
+
+  it("returns an empty auth overview for invalid projects", async () => {
+    const missingProject = path.join(process.cwd(), "missing-project-for-auth");
+
+    const auth = await getStudioAuth({
+      projectPath: missingProject,
+      limit: 10,
+    });
+
+    expect(auth).toEqual({
+      stats: {
+        loginAttemptsTotal: 0,
+        loginSuccessCount: 0,
+        loginFailureCount: 0,
+        activeSessionCount: 0,
+        authErrorCount: 0,
+        suspiciousActivityCount: 0,
+      },
+      timeline: [],
+      totalTimelineEvents: 0,
+      suspiciousPatterns: [],
+      users: [],
+    });
+  });
+
+  it("counts session ids first and only falls back to user ids when session ids are missing", async () => {
+    const projectDir = await createProject();
+    const logDir = path.join(projectDir, "logs");
+
+    await mkdir(logDir, { recursive: true });
+    await writeFile(
+      path.join(logDir, "log.ndjson"),
+      [
+        createLogLine({
+          timestamp: "2026-03-13T13:00:00.000Z",
+          level: "info",
+          message: "session created",
+          type: "auth_session",
+          path: "/session/create",
+          user: { id: "user-1" },
+          session: { id: "session-1" },
+        }),
+        createLogLine({
+          timestamp: "2026-03-13T13:01:00.000Z",
+          level: "info",
+          message: "login success",
+          type: "auth_login",
+          path: "/auth/login",
+          statusCode: 200,
+          user: { id: "user-2" },
+        }),
+      ].join(""),
+    );
+
+    const auth = await getStudioAuth({ projectPath: projectDir, limit: 10 });
+    expect(auth.stats.activeSessionCount).toBe(2);
+  });
+
+  it("honors auth.userId when classifying auth records", async () => {
+    const projectDir = await createProject();
+    const logDir = path.join(projectDir, "logs");
+
+    await mkdir(logDir, { recursive: true });
+    await writeFile(
+      path.join(logDir, "log.ndjson"),
+      createLogLine({
+        timestamp: "2026-03-13T14:00:00.000Z",
+        level: "info",
+        message: "login success",
+        type: "auth_login",
+        path: "/auth/login",
+        statusCode: 200,
+        auth: { userId: "auth-user-1" },
+      }),
+    );
+
+    const auth = await getStudioAuth({ projectPath: projectDir, limit: 10 });
+    expect(auth.timeline[0]?.userId).toBe("auth-user-1");
   });
 
   it("reports assistant status and returns mocked assistant replies", async () => {

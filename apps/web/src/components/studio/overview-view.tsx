@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import type { StudioDetectedSection, StudioSectionId } from "@/lib/studio";
+import { formatCompactDateTime } from "@/lib/studio";
 
 import { EmptyState } from "./empty-state";
 import { PanelHeader } from "./panel-header";
@@ -38,7 +39,7 @@ export function OverviewView({ sections, onSelect }: OverviewViewProps) {
           />
           <CardContent className="space-y-3">
             <div className="text-xs text-muted-foreground">
-              Latest signal: {section.lastMatchedAt ?? "Unknown"}
+              Latest signal: {formatCompactDateTime(section.lastMatchedAt)}
             </div>
             <Button variant="outline" onClick={() => onSelect(section.id)}>
               Open section

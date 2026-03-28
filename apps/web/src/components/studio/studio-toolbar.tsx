@@ -76,6 +76,17 @@ export function StudioToolbar({
   const authMode = section === "auth";
   const overviewMode = section === "overview";
   const disableClassificationControls = authMode || overviewMode;
+  const disabledControlText = overviewMode
+    ? {
+        level: "Overview doesn't filter by level",
+        type: "Overview doesn't filter by type",
+        view: "Overview has no log grouping",
+      }
+    : {
+        level: "Auth view controls classification",
+        type: "Auth view uses domain event types",
+        view: "Auth timeline",
+      };
 
   return (
     <Card className="overflow-visible border-border/70 bg-card">
@@ -149,7 +160,7 @@ export function StudioToolbar({
           </FilterBox>
           <FilterBox icon={<SlidersHorizontal className="size-3.5" />} label="Level">
             {disableClassificationControls ? (
-              <Input value="Auth view controls classification" readOnly disabled />
+              <Input value={disabledControlText.level} readOnly disabled />
             ) : (
               <Select
                 value={filters.level || ALL_LEVELS_VALUE}
@@ -178,7 +189,7 @@ export function StudioToolbar({
           </FilterBox>
           <FilterBox label="Type">
             {disableClassificationControls ? (
-              <Input value="Auth view uses domain event types" readOnly disabled />
+              <Input value={disabledControlText.type} readOnly disabled />
             ) : (
               <Select
                 value={filters.type || ALL_TYPES_VALUE}
@@ -230,7 +241,7 @@ export function StudioToolbar({
           </FilterBox>
           <FilterBox icon={<LayoutPanelTop className="size-3.5" />} label="View">
             {disableClassificationControls ? (
-              <Input value="Auth timeline" readOnly disabled />
+              <Input value={disabledControlText.view} readOnly disabled />
             ) : (
               <Select value={grouping} onValueChange={(value) => onGroupingChange(value as StudioGroupingMode)}>
                 <SelectTrigger>

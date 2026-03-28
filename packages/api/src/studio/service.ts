@@ -167,6 +167,23 @@ export async function getStudioSections(projectPath?: string): Promise<StudioDet
 
 export async function getStudioAuth(input: StudioAuthQueryInput): Promise<StudioAuthOverview> {
   const { files, project, config } = await getStudioProjectFiles(input.projectPath);
+  if (!project.valid) {
+    return {
+      stats: {
+        loginAttemptsTotal: 0,
+        loginSuccessCount: 0,
+        loginFailureCount: 0,
+        activeSessionCount: 0,
+        authErrorCount: 0,
+        suspiciousActivityCount: 0,
+      },
+      timeline: [],
+      totalTimelineEvents: 0,
+      suspiciousPatterns: [],
+      users: [],
+    };
+  }
+
   const loaded = await loadProjectRecords(project.absolutePath, config, files, {
     from: input.from,
     to: input.to,

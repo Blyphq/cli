@@ -6,7 +6,9 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { AuthView } from "./auth-view";
+import { OverviewView } from "./overview-view";
 import { SectionNavPanel } from "./section-nav-panel";
+import { StudioToolbar } from "./studio-toolbar";
 
 const authData = {
   stats: {
@@ -115,6 +117,33 @@ describe("SectionNavPanel", () => {
     expect(screen.getByText("Auth")).toBeInTheDocument();
     expect(onSelect).toHaveBeenCalledWith("auth");
   });
+
+  it("resets the add-section form when the dialog closes", async () => {
+    const user = userEvent.setup();
+    render(
+      <SectionNavPanel
+        projectPath="/project"
+        meta={{
+          project: {} as never,
+          config: {} as never,
+          sections: [],
+          logs: {} as never,
+        }}
+        section="overview"
+        visitedAtBySection={{}}
+        onSelect={vi.fn()}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /add section/i }));
+    const nameInput = screen.getByPlaceholderText("Section name");
+    await user.type(nameInput, "KYC");
+    expect(nameInput).toHaveValue("KYC");
+
+    await user.keyboard("{Escape}");
+    await user.click(screen.getByRole("button", { name: /add section/i }));
+    expect(screen.getByPlaceholderText("Section name")).toHaveValue("");
+  });
 });
 
 describe("AuthView", () => {
@@ -181,5 +210,86 @@ describe("AuthView", () => {
     expect(
       screen.getByText("No auth activity matched the current filters."),
     ).toBeInTheDocument();
+  });
+
+  it("disables auth pagination controls while loading", () => {
+    render(
+      <AuthView
+        auth={authData as never}
+        loading={true}
+        offset={0}
+        limit={100}
+        selectedRecordId={null}
+        selectedUserId={null}
+        selectedPatternId={null}
+        onPageChange={vi.fn()}
+        onSelectRecord={vi.fn()}
+        onSelectUser={vi.fn()}
+        onResetUser={vi.fn()}
+        onSelectPattern={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: /previous/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /next/i })).toBeDisabled();
+  });
+});
+
+describe("StudioToolbar", () => {
+  it("shows overview-specific disabled helper text", () => {
+    render(
+      <StudioToolbar
+        draftProjectPath=""
+        facets={undefined}
+        files={[]}
+        filters={{
+          level: "",
+          type: "",
+          search: "",
+          fileId: "",
+          from: "",
+          to: "",
+        }}
+        grouping="grouped"
+        meta={undefined}
+        section="overview"
+        onDraftProjectPathChange={vi.fn()}
+        onFilterChange={vi.fn()}
+        onGroupingChange={vi.fn()}
+        onInspect={vi.fn()}
+        onStartStandaloneChat={vi.fn()}
+        onResetFilters={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByDisplayValue("Overview doesn't filter by level")).toBeDisabled();
+    expect(screen.getByDisplayValue("Overview doesn't filter by type")).toBeDisabled();
+    expect(screen.getByDisplayValue("Overview has no log grouping")).toBeDisabled();
+  });
+});
+
+describe("OverviewView", () => {
+  it("formats latest signal timestamps for display", () => {
+    render(
+      <OverviewView
+        sections={[
+          {
+            id: "auth",
+            label: "Auth",
+            count: 2,
+            icon: "🔐",
+            kind: "builtin",
+            highlighted: false,
+            unreadErrorCount: 0,
+            lastMatchedAt: "2026-03-13T10:00:00.000Z",
+            lastErrorAt: null,
+          },
+        ]}
+        onSelect={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByText("Latest signal: 2026-03-13T10:00:00.000Z")).not.toBeInTheDocument();
+    expect(screen.getByText(/Latest signal:/)).toBeInTheDocument();
   });
 });

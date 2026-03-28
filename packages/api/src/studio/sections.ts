@@ -13,6 +13,8 @@ interface SectionDefinition {
   match(record: StudioNormalizedRecord): { score: number; unreadError: boolean } | null;
 }
 
+const wildcardRegexCache = new Map<string, RegExp>();
+
 const BUILTIN_SECTION_DEFINITIONS: SectionDefinition[] = [
   {
     id: "errors",
@@ -294,10 +296,17 @@ function collectKeys(value: unknown, prefix: string, target: Set<string>) {
 }
 
 function wildcardMatch(value: string, pattern: string): boolean {
-  const escaped = pattern
-    .replace(/[.+?^${}()|[\]\\]/g, "\\$&")
-    .replace(/\*/g, ".*");
-  return new RegExp(`^${escaped}$`, "i").test(value);
+  let matcher = wildcardRegexCache.get(pattern);
+
+  if (!matcher) {
+    const escaped = pattern
+      .replace(/[.+?^${}()|[\]\\]/g, "\\$&")
+      .replace(/\*/g, ".*");
+    matcher = new RegExp(`^${escaped}$`, "i");
+    wildcardRegexCache.set(pattern, matcher);
+  }
+
+  return matcher.test(value);
 }
 
 function sortSections(sections: StudioDetectedSection[]): StudioDetectedSection[] {

@@ -91,7 +91,7 @@ export function isAuthRecord(record: StudioNormalizedRecord): boolean {
     (record.type ?? "").toLowerCase().includes(pattern),
   );
   const userField = Boolean(
-    getSafeString(record, ["user.id", "userId", "user.id"]) ||
+    getSafeString(record, ["user.id", "userId", "auth.userId"]) ||
       getSafeString(record, ["user.email", "userEmail"]),
   );
   const authError = (statusCode === 401 || statusCode === 403) && (routeMatch || authMessage);
@@ -283,14 +283,25 @@ function buildStats(
   const logins = events.filter((event) => event.kind === "login");
   const loginSuccessCount = logins.filter((event) => event.outcome === "success").length;
   const loginFailureCount = logins.filter((event) => event.outcome === "failure").length;
-  const sessionIds = new Set(events.map((event) => event.sessionId).filter(Boolean));
-  const userIds = new Set(events.map((event) => event.userId).filter(Boolean));
+  const sessionIds = new Set<string>();
+  const fallbackUserIds = new Set<string>();
+
+  for (const event of events) {
+    if (event.sessionId) {
+      sessionIds.add(event.sessionId);
+      continue;
+    }
+
+    if (event.userId) {
+      fallbackUserIds.add(event.userId);
+    }
+  }
 
   return {
     loginAttemptsTotal: logins.length,
     loginSuccessCount,
     loginFailureCount,
-    activeSessionCount: new Set([...sessionIds, ...userIds]).size,
+    activeSessionCount: sessionIds.size + fallbackUserIds.size,
     authErrorCount: events.filter((event) => event.statusCode === 401 || event.statusCode === 403).length,
     suspiciousActivityCount: suspiciousPatterns.length,
   };
