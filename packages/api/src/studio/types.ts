@@ -3,6 +3,17 @@ export type StudioLogFileKind = "active" | "archive";
 export type StudioLogStream = "combined" | "error" | "unknown";
 export type StudioRecordSource = "server" | "client" | "structured" | "http" | "unknown";
 export type StudioGroupingMode = "flat" | "grouped";
+export type StudioBuiltinSectionId =
+  | "overview"
+  | "errors"
+  | "auth"
+  | "payments"
+  | "http"
+  | "agents"
+  | "background"
+  | "database"
+  | "all-logs";
+export type StudioSectionId = StudioBuiltinSectionId | `custom:${string}`;
 export type StudioGroupingReason =
   | "explicit-group-id"
   | "request-id"
@@ -83,24 +94,6 @@ export interface StudioResolvedPostHogConnectorSummary {
   errorTracking: StudioResolvedPostHogErrorTrackingSummary;
 }
 
-export interface StudioResolvedBetterStackConnectorSummary {
-  enabled: boolean;
-  mode: string;
-  sourceToken?: string;
-  ingestingHost?: string;
-  ready: boolean;
-  status: "enabled" | "missing";
-}
-
-export interface StudioResolvedDatabuddyConnectorSummary {
-  enabled: boolean;
-  mode: string;
-  apiKey?: string;
-  websiteId?: string;
-  ready: boolean;
-  status: "enabled" | "missing";
-}
-
 export interface StudioResolvedSentryConnectorSummary {
   enabled: boolean;
   mode: string;
@@ -124,59 +117,22 @@ export interface StudioResolvedOtlpConnectorSummary {
 }
 
 export interface StudioResolvedConnectorsSummary {
-  betterstack: StudioResolvedBetterStackConnectorSummary;
-  databuddy: StudioResolvedDatabuddyConnectorSummary;
   posthog: StudioResolvedPostHogConnectorSummary;
   sentry: StudioResolvedSentryConnectorSummary;
   otlp: StudioResolvedOtlpConnectorSummary[];
 }
 
-export type StudioConnectorHealth =
-  | "healthy"
-  | "retrying"
-  | "dead-lettered"
-  | "inactive";
-
-export interface StudioConnectorDeliveryStatus {
-  key: string;
-  connectorType: string;
-  connectorTarget: string | null;
-  label: string;
-  enabled: boolean;
-  health: StudioConnectorHealth;
-  pendingCount: number;
-  deadLetterCount: number;
-  lastSuccessAt: string | null;
-  lastFailureAt: string | null;
-  lastError: string | null;
+export interface StudioCustomSectionMatch {
+  fields: string[];
+  routes: string[];
+  messages: string[];
 }
 
-export interface StudioDeadLetterRecord {
-  id: string;
-  timestamp: string;
-  connectorKey: string;
-  connectorLabel: string;
-  connectorType: string;
-  connectorTarget: string | null;
-  payloadPreview: string;
-  lastError: string | null;
-  attemptCount: number;
-  maxAttempts: number;
-}
-
-export interface StudioDeadLetterPage {
-  items: StudioDeadLetterRecord[];
-  total: number;
-  offset: number;
-  limit: number;
-}
-
-export interface StudioDeliveryStatus {
-  connectors: StudioConnectorDeliveryStatus[];
-  deadLetters: StudioDeadLetterPage;
-  queuePath: string;
-  available: boolean;
-  unavailableReason: "queue_missing" | "sqlite_unavailable" | "delivery_disabled" | null;
+export interface StudioCustomSectionDefinition {
+  id: StudioSectionId;
+  name: string;
+  icon: string;
+  match: StudioCustomSectionMatch;
 }
 
 export interface StudioResolvedConfigSummary {
@@ -187,6 +143,9 @@ export interface StudioResolvedConfigSummary {
   clientLogging: StudioClientLoggingSummary;
   ai: StudioAiSummary;
   connectors: StudioResolvedConnectorsSummary;
+  studio: {
+    sections: StudioCustomSectionDefinition[];
+  };
   destination: "file" | "database";
   database: StudioDatabaseConfigSummary;
 }
@@ -220,6 +179,18 @@ export interface StudioLogDiscovery {
   files: StudioLogFile[];
   mode: StudioLogMode;
   database: StudioDatabaseConfigSummary | null;
+}
+
+export interface StudioDetectedSection {
+  id: StudioSectionId;
+  label: string;
+  count: number;
+  icon: string;
+  kind: "builtin" | "custom";
+  highlighted: boolean;
+  unreadErrorCount: number;
+  lastMatchedAt: string | null;
+  lastErrorAt: string | null;
 }
 
 export interface StudioHttpDetails {
@@ -329,6 +300,7 @@ export interface StudioLogsQueryInput {
   from?: string;
   to?: string;
   grouping?: StudioGroupingMode;
+  sectionId?: string;
 }
 
 export interface StudioLogsPage {
@@ -341,6 +313,86 @@ export interface StudioLogsPage {
   offset: number;
   limit: number;
   truncated: boolean;
+}
+
+export interface StudioAuthQueryInput {
+  projectPath?: string;
+  fileId?: string;
+  from?: string;
+  to?: string;
+  search?: string;
+  offset?: number;
+  limit?: number;
+  userId?: string;
+  sectionId?: string;
+}
+
+export type StudioAuthEventKind =
+  | "login"
+  | "session"
+  | "token"
+  | "permission"
+  | "oauth"
+  | "other";
+
+export type StudioAuthOutcome = "success" | "failure" | "unknown";
+
+export interface StudioAuthEvent {
+  id: string;
+  recordId: string;
+  timestamp: string | null;
+  kind: StudioAuthEventKind;
+  action: string;
+  outcome: StudioAuthOutcome;
+  userId: string | null;
+  userEmail: string | null;
+  ip: string | null;
+  route: string | null;
+  method: string | null;
+  provider: string | null;
+  scope: string | null;
+  requiredPermission: string | null;
+  statusCode: number | null;
+  durationMs: number | null;
+  sessionId: string | null;
+  summary: string;
+}
+
+export interface StudioAuthStats {
+  loginAttemptsTotal: number;
+  loginSuccessCount: number;
+  loginFailureCount: number;
+  activeSessionCount: number;
+  authErrorCount: number;
+  suspiciousActivityCount: number;
+}
+
+export interface StudioAuthSuspiciousPattern {
+  id: string;
+  kind: "brute-force" | "invalid-token-spike" | "concurrent-sessions";
+  title: string;
+  description: string;
+  affectedUserId: string | null;
+  affectedIp: string | null;
+  eventCount: number;
+  timestampStart: string | null;
+  timestampEnd: string | null;
+  recordIds: string[];
+}
+
+export interface StudioAuthUserSummary {
+  userId: string;
+  loginCount: number;
+  lastSeen: string | null;
+  errorCount: number;
+}
+
+export interface StudioAuthOverview {
+  stats: StudioAuthStats;
+  timeline: StudioAuthEvent[];
+  totalTimelineEvents: number;
+  suspiciousPatterns: StudioAuthSuspiciousPattern[];
+  users: StudioAuthUserSummary[];
 }
 
 export interface StudioLogFacets {
@@ -398,6 +450,7 @@ export interface StudioAssistantReplyInput {
 export interface StudioMeta {
   project: StudioProjectResolution;
   config: StudioConfigDiscovery;
+  sections: StudioDetectedSection[];
   logs: {
     mode: StudioLogMode;
     database: StudioDatabaseConfigSummary | null;

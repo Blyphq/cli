@@ -1,5 +1,5 @@
 import { gzipSync } from "node:zlib";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -18,8 +18,10 @@ import { discoverLogFiles } from "./logs";
 import { resolveStudioProject } from "./project";
 import { queryLogs } from "./query";
 import {
+  addStudioCustomSection,
   describeStudioSelection,
   getStudioAssistantStatus,
+  getStudioAuth,
   getStudioConfig,
   getStudioFacets,
   getStudioFiles,
@@ -402,6 +404,7 @@ describe("studio service", () => {
     expect(meta.project.valid).toBe(true);
     expect(meta.config.status).toBe("found");
     expect(files.files).toHaveLength(1);
+    expect(meta.sections).toEqual([]);
   });
 
   it("supports direct queryLogs on discovered files", async () => {
@@ -419,6 +422,582 @@ describe("studio service", () => {
     });
 
     expect(page.records[0]?.message).toBe("hello");
+  });
+
+  it("detects auth sections and builds auth overviews", async () => {
+    const projectDir = await createProject();
+    const logDir = path.join(projectDir, "logs");
+
+    await mkdir(logDir, { recursive: true });
+    await writeFile(
+      path.join(logDir, "log.ndjson"),
+      [
+        createLogLine({
+          timestamp: "2026-03-13T10:00:00.000Z",
+          level: "info",
+          message: "login succeeded",
+          type: "auth_login",
+          path: "/auth/login",
+          method: "POST",
+          statusCode: 200,
+          duration: 42,
+          auth: { method: "password" },
+          user: { id: "user-1", email: "user-1@example.com" },
+          session: { id: "session-user-1-primary" },
+          ip: "10.0.0.1",
+        }),
+        createLogLine({
+          timestamp: "2026-03-13T10:00:30.000Z",
+          level: "warn",
+          message: "login failed",
+          type: "auth_login",
+          path: "/auth/login",
+          method: "POST",
+          statusCode: 401,
+          user: { id: "user-2", email: "***masked@example.com" },
+          session: { id: "session-user-2" },
+          ip: "10.0.0.2",
+          token: { accessToken: "secret-token-value" },
+        }),
+        createLogLine({
+          timestamp: "2026-03-13T10:02:00.000Z",
+          level: "warn",
+          message: "login failed",
+          type: "auth_login",
+          path: "/auth/login",
+          statusCode: 401,
+          user: { id: "user-2" },
+          ip: "10.0.0.2",
+        }),
+        createLogLine({
+          timestamp: "2026-03-13T10:03:00.000Z",
+          level: "warn",
+          message: "authentication failed",
+          type: "auth_login",
+          path: "/auth/login",
+          statusCode: 401,
+          user: { id: "user-2" },
+          ip: "10.0.0.2",
+        }),
+        createLogLine({
+          timestamp: "2026-03-13T10:05:00.000Z",
+          level: "info",
+          message: "session refreshed",
+          type: "auth_session",
+          path: "/session/refresh",
+          session: { id: "session-user-1-primary" },
+          user: { id: "user-1" },
+          ip: "10.0.0.1",
+        }),
+        createLogLine({
+          timestamp: "2026-03-13T10:06:00.000Z",
+          level: "info",
+          message: "session expired",
+          type: "auth_session",
+          path: "/session/expire",
+          session: { id: "session-user-2" },
+          user: { id: "user-2" },
+          ip: "10.0.0.2",
+        }),
+        ...Array.from({ length: 5 }, (_, index) =>
+          createLogLine({
+            timestamp: `2026-03-13T10:1${index}:00.000Z`,
+            level: "error",
+            message: "invalid token",
+            type: "auth_token",
+            path: "/token/validate",
+            statusCode: 401,
+            user: { id: "user-3" },
+            token: { refreshToken: `refresh-${index}` },
+          }),
+        ),
+        createLogLine({
+          timestamp: "2026-03-13T10:20:00.000Z",
+          level: "info",
+          message: "session created",
+          type: "auth_session",
+          path: "/session/create",
+          user: { id: "user-1" },
+          session: { id: "session-user-1-secondary" },
+          ip: "10.0.0.3",
+        }),
+        createLogLine({
+          timestamp: "2026-03-13T10:21:00.000Z",
+          level: "error",
+          message: "forbidden",
+          type: "auth_permission",
+          path: "/auth/admin",
+          statusCode: 403,
+          user: { id: "user-1" },
+          permission: "admin:write",
+          ip: "10.0.0.1",
+        }),
+        createLogLine({
+          timestamp: "2026-03-13T10:22:00.000Z",
+          level: "info",
+          message: "oauth callback success",
+          type: "oauth_callback",
+          path: "/oauth/github/callback",
+          provider: "github",
+          scope: "repo,user",
+          statusCode: 200,
+          user: { id: "user-4" },
+        }),
+      ].join(""),
+    );
+
+    const meta = await getStudioMeta(projectDir);
+    const auth = await getStudioAuth({ projectPath: projectDir, limit: 50 });
+
+    expect(meta.sections.map((section) => section.id)).toContain("auth");
+    expect(meta.sections.map((section) => section.id)).toContain("errors");
+    expect(meta.sections.find((section) => section.id === "auth")).toMatchObject({
+      label: "Auth",
+      icon: "🔐",
+      count: 14,
+    });
+    expect(auth.stats).toMatchObject({
+      loginAttemptsTotal: 4,
+      loginSuccessCount: 1,
+      loginFailureCount: 3,
+      activeSessionCount: 4,
+      authErrorCount: 9,
+      suspiciousActivityCount: 3,
+    });
+    expect(auth.timeline.some((event) => event.kind === "login" && event.outcome === "success")).toBe(true);
+    expect(auth.timeline.some((event) => event.kind === "session" && event.action === "expired")).toBe(true);
+    expect(auth.timeline.some((event) => event.kind === "token" && event.action === "rejected")).toBe(true);
+    expect(auth.timeline.some((event) => event.kind === "permission" && event.requiredPermission === "admin:write")).toBe(true);
+    expect(auth.timeline.some((event) => event.kind === "oauth" && event.provider === "github")).toBe(true);
+    expect(auth.suspiciousPatterns.map((pattern) => pattern.kind).sort()).toEqual([
+      "brute-force",
+      "concurrent-sessions",
+      "invalid-token-spike",
+    ]);
+    expect(auth.users.find((user) => user.userId === "user-1")).toMatchObject({
+      loginCount: 1,
+      errorCount: 1,
+    });
+    expect(auth.timeline.find((event) => event.userId === "user-2")?.userEmail).toBe("***masked@example.com");
+    expect(auth.timeline.some((event) => event.summary.includes("secret-token-value"))).toBe(false);
+    expect(auth.timeline.some((event) => event.summary.includes("refresh-0"))).toBe(false);
+
+    const filtered = await getStudioAuth({
+      projectPath: projectDir,
+      userId: "user-1",
+      limit: 50,
+    });
+
+    expect(filtered.timeline.every((event) => event.userId === "user-1")).toBe(true);
+    expect(filtered.users).toEqual([
+      expect.objectContaining({ userId: "user-1" }),
+    ]);
+  });
+
+  it("does not surface auth section for unrelated 401 records", async () => {
+    const projectDir = await createProject();
+    const logDir = path.join(projectDir, "logs");
+
+    await mkdir(logDir, { recursive: true });
+    await writeFile(
+      path.join(logDir, "log.ndjson"),
+      createLogLine({
+        timestamp: "2026-03-13T11:00:00.000Z",
+        level: "error",
+        message: "upstream failed",
+        type: "http_request",
+        path: "/api/data",
+        statusCode: 401,
+      }),
+    );
+
+    const meta = await getStudioMeta(projectDir);
+    expect(meta.sections).toMatchObject([
+      expect.objectContaining({ id: "errors", count: 1 }),
+    ]);
+  });
+
+  it("ignores invalid timestamps when computing section timestamps", async () => {
+    const projectDir = await createProject();
+    const logDir = path.join(projectDir, "logs");
+
+    await mkdir(logDir, { recursive: true });
+    await writeFile(
+      path.join(logDir, "log.ndjson"),
+      [
+        createLogLine({
+          timestamp: "not-a-date",
+          level: "error",
+          message: "request crashed",
+          type: "http_request",
+          path: "/api/data",
+          statusCode: 500,
+        }),
+        createLogLine({
+          timestamp: "2026-03-13T11:10:00.000Z",
+          level: "error",
+          message: "request crashed again",
+          type: "http_request",
+          path: "/api/data",
+          statusCode: 500,
+        }),
+      ].join(""),
+    );
+
+    const meta = await getStudioMeta(projectDir);
+    const errors = meta.sections.find((section) => section.id === "errors");
+
+    expect(errors?.lastMatchedAt).toBe("2026-03-13T11:10:00.000Z");
+    expect(errors?.lastErrorAt).toBe("2026-03-13T11:10:00.000Z");
+  });
+
+  it("does not classify bare 401 records as auth without corroborating signals", async () => {
+    const projectDir = await createProject();
+    const logDir = path.join(projectDir, "logs");
+
+    await mkdir(logDir, { recursive: true });
+    await writeFile(
+      path.join(logDir, "log.ndjson"),
+      createLogLine({
+        timestamp: "2026-03-13T11:05:00.000Z",
+        level: "warn",
+        message: "upstream returned 401",
+        type: "http_request",
+        path: "/api/data",
+        statusCode: 401,
+      }),
+    );
+
+    const auth = await getStudioAuth({ projectPath: projectDir, limit: 10 });
+    expect(auth.totalTimelineEvents).toBe(0);
+  });
+
+  it("scopes suspicious activity counts to the selected user", async () => {
+    const projectDir = await createProject();
+    const logDir = path.join(projectDir, "logs");
+
+    await mkdir(logDir, { recursive: true });
+    await writeFile(
+      path.join(logDir, "log.ndjson"),
+      [
+        createLogLine({
+          timestamp: "2026-03-13T10:00:00.000Z",
+          level: "warn",
+          message: "login failed",
+          type: "auth_login",
+          path: "/auth/login",
+          statusCode: 401,
+          user: { id: "user-a" },
+          ip: "10.0.0.9",
+        }),
+        createLogLine({
+          timestamp: "2026-03-13T10:02:00.000Z",
+          level: "warn",
+          message: "login failed",
+          type: "auth_login",
+          path: "/auth/login",
+          statusCode: 401,
+          user: { id: "user-a" },
+          ip: "10.0.0.9",
+        }),
+        createLogLine({
+          timestamp: "2026-03-13T10:03:00.000Z",
+          level: "warn",
+          message: "login failed",
+          type: "auth_login",
+          path: "/auth/login",
+          statusCode: 401,
+          user: { id: "user-a" },
+          ip: "10.0.0.9",
+        }),
+        createLogLine({
+          timestamp: "2026-03-13T10:04:00.000Z",
+          level: "info",
+          message: "login succeeded",
+          type: "auth_login",
+          path: "/auth/login",
+          statusCode: 200,
+          user: { id: "user-b" },
+          ip: "10.0.0.10",
+        }),
+      ].join(""),
+    );
+
+    const auth = await getStudioAuth({
+      projectPath: projectDir,
+      userId: "user-b",
+      limit: 10,
+    });
+
+    expect(auth.stats.suspiciousActivityCount).toBe(0);
+    expect(auth.suspiciousPatterns).toEqual([]);
+    expect(auth.timeline.every((event) => event.userId === "user-b")).toBe(true);
+  });
+
+  it("persists custom sections to blyp config and detects them", async () => {
+    const projectDir = await createProject();
+    const logDir = path.join(projectDir, "logs");
+
+    await mkdir(logDir, { recursive: true });
+    await writeFile(
+      path.join(projectDir, "blyp.config.json"),
+      JSON.stringify({ file: { dir: "./logs" } }, null, 2),
+    );
+    await writeFile(
+      path.join(logDir, "log.ndjson"),
+      createLogLine({
+        timestamp: "2026-03-13T12:00:00.000Z",
+        level: "info",
+        message: "kyc started",
+        path: "/kyc/verify",
+        kyc: { applicantId: "app-1" },
+      }),
+    );
+
+    const result = await addStudioCustomSection({
+      projectPath: projectDir,
+      name: "KYC",
+      icon: "🪪",
+      match: {
+        fields: ["kyc.*"],
+        routes: ["/kyc/*"],
+        messages: ["kyc"],
+      },
+    });
+
+    expect(result.sections.find((section) => section.id === "custom:kyc")).toMatchObject({
+      label: "KYC",
+      icon: "🪪",
+      count: 1,
+      kind: "custom",
+    });
+
+    const config = await getStudioConfig(projectDir);
+    expect(config.resolved.studio.sections).toEqual([
+      {
+        id: "custom:kyc",
+        name: "KYC",
+        icon: "🪪",
+        match: {
+          fields: ["kyc.*"],
+          routes: ["/kyc/*"],
+          messages: ["kyc"],
+        },
+      },
+    ]);
+  });
+
+  it("replaces existing custom sections in ts config without duplication or bracket corruption", async () => {
+    const projectDir = await createProject();
+    const logDir = path.join(projectDir, "logs");
+    const configPath = path.join(projectDir, "blyp.config.ts");
+
+    await mkdir(logDir, { recursive: true });
+    await writeFile(
+      configPath,
+      [
+        "export default {",
+        "  studio: {",
+        "    sections: [",
+        "      {",
+        "        name: 'KYC',",
+        "        icon: '🪪',",
+        "        match: {",
+        "          fields: ['kyc.old'],",
+        "          routes: ['/kyc/old'],",
+        "          messages: ['legacy'],",
+        "        },",
+        "      },",
+        "    ],",
+        "  },",
+        "};",
+      ].join("\n"),
+    );
+
+    await addStudioCustomSection({
+      projectPath: projectDir,
+      name: "KYC",
+      icon: "🪪",
+      match: {
+        fields: ["kyc.*"],
+        routes: ["/kyc/*"],
+        messages: ["kyc"],
+      },
+    });
+
+    const written = await readFile(configPath, "utf8");
+    expect(written.match(/name:\s*['"]KYC['"]/g)?.length ?? 0).toBe(1);
+    expect(written).toContain("fields: [\"kyc.*\"]");
+    expect(written).toContain("routes: [\"/kyc/*\"]");
+    expect(written).toContain("messages: [\"kyc\"]");
+  });
+
+  it("rewrites studio.sections instead of an unrelated earlier sections array", async () => {
+    const projectDir = await createProject();
+    const logDir = path.join(projectDir, "logs");
+    const configPath = path.join(projectDir, "blyp.config.ts");
+
+    await mkdir(logDir, { recursive: true });
+    await writeFile(
+      configPath,
+      [
+        "export default {",
+        "  docs: {",
+        "    sections: ['intro', 'advanced'],",
+        "  },",
+        "  studio: {",
+        "    sections: [",
+        "      {",
+        "        name: 'KYC',",
+        "        icon: '🪪',",
+        "        match: {",
+        "          fields: ['kyc.old'],",
+        "          routes: ['/kyc/old'],",
+        "          messages: ['legacy'],",
+        "        },",
+        "      },",
+        "    ],",
+        "  },",
+        "};",
+      ].join("\n"),
+    );
+
+    await addStudioCustomSection({
+      projectPath: projectDir,
+      name: "KYC",
+      icon: "🪪",
+      match: {
+        fields: ["kyc.*"],
+        routes: ["/kyc/*"],
+        messages: ["kyc"],
+      },
+    });
+
+    const written = await readFile(configPath, "utf8");
+    expect(written).toContain("sections: ['intro', 'advanced']");
+    expect(written.match(/name:\s*['\"]KYC['\"]/g)?.length ?? 0).toBe(1);
+    expect(written).toContain("fields: [\"kyc.*\"]");
+    expect(written).toContain("routes: [\"/kyc/*\"]");
+    expect(written).toContain("messages: [\"kyc\"]");
+  });
+
+  it("adds studio.sections when studio exists and only another object has sections", async () => {
+    const projectDir = await createProject();
+    const logDir = path.join(projectDir, "logs");
+    const configPath = path.join(projectDir, "blyp.config.ts");
+
+    await mkdir(logDir, { recursive: true });
+    await writeFile(
+      configPath,
+      [
+        "export default {",
+        "  docs: {",
+        "    sections: ['intro', 'advanced'],",
+        "  },",
+        "  studio: {",
+        "    theme: 'dark',",
+        "  },",
+        "};",
+      ].join("\n"),
+    );
+
+    await addStudioCustomSection({
+      projectPath: projectDir,
+      name: "KYC",
+      icon: "🪪",
+      match: {
+        fields: ["kyc.*"],
+        routes: ["/kyc/*"],
+        messages: ["kyc"],
+      },
+    });
+
+    const written = await readFile(configPath, "utf8");
+    expect(written).toContain("sections: ['intro', 'advanced']");
+    expect(written).toContain("theme: 'dark'");
+    expect(written).toContain("studio: {\n    sections:");
+    expect(written).toContain("fields: [\"kyc.*\"]");
+    expect(written).toContain("routes: [\"/kyc/*\"]");
+    expect(written).toContain("messages: [\"kyc\"]");
+  });
+
+  it("returns an empty auth overview for invalid projects", async () => {
+    const missingProject = path.join(process.cwd(), "missing-project-for-auth");
+
+    const auth = await getStudioAuth({
+      projectPath: missingProject,
+      limit: 10,
+    });
+
+    expect(auth).toEqual({
+      stats: {
+        loginAttemptsTotal: 0,
+        loginSuccessCount: 0,
+        loginFailureCount: 0,
+        activeSessionCount: 0,
+        authErrorCount: 0,
+        suspiciousActivityCount: 0,
+      },
+      timeline: [],
+      totalTimelineEvents: 0,
+      suspiciousPatterns: [],
+      users: [],
+    });
+  });
+
+  it("counts session ids first and only falls back to user ids when session ids are missing", async () => {
+    const projectDir = await createProject();
+    const logDir = path.join(projectDir, "logs");
+
+    await mkdir(logDir, { recursive: true });
+    await writeFile(
+      path.join(logDir, "log.ndjson"),
+      [
+        createLogLine({
+          timestamp: "2026-03-13T13:00:00.000Z",
+          level: "info",
+          message: "session created",
+          type: "auth_session",
+          path: "/session/create",
+          user: { id: "user-1" },
+          session: { id: "session-1" },
+        }),
+        createLogLine({
+          timestamp: "2026-03-13T13:01:00.000Z",
+          level: "info",
+          message: "login success",
+          type: "auth_login",
+          path: "/auth/login",
+          statusCode: 200,
+          user: { id: "user-2" },
+        }),
+      ].join(""),
+    );
+
+    const auth = await getStudioAuth({ projectPath: projectDir, limit: 10 });
+    expect(auth.stats.activeSessionCount).toBe(2);
+  });
+
+  it("honors auth.userId when classifying auth records", async () => {
+    const projectDir = await createProject();
+    const logDir = path.join(projectDir, "logs");
+
+    await mkdir(logDir, { recursive: true });
+    await writeFile(
+      path.join(logDir, "log.ndjson"),
+      createLogLine({
+        timestamp: "2026-03-13T14:00:00.000Z",
+        level: "info",
+        message: "login success",
+        type: "auth_login",
+        path: "/auth/login",
+        statusCode: 200,
+        auth: { userId: "auth-user-1" },
+      }),
+    );
+
+    const auth = await getStudioAuth({ projectPath: projectDir, limit: 10 });
+    expect(auth.timeline[0]?.userId).toBe("auth-user-1");
   });
 
   it("reports assistant status and returns mocked assistant replies", async () => {
@@ -848,13 +1427,7 @@ describe("studio DB mode", () => {
         logDir: "",
         clientLogging: { enabled: false, path: "" },
         ai: { apiKeyConfigured: false, apiKeySource: "missing" as const, model: null, modelSource: "missing" as const, enabled: false },
-        connectors: {
-          betterstack: { enabled: false, mode: "auto", ready: false, status: "missing" as const },
-          databuddy: { enabled: false, mode: "auto", ready: false, status: "missing" as const },
-          posthog: { enabled: false, mode: "auto", host: "", serviceName: "", errorTracking: { enabled: false, mode: "auto", enableExceptionAutocapture: false, ready: false, status: "missing" as const } },
-          sentry: { enabled: false, mode: "auto", ready: false, status: "missing" as const },
-          otlp: [],
-        },
+        connectors: { posthog: { enabled: false, mode: "auto", host: "", serviceName: "", errorTracking: { enabled: false, mode: "auto", enableExceptionAutocapture: false, ready: false, status: "missing" as const } }, sentry: { enabled: false, mode: "auto", ready: false, status: "missing" as const }, otlp: [] },
       },
       status: "found" as const,
       winner: null,
@@ -1184,18 +1757,6 @@ function buildDbConfig({
         enabled: false,
       },
       connectors: {
-        betterstack: {
-          enabled: false,
-          mode: "auto",
-          ready: false,
-          status: "missing" as const,
-        },
-        databuddy: {
-          enabled: false,
-          mode: "auto",
-          ready: false,
-          status: "missing" as const,
-        },
         posthog: {
           enabled: false,
           mode: "auto",
@@ -1211,6 +1772,9 @@ function buildDbConfig({
         },
         sentry: { enabled: false, mode: "auto", ready: false, status: "missing" as const },
         otlp: [],
+      },
+      studio: {
+        sections: [],
       },
     },
     status: "found" as const,

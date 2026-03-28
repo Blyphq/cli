@@ -19,6 +19,9 @@ interface LogListProps {
   totalMatched: number;
   truncated: boolean;
   loading: boolean;
+  title?: string;
+  emptyTitle?: string;
+  emptyDescription?: string;
   onSelect(selection: StudioSelection): void;
   onPageChange(nextOffset: number): void;
 }
@@ -32,6 +35,9 @@ export function LogList({
   totalMatched,
   truncated,
   loading,
+  title = "Log Viewer",
+  emptyTitle = "No log records matched",
+  emptyDescription = "Try a different file, type, level, or search term.",
   onSelect,
   onPageChange,
 }: LogListProps) {
@@ -40,15 +46,15 @@ export function LogList({
   if (!loading && entries.length === 0) {
     return (
       <EmptyState
-        title="No log records matched"
-        description="Try a different file, type, level, or search term."
+        title={emptyTitle}
+        description={emptyDescription}
       />
     );
   }
 
   return (
     <Card className="min-h-[36rem] min-w-0">
-      <PanelHeader title="Log Viewer" description={summary} />
+      <PanelHeader title={title} description={summary} />
       <CardContent className="min-w-0 p-0">
         <div className="hidden min-w-0 overflow-x-auto lg:block">
           <table className="w-full table-fixed text-left text-sm">

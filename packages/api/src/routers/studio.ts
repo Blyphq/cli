@@ -4,12 +4,12 @@ import { z } from "zod";
 import { publicProcedure, router } from "../index";
 import { StudioAssistantDisabledError } from "../studio/assistant-provider";
 import {
-  clearStudioDeliveryDeadLetters,
   describeStudioSelection,
   generateStudioChatTitle,
   getStudioAssistantStatus,
+  addStudioCustomSection,
+  getStudioAuth,
   getStudioConfig,
-  getStudioDeliveryStatusPanel,
   getStudioFacets,
   getStudioFiles,
   getStudioGroup,
@@ -18,7 +18,6 @@ import {
   getStudioRecord,
   getStudioRecordSource,
   replyWithStudioAssistant,
-  retryStudioDeliveryDeadLetters,
 } from "../studio/service";
 
 const studioLogsInput = z.object({
@@ -32,6 +31,19 @@ const studioLogsInput = z.object({
   from: z.string().optional(),
   to: z.string().optional(),
   grouping: z.enum(["flat", "grouped"]).optional(),
+  sectionId: z.string().optional(),
+});
+
+const studioAuthInput = z.object({
+  projectPath: z.string().optional(),
+  fileId: z.string().optional(),
+  from: z.string().optional(),
+  to: z.string().optional(),
+  search: z.string().optional(),
+  offset: z.number().int().min(0).optional(),
+  limit: z.number().int().positive().max(500).optional(),
+  userId: z.string().optional(),
+  sectionId: z.string().optional(),
 });
 
 const assistantInput = z.object({
@@ -64,21 +76,12 @@ export const studioRouter = router({
   files: publicProcedure
     .input(z.object({ projectPath: z.string().optional() }).optional())
     .query(({ input }) => getStudioFiles(input?.projectPath)),
-  deliveryStatus: publicProcedure
-    .input(
-      z
-        .object({
-          projectPath: z.string().optional(),
-          limit: z.number().int().positive().max(500).optional(),
-          offset: z.number().int().min(0).optional(),
-          connectorKey: z.string().optional(),
-        })
-        .optional(),
-    )
-    .query(({ input }) => getStudioDeliveryStatusPanel(input ?? {})),
   logs: publicProcedure
     .input(studioLogsInput.optional())
     .query(({ input }) => getStudioLogs(input ?? {})),
+  auth: publicProcedure
+    .input(studioAuthInput.optional())
+    .query(({ input }) => getStudioAuth(input ?? {})),
   fileLogs: publicProcedure
     .input(
       z.object({
@@ -105,10 +108,25 @@ export const studioRouter = router({
           fileId: z.string().optional(),
           from: z.string().optional(),
           to: z.string().optional(),
+          sectionId: z.string().optional(),
         })
         .optional(),
     )
     .query(({ input }) => getStudioFacets(input ?? {})),
+  addCustomSection: publicProcedure
+    .input(
+      z.object({
+        projectPath: z.string().optional(),
+        name: z.string().min(1),
+        icon: z.string().min(1),
+        match: z.object({
+          fields: z.array(z.string()).optional(),
+          routes: z.array(z.string()).optional(),
+          messages: z.array(z.string()).optional(),
+        }),
+      }),
+    )
+    .mutation(({ input }) => addStudioCustomSection(input)),
   group: publicProcedure
     .input(
       z.object({
@@ -168,12 +186,6 @@ export const studioRouter = router({
         throw toAssistantTrpcError(error);
       }
     }),
-  retryDeadLetters: publicProcedure
-    .input(z.object({ ids: z.array(z.string()).min(1) }))
-    .mutation(({ input }) => retryStudioDeliveryDeadLetters(input)),
-  clearDeadLetters: publicProcedure
-    .input(z.object({ ids: z.array(z.string()).min(1) }))
-    .mutation(({ input }) => clearStudioDeliveryDeadLetters(input)),
 });
 
 function toAssistantTrpcError(error: unknown): TRPCError {

@@ -7,12 +7,12 @@ import {
   type StudioAssistantStreamResult,
 } from "./assistant";
 import { generateAssistantText, getAssistantStatus } from "./assistant-provider";
-import { discoverStudioConfig, resolveStudioAiCredentials } from "./config";
+import { analyzeAuthRecords } from "./auth";
 import {
-  clearStudioDeadLetters,
-  getStudioDeliveryStatus,
-  retryStudioDeadLetters,
-} from "./delivery";
+  discoverStudioConfig,
+  resolveStudioAiCredentials,
+  saveStudioCustomSection,
+} from "./config";
 import {
   buildSyntheticDatabaseFile,
   loadDatabaseRecords,
@@ -22,15 +22,18 @@ import { buildGroupDetails } from "./grouping";
 import { discoverLogFiles } from "./logs";
 import { loadProjectClaudeMd } from "./project-context";
 import { resolveStudioProject } from "./project";
-import { loadNormalizedRecords, queryLogs } from "./query";
+import { filterRecords, loadNormalizedRecords, queryLogs } from "./query";
+import { buildDetectedSections } from "./sections";
 import { createUnavailableSourceContext, resolveRecordSourceContext } from "./source";
 
 import type {
   StudioAssistantMessage,
   StudioAssistantReplyInput,
   StudioAssistantStatus,
+  StudioAuthOverview,
+  StudioAuthQueryInput,
   StudioConfigDiscovery,
-  StudioDeliveryStatus,
+  StudioDetectedSection,
   StudioLogDiscovery,
   StudioLogFacets,
   StudioLogsPage,
@@ -85,10 +88,15 @@ export async function getStudioMeta(projectPath?: string): Promise<StudioMeta> {
   const logs = project.valid
     ? await discoverLogSource(project.absolutePath, config)
     : emptyLogDiscovery(config);
+  const sections =
+    project.valid
+      ? await getStudioSections(project.absolutePath)
+      : [];
 
   return {
     project,
     config: stripParsedConfig(config),
+    sections,
     logs: {
       mode: logs.mode,
       database: logs.database,
@@ -120,26 +128,6 @@ export async function getStudioFiles(projectPath?: string): Promise<StudioLogDis
   return discoverLogSource(project.absolutePath, config);
 }
 
-export async function getStudioDeliveryStatusPanel(input: {
-  projectPath?: string;
-  limit?: number;
-  offset?: number;
-  connectorKey?: string;
-}): Promise<StudioDeliveryStatus> {
-  const project = await resolveStudioProject(input.projectPath);
-  const config = await discoverStudioConfig(project);
-
-  return getStudioDeliveryStatus(config, input);
-}
-
-export async function retryStudioDeliveryDeadLetters(input: { ids: string[] }) {
-  return retryStudioDeadLetters(input.ids);
-}
-
-export async function clearStudioDeliveryDeadLetters(input: { ids: string[] }) {
-  return clearStudioDeadLetters(input.ids);
-}
-
 export async function getStudioLogs(input: StudioLogsQueryInput): Promise<StudioLogsPage> {
   const { files, project, config } = await getStudioProjectFiles(input.projectPath);
 
@@ -154,6 +142,7 @@ export async function getStudioLogs(input: StudioLogsQueryInput): Promise<Studio
       files: files.files,
       input,
       projectPath: project.absolutePath,
+      customSections: config.resolved.studio.sections,
       preloaded: dbLoaded,
     });
   }
@@ -162,19 +151,96 @@ export async function getStudioLogs(input: StudioLogsQueryInput): Promise<Studio
     files: files.files,
     input,
     projectPath: project.absolutePath,
+    customSections: config.resolved.studio.sections,
   });
+}
+
+export async function getStudioSections(projectPath?: string): Promise<StudioDetectedSection[]> {
+  const { files, project, config } = await getStudioProjectFiles(projectPath);
+  if (!project.valid) {
+    return [];
+  }
+
+  const loaded = await loadProjectRecords(project.absolutePath, config, files);
+  return buildDetectedSections(loaded.records, config.resolved.studio.sections);
+}
+
+export async function getStudioAuth(input: StudioAuthQueryInput): Promise<StudioAuthOverview> {
+  const { files, project, config } = await getStudioProjectFiles(input.projectPath);
+  if (!project.valid) {
+    return {
+      stats: {
+        loginAttemptsTotal: 0,
+        loginSuccessCount: 0,
+        loginFailureCount: 0,
+        activeSessionCount: 0,
+        authErrorCount: 0,
+        suspiciousActivityCount: 0,
+      },
+      timeline: [],
+      totalTimelineEvents: 0,
+      suspiciousPatterns: [],
+      users: [],
+    };
+  }
+
+  const loaded = await loadProjectRecords(project.absolutePath, config, files, {
+    from: input.from,
+    to: input.to,
+    search: input.search,
+  });
+  const filtered = filterRecords(
+    loaded.records,
+    {
+      fileId: input.fileId,
+      from: input.from,
+      to: input.to,
+      search: input.search,
+      sectionId: input.sectionId,
+    },
+    config.resolved.studio.sections,
+  );
+
+  return analyzeAuthRecords(filtered, input);
+}
+
+export async function addStudioCustomSection(input: {
+  projectPath?: string;
+  name: string;
+  icon: string;
+  match: {
+    fields?: string[];
+    routes?: string[];
+    messages?: string[];
+  };
+}): Promise<{ sections: StudioDetectedSection[] }> {
+  const project = await resolveStudioProject(input.projectPath);
+  if (!project.valid) {
+    return { sections: [] };
+  }
+
+  await saveStudioCustomSection({
+    projectPath: project.absolutePath,
+    name: input.name,
+    icon: input.icon,
+    match: input.match,
+  });
+
+  return {
+    sections: await getStudioSections(project.absolutePath),
+  };
 }
 
 export async function getStudioFacets(
   input: Pick<
     StudioLogsQueryInput,
-    "projectPath" | "level" | "search" | "fileId" | "from" | "to"
+    "projectPath" | "level" | "search" | "fileId" | "from" | "to" | "sectionId"
   >,
 ): Promise<StudioLogFacets> {
   const { files, project, config } = await getStudioProjectFiles(input.projectPath);
   const loaded = await loadProjectRecords(project.absolutePath, config, files, input);
 
-  return getLogFacets(loaded.records, input);
+  return getLogFacets(loaded.records, input, config.resolved.studio.sections);
 }
 
 export async function getStudioGroup(input: {

@@ -1,16 +1,15 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
+import { writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { createJiti } from "jiti";
 
 import type {
   StudioAiSummary,
-  StudioResolvedBetterStackConnectorSummary,
   StudioClientLoggingSummary,
   StudioConfigDiscovery,
   StudioConfigFileMatch,
   StudioConfigFileType,
-  StudioResolvedDatabuddyConnectorSummary,
   StudioLogFileSummary,
   StudioLogRotationSummary,
   StudioProjectResolution,
@@ -19,6 +18,7 @@ import type {
   StudioResolvedOtlpConnectorSummary,
   StudioResolvedPostHogConnectorSummary,
   StudioResolvedSentryConnectorSummary,
+  StudioCustomSectionDefinition,
 } from "./types";
 
 // Cache jiti-loaded configs by absolute config path + mtime so that concurrent
@@ -98,18 +98,6 @@ interface StudioConfigInput {
     };
   };
   connectors?: {
-    betterstack?: {
-      enabled?: boolean;
-      mode?: string;
-      sourceToken?: string;
-      ingestingHost?: string;
-    };
-    databuddy?: {
-      enabled?: boolean;
-      mode?: string;
-      apiKey?: string;
-      websiteId?: string;
-    };
     posthog?: {
       enabled?: boolean;
       mode?: string;
@@ -139,10 +127,19 @@ interface StudioConfigInput {
       serviceName?: string;
     }>;
   };
+  studio?: {
+    sections?: Array<{
+      name?: string;
+      icon?: string;
+      match?: {
+        fields?: string[];
+        routes?: string[];
+        messages?: string[];
+      };
+    }>;
+  };
 }
 
-type BetterStackConnectorInput = NonNullable<NonNullable<StudioConfigInput["connectors"]>["betterstack"]>;
-type DatabuddyConnectorInput = NonNullable<NonNullable<StudioConfigInput["connectors"]>["databuddy"]>;
 type PostHogConnectorInput = NonNullable<NonNullable<StudioConfigInput["connectors"]>["posthog"]>;
 type SentryConnectorInput = NonNullable<NonNullable<StudioConfigInput["connectors"]>["sentry"]>;
 type OtlpConnectorInput = NonNullable<NonNullable<StudioConfigInput["connectors"]>["otlp"]>[number];
@@ -334,6 +331,11 @@ function sanitizeConfigForStudio(value: StudioConfigInput): StudioConfigInput {
             : undefined,
         }
       : undefined,
+    studio: value.studio
+      ? {
+          sections: normalizeCustomSections(value.studio.sections),
+        }
+      : undefined,
   };
 }
 
@@ -418,9 +420,276 @@ function buildResolvedConfig(
     clientLogging: mergeClientLoggingConfig(input.clientLogging),
     ai: mergeAiConfig(input.ai, projectPath),
     connectors: mergeConnectorsConfig(input.connectors, projectPath),
+    studio: {
+      sections: normalizeCustomSections(input.studio?.sections),
+    },
     destination: input.destination ?? "file",
     database: mergeDatabaseConfig(input, configFileType),
   };
+}
+
+function normalizeCustomSections(
+  input:
+    | Array<{
+        name?: string;
+        icon?: string;
+        match?: {
+          fields?: string[];
+          routes?: string[];
+          messages?: string[];
+        };
+      }>
+    | undefined,
+): StudioCustomSectionDefinition[] {
+  const source = Array.isArray(input) ? input : [];
+  const sections: StudioCustomSectionDefinition[] = [];
+
+  for (const section of source) {
+    if (!section || typeof section.name !== "string" || section.name.trim().length === 0) {
+      continue;
+    }
+
+    const slug = slugifySectionName(section.name);
+    sections.push({
+      id: `custom:${slug}`,
+      name: section.name.trim(),
+      icon: typeof section.icon === "string" && section.icon.trim().length > 0 ? section.icon.trim() : "✨",
+      match: {
+        fields: uniqueStrings(section.match?.fields),
+        routes: uniqueStrings(section.match?.routes),
+        messages: uniqueStrings(section.match?.messages),
+      },
+    });
+  }
+
+  return sections;
+}
+
+function uniqueStrings(values: string[] | undefined): string[] {
+  return Array.from(
+    new Set(
+      (values ?? [])
+        .filter((value): value is string => typeof value === "string")
+        .map((value) => value.trim())
+        .filter(Boolean),
+    ),
+  );
+}
+
+function slugifySectionName(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 32) || "section";
+}
+
+export async function saveStudioCustomSection(input: {
+  projectPath: string;
+  name: string;
+  icon: string;
+  match: {
+    fields?: string[];
+    routes?: string[];
+    messages?: string[];
+  };
+}): Promise<StudioCustomSectionDefinition[]> {
+  const project = {
+    absolutePath: input.projectPath,
+    valid: true,
+  } as StudioProjectResolution;
+  const discovered = await discoverStudioConfig(project);
+  const existing = discovered.resolved.studio.sections;
+  const nextSection = normalizeCustomSections([
+    {
+      name: input.name,
+      icon: input.icon,
+      match: input.match,
+    },
+  ])[0];
+
+  if (!nextSection) {
+    return existing;
+  }
+
+  const nextSections = [
+    ...existing.filter((section) => section.id !== nextSection.id),
+    nextSection,
+  ];
+
+  const targetPath = discovered.winner?.path ?? path.join(input.projectPath, "blyp.config.json");
+  const targetType = discovered.winner?.type ?? "json";
+
+  if (targetType === "json") {
+    const parsed = discovered.rawContent ? (JSON.parse(discovered.rawContent) as Record<string, unknown>) : {};
+    const nextConfig = {
+      ...parsed,
+      studio: {
+        ...(isPlainObject(parsed.studio) ? parsed.studio : {}),
+        sections: nextSections.map((section) => ({
+          name: section.name,
+          icon: section.icon,
+          match: section.match,
+        })),
+      },
+    };
+    await writeFile(targetPath, `${JSON.stringify(nextConfig, null, 2)}\n`, "utf8");
+    return nextSections;
+  }
+
+  const raw = discovered.rawContent?.trim() || "export default {}";
+  const sectionsSnippet = serializeSectionsForJs(nextSections);
+  let updated = raw;
+
+  if (hasStudioSectionsArray(raw)) {
+    updated = replaceStudioSectionsArray(raw, sectionsSnippet);
+  } else if (/studio\s*:\s*\{/m.test(raw)) {
+    updated = raw.replace(/studio\s*:\s*\{/m, `studio: {\n    sections: ${sectionsSnippet},`);
+  } else if (/export\s+default\s*\{/m.test(raw)) {
+    updated = raw.replace(/export\s+default\s*\{/m, `export default {\n  studio: {\n    sections: ${sectionsSnippet},\n  },`);
+  } else {
+    updated = `export default {\n  studio: {\n    sections: ${sectionsSnippet},\n  },\n};\n`;
+  }
+
+  await writeFile(targetPath, `${updated.replace(/\n*$/, "")}\n`, "utf8");
+  return nextSections;
+}
+
+function hasStudioSectionsArray(source: string): boolean {
+  const studioKey = source.search(/studio\s*:/m);
+  if (studioKey < 0) {
+    return false;
+  }
+
+  const studioObjectStart = source.indexOf("{", studioKey);
+  if (studioObjectStart < 0) {
+    return false;
+  }
+
+  const studioObjectEnd = findMatchingBracket(source, studioObjectStart, "{", "}");
+  if (studioObjectEnd < 0) {
+    return false;
+  }
+
+  const studioSource = source.slice(studioObjectStart, studioObjectEnd + 1);
+  return /sections\s*:\s*\[/m.test(studioSource);
+}
+
+function serializeSectionsForJs(sections: StudioCustomSectionDefinition[]): string {
+  if (sections.length === 0) {
+    return "[]";
+  }
+
+  const items = sections.map((section) =>
+    [
+      "      {",
+      `        name: ${JSON.stringify(section.name)},`,
+      `        icon: ${JSON.stringify(section.icon)},`,
+      "        match: {",
+      `          fields: ${JSON.stringify(section.match.fields)},`,
+      `          routes: ${JSON.stringify(section.match.routes)},`,
+      `          messages: ${JSON.stringify(section.match.messages)},`,
+      "        },",
+      "      }",
+    ].join("\n"),
+  );
+
+  return `[\n${items.join(",\n")}\n    ]`;
+}
+
+function replaceStudioSectionsArray(source: string, sectionsSnippet: string): string {
+  const studioKey = source.search(/studio\s*:/m);
+  if (studioKey < 0) {
+    throw new Error("Studio config rewrite could not find studio.");
+  }
+
+  const studioObjectStart = source.indexOf("{", studioKey);
+  if (studioObjectStart < 0) {
+    throw new Error("Studio config rewrite could not find studio object.");
+  }
+
+  const studioObjectEnd = findMatchingBracket(source, studioObjectStart, "{", "}");
+  if (studioObjectEnd < 0) {
+    throw new Error("Studio config rewrite could not find the end of studio.");
+  }
+
+  const studioSource = source.slice(studioObjectStart, studioObjectEnd + 1);
+  const localSectionsKey = studioSource.search(/sections\s*:/m);
+  const sectionsKey =
+    localSectionsKey < 0 ? -1 : studioObjectStart + localSectionsKey;
+  if (sectionsKey < 0) {
+    throw new Error("Studio config rewrite could not find studio.sections.");
+  }
+
+  const arrayStart = source.indexOf("[", sectionsKey);
+  if (arrayStart < 0) {
+    throw new Error("Studio config rewrite could not find studio.sections array.");
+  }
+
+  const arrayEnd = findMatchingBracket(source, arrayStart, "[", "]");
+  if (arrayEnd < 0) {
+    throw new Error("Studio config rewrite could not find the end of studio.sections.");
+  }
+
+  return `${source.slice(0, arrayStart)}${sectionsSnippet}${source.slice(arrayEnd + 1)}`;
+}
+
+function findMatchingBracket(
+  source: string,
+  startIndex: number,
+  openChar: "[" | "{",
+  closeChar: "]" | "}",
+): number {
+  let depth = 0;
+  let quote: "'" | "\"" | "`" | null = null;
+  let escaping = false;
+
+  for (let index = startIndex; index < source.length; index += 1) {
+    const char = source[index];
+
+    if (!char) {
+      continue;
+    }
+
+    if (quote) {
+      if (escaping) {
+        escaping = false;
+        continue;
+      }
+      if (char === "\\") {
+        escaping = true;
+        continue;
+      }
+      if (char === quote) {
+        quote = null;
+      }
+      continue;
+    }
+
+    if (char === "'" || char === "\"" || char === "`") {
+      quote = char;
+      continue;
+    }
+
+    if (char === openChar) {
+      depth += 1;
+      continue;
+    }
+
+    if (char === closeChar) {
+      depth -= 1;
+      if (depth === 0) {
+        return index;
+      }
+    }
+  }
+
+  return -1;
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 function mergeAiConfig(
@@ -517,57 +786,9 @@ function mergeConnectorsConfig(
   projectPath: string,
 ): StudioResolvedConnectorsSummary {
   return {
-    betterstack: mergeBetterStackConnector(input?.betterstack),
-    databuddy: mergeDatabuddyConnector(input?.databuddy),
     posthog: mergePostHogConnector(input?.posthog, projectPath),
     sentry: mergeSentryConnector(input?.sentry),
     otlp: mergeOtlpConnectors(input?.otlp, projectPath),
-  };
-}
-
-function mergeBetterStackConnector(
-  input: BetterStackConnectorInput | undefined,
-): StudioResolvedBetterStackConnectorSummary {
-  const enabled = input?.enabled ?? false;
-  const sourceToken = input?.sourceToken;
-  const ingestingHost = input?.ingestingHost;
-  const ready =
-    enabled &&
-    typeof sourceToken === "string" &&
-    sourceToken.trim().length > 0 &&
-    typeof ingestingHost === "string" &&
-    /^https?:\/\//.test(ingestingHost);
-
-  return {
-    enabled,
-    mode: input?.mode ?? "auto",
-    sourceToken,
-    ingestingHost,
-    ready,
-    status: ready ? "enabled" : "missing",
-  };
-}
-
-function mergeDatabuddyConnector(
-  input: DatabuddyConnectorInput | undefined,
-): StudioResolvedDatabuddyConnectorSummary {
-  const enabled = input?.enabled ?? false;
-  const apiKey = input?.apiKey;
-  const websiteId = input?.websiteId;
-  const ready =
-    enabled &&
-    typeof apiKey === "string" &&
-    apiKey.trim().length > 0 &&
-    typeof websiteId === "string" &&
-    websiteId.trim().length > 0;
-
-  return {
-    enabled,
-    mode: input?.mode ?? "auto",
-    apiKey,
-    websiteId,
-    ready,
-    status: ready ? "enabled" : "missing",
   };
 }
 

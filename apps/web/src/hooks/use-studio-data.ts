@@ -1,7 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
 import { useDeferredValue } from "react";
 
-import type { StudioFilters, StudioGroupingMode, StudioSelection } from "@/lib/studio";
+import type {
+  StudioFilters,
+  StudioGroupingMode,
+  StudioSectionId,
+  StudioSelection,
+} from "@/lib/studio";
+import { isAllLogsSection, isAuthSection, isOverviewSection } from "@/lib/studio";
 import { useTRPC } from "@/utils/trpc";
 
 export interface UseStudioDataParams {
@@ -9,6 +15,8 @@ export interface UseStudioDataParams {
   filters: StudioFilters;
   offset: number;
   grouping: StudioGroupingMode;
+  section: StudioSectionId;
+  authUserId: string | null;
   selection: StudioSelection;
 }
 
@@ -17,12 +25,21 @@ export function useStudioData({
   filters,
   offset,
   grouping,
+  section,
+  authUserId,
   selection,
 }: UseStudioDataParams) {
   const trpc = useTRPC();
   const deferredSearch = useDeferredValue(filters.search);
+  const logsSectionId =
+    isOverviewSection(section) || isAllLogsSection(section) || isAuthSection(section)
+      ? undefined
+      : section;
 
-  const metaQuery = useQuery(trpc.studio.meta.queryOptions({ projectPath }));
+  const metaQuery = useQuery({
+    ...trpc.studio.meta.queryOptions({ projectPath }),
+    refetchInterval: 1000,
+  });
 
   const configQuery = useQuery({
     ...trpc.studio.config.queryOptions({ projectPath }),
@@ -34,18 +51,6 @@ export function useStudioData({
     enabled: metaQuery.isSuccess && metaQuery.data.project.valid,
   });
 
-  const deliveryStatusQuery = useQuery({
-    ...trpc.studio.deliveryStatus.queryOptions({
-      projectPath,
-      limit: 50,
-      offset: 0,
-      connectorKey: selection?.kind === "delivery" ? selection.connectorKey : undefined,
-    }),
-    enabled: metaQuery.isSuccess,
-    refetchInterval: 5_000,
-    refetchOnWindowFocus: true,
-  });
-
   const facetsQuery = useQuery({
     ...trpc.studio.facets.queryOptions({
       projectPath,
@@ -54,6 +59,7 @@ export function useStudioData({
       fileId: filters.fileId || undefined,
       from: filters.from || undefined,
       to: filters.to || undefined,
+      sectionId: logsSectionId,
     }),
     enabled: metaQuery.isSuccess && metaQuery.data.project.valid,
   });
@@ -70,8 +76,29 @@ export function useStudioData({
       fileId: filters.fileId || undefined,
       from: filters.from || undefined,
       to: filters.to || undefined,
+      sectionId: logsSectionId,
     }),
-    enabled: metaQuery.isSuccess && metaQuery.data.project.valid,
+    enabled:
+      metaQuery.isSuccess &&
+      metaQuery.data.project.valid &&
+      !isOverviewSection(section) &&
+      !isAuthSection(section),
+    refetchInterval: 1000,
+  });
+
+  const authQuery = useQuery({
+    ...trpc.studio.auth.queryOptions({
+      projectPath,
+      offset,
+      limit: 100,
+      fileId: filters.fileId || undefined,
+      from: filters.from || undefined,
+      to: filters.to || undefined,
+      search: deferredSearch || undefined,
+      userId: authUserId || undefined,
+    }),
+    enabled: metaQuery.isSuccess && metaQuery.data.project.valid && section === "auth",
+    refetchInterval: 1000,
   });
 
   const groupQuery = useQuery({
@@ -126,6 +153,7 @@ export function useStudioData({
   const hasLogsError =
     filesQuery.isError ||
     logsQuery.isError ||
+    authQuery.isError ||
     groupQuery.isError ||
     recordQuery.isError;
   const hasBackendError =
@@ -139,9 +167,9 @@ export function useStudioData({
     metaQuery,
     configQuery,
     filesQuery,
-    deliveryStatusQuery,
     facetsQuery,
     logsQuery,
+    authQuery,
     groupQuery,
     recordQuery,
     recordSourceQuery,

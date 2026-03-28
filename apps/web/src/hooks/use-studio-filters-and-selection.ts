@@ -1,9 +1,12 @@
 import { useEffect, useState } from "react";
 
 import type {
+  StudioAuthUiState,
   StudioFilters,
   StudioGroupingMode,
   StudioLogEntry,
+  StudioSidebarState,
+  StudioSectionId,
   StudioSelection,
 } from "@/lib/studio";
 import { isGroupEntry } from "@/lib/studio";
@@ -22,11 +25,36 @@ export function useStudioFiltersAndSelection(initialProjectPath: string) {
   const [selection, setSelection] = useState<StudioSelection>(null);
   const [offset, setOffset] = useState(0);
   const [grouping, setGrouping] = useState<StudioGroupingMode>("grouped");
+  const [section, setSectionState] = useState<StudioSectionId>("overview");
+  const [visitedAtBySection, setVisitedAtBySection] = useState<Record<string, string>>({});
+  const [authUi, setAuthUi] = useState<StudioAuthUiState>({
+    selectedUserId: null,
+    selectedPatternId: null,
+  });
   const [draftProjectPath, setDraftProjectPath] = useState(initialProjectPath);
 
   useEffect(() => {
     setDraftProjectPath(initialProjectPath);
+    const persisted = readSidebarState(initialProjectPath);
+    setSectionState(persisted.selectedSection);
+    setVisitedAtBySection(persisted.visitedAtBySection);
+    setAuthUi({ selectedUserId: null, selectedPatternId: null });
   }, [initialProjectPath]);
+
+  const setSection = (next: StudioSectionId) => {
+    setSectionState(next);
+    if (initialProjectPath) {
+      const nextVisited = {
+        ...visitedAtBySection,
+        [next]: new Date().toISOString(),
+      };
+      setVisitedAtBySection(nextVisited);
+      writeSidebarState(initialProjectPath, {
+        selectedSection: next,
+        visitedAtBySection: nextVisited,
+      });
+    }
+  };
 
   return {
     filters,
@@ -37,18 +65,77 @@ export function useStudioFiltersAndSelection(initialProjectPath: string) {
     setOffset,
     grouping,
     setGrouping,
+    section,
+    setSection,
+    visitedAtBySection,
+    authUi,
+    setAuthUi,
     draftProjectPath,
     setDraftProjectPath,
   };
+}
+
+function getSidebarStorageKey(projectPath: string): string {
+  return `blyp:studio:sidebar:${projectPath || "default"}`;
+}
+
+function readSidebarState(projectPath: string): StudioSidebarState {
+  if (typeof window === "undefined") {
+    return { selectedSection: "overview", visitedAtBySection: {} };
+  }
+
+  try {
+    const raw = window.localStorage.getItem(getSidebarStorageKey(projectPath));
+    if (!raw) {
+      return { selectedSection: "overview", visitedAtBySection: {} };
+    }
+    return parseSidebarState(JSON.parse(raw));
+  } catch {
+    return { selectedSection: "overview", visitedAtBySection: {} };
+  }
+}
+
+function writeSidebarState(projectPath: string, value: StudioSidebarState) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.localStorage.setItem(getSidebarStorageKey(projectPath), JSON.stringify(value));
+}
+
+function parseSidebarState(value: unknown): StudioSidebarState {
+  if (
+    value &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    typeof (value as { selectedSection?: unknown }).selectedSection === "string" &&
+    (value as { visitedAtBySection?: unknown }).visitedAtBySection &&
+    typeof (value as { visitedAtBySection: unknown }).visitedAtBySection === "object" &&
+    !Array.isArray((value as { visitedAtBySection: unknown }).visitedAtBySection)
+  ) {
+    const visitedAtBySection = Object.fromEntries(
+      Object.entries(
+        (value as { visitedAtBySection: Record<string, unknown> }).visitedAtBySection,
+      ).filter((entry): entry is [string, string] => typeof entry[1] === "string"),
+    );
+
+    return {
+      selectedSection: (value as { selectedSection: StudioSidebarState["selectedSection"] }).selectedSection,
+      visitedAtBySection,
+    };
+  }
+
+  return { selectedSection: "overview", visitedAtBySection: {} };
 }
 
 export function useSyncSelectionFromEntries(
   entries: StudioLogEntry[],
   selection: StudioSelection,
   setSelection: (s: StudioSelection) => void,
+  enabled = true,
 ) {
   useEffect(() => {
-    if (selection?.kind === "delivery") {
+    if (!enabled) {
       return;
     }
 
@@ -72,5 +159,5 @@ export function useSyncSelectionFromEntries(
           : { kind: "record", id: firstEntry.id },
       );
     }
-  }, [entries, selection, setSelection]);
+  }, [enabled, entries, selection, setSelection]);
 }
