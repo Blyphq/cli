@@ -48,6 +48,10 @@ export function useSyncSelectionFromEntries(
   setSelection: (s: StudioSelection) => void,
 ) {
   useEffect(() => {
+    if (selection?.kind === "delivery") {
+      return;
+    }
+
     if (!entries.length) {
       setSelection(null);
       return;

@@ -848,7 +848,13 @@ describe("studio DB mode", () => {
         logDir: "",
         clientLogging: { enabled: false, path: "" },
         ai: { apiKeyConfigured: false, apiKeySource: "missing" as const, model: null, modelSource: "missing" as const, enabled: false },
-        connectors: { posthog: { enabled: false, mode: "auto", host: "", serviceName: "", errorTracking: { enabled: false, mode: "auto", enableExceptionAutocapture: false, ready: false, status: "missing" as const } }, sentry: { enabled: false, mode: "auto", ready: false, status: "missing" as const }, otlp: [] },
+        connectors: {
+          betterstack: { enabled: false, mode: "auto", ready: false, status: "missing" as const },
+          databuddy: { enabled: false, mode: "auto", ready: false, status: "missing" as const },
+          posthog: { enabled: false, mode: "auto", host: "", serviceName: "", errorTracking: { enabled: false, mode: "auto", enableExceptionAutocapture: false, ready: false, status: "missing" as const } },
+          sentry: { enabled: false, mode: "auto", ready: false, status: "missing" as const },
+          otlp: [],
+        },
       },
       status: "found" as const,
       winner: null,
@@ -1178,6 +1184,18 @@ function buildDbConfig({
         enabled: false,
       },
       connectors: {
+        betterstack: {
+          enabled: false,
+          mode: "auto",
+          ready: false,
+          status: "missing" as const,
+        },
+        databuddy: {
+          enabled: false,
+          mode: "auto",
+          ready: false,
+          status: "missing" as const,
+        },
         posthog: {
           enabled: false,
           mode: "auto",

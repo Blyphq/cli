@@ -83,6 +83,24 @@ export interface StudioResolvedPostHogConnectorSummary {
   errorTracking: StudioResolvedPostHogErrorTrackingSummary;
 }
 
+export interface StudioResolvedBetterStackConnectorSummary {
+  enabled: boolean;
+  mode: string;
+  sourceToken?: string;
+  ingestingHost?: string;
+  ready: boolean;
+  status: "enabled" | "missing";
+}
+
+export interface StudioResolvedDatabuddyConnectorSummary {
+  enabled: boolean;
+  mode: string;
+  apiKey?: string;
+  websiteId?: string;
+  ready: boolean;
+  status: "enabled" | "missing";
+}
+
 export interface StudioResolvedSentryConnectorSummary {
   enabled: boolean;
   mode: string;
@@ -106,9 +124,59 @@ export interface StudioResolvedOtlpConnectorSummary {
 }
 
 export interface StudioResolvedConnectorsSummary {
+  betterstack: StudioResolvedBetterStackConnectorSummary;
+  databuddy: StudioResolvedDatabuddyConnectorSummary;
   posthog: StudioResolvedPostHogConnectorSummary;
   sentry: StudioResolvedSentryConnectorSummary;
   otlp: StudioResolvedOtlpConnectorSummary[];
+}
+
+export type StudioConnectorHealth =
+  | "healthy"
+  | "retrying"
+  | "dead-lettered"
+  | "inactive";
+
+export interface StudioConnectorDeliveryStatus {
+  key: string;
+  connectorType: string;
+  connectorTarget: string | null;
+  label: string;
+  enabled: boolean;
+  health: StudioConnectorHealth;
+  pendingCount: number;
+  deadLetterCount: number;
+  lastSuccessAt: string | null;
+  lastFailureAt: string | null;
+  lastError: string | null;
+}
+
+export interface StudioDeadLetterRecord {
+  id: string;
+  timestamp: string;
+  connectorKey: string;
+  connectorLabel: string;
+  connectorType: string;
+  connectorTarget: string | null;
+  payloadPreview: string;
+  lastError: string | null;
+  attemptCount: number;
+  maxAttempts: number;
+}
+
+export interface StudioDeadLetterPage {
+  items: StudioDeadLetterRecord[];
+  total: number;
+  offset: number;
+  limit: number;
+}
+
+export interface StudioDeliveryStatus {
+  connectors: StudioConnectorDeliveryStatus[];
+  deadLetters: StudioDeadLetterPage;
+  queuePath: string;
+  available: boolean;
+  unavailableReason: "queue_missing" | "sqlite_unavailable" | "delivery_disabled" | null;
 }
 
 export interface StudioResolvedConfigSummary {
