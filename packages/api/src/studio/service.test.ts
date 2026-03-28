@@ -881,6 +881,46 @@ describe("studio service", () => {
     expect(written).toContain("messages: [\"kyc\"]");
   });
 
+  it("adds studio.sections when studio exists and only another object has sections", async () => {
+    const projectDir = await createProject();
+    const logDir = path.join(projectDir, "logs");
+    const configPath = path.join(projectDir, "blyp.config.ts");
+
+    await mkdir(logDir, { recursive: true });
+    await writeFile(
+      configPath,
+      [
+        "export default {",
+        "  docs: {",
+        "    sections: ['intro', 'advanced'],",
+        "  },",
+        "  studio: {",
+        "    theme: 'dark',",
+        "  },",
+        "};",
+      ].join("\n"),
+    );
+
+    await addStudioCustomSection({
+      projectPath: projectDir,
+      name: "KYC",
+      icon: "🪪",
+      match: {
+        fields: ["kyc.*"],
+        routes: ["/kyc/*"],
+        messages: ["kyc"],
+      },
+    });
+
+    const written = await readFile(configPath, "utf8");
+    expect(written).toContain("sections: ['intro', 'advanced']");
+    expect(written).toContain("theme: 'dark'");
+    expect(written).toContain("studio: {\n    sections:");
+    expect(written).toContain("fields: [\"kyc.*\"]");
+    expect(written).toContain("routes: [\"/kyc/*\"]");
+    expect(written).toContain("messages: [\"kyc\"]");
+  });
+
   it("returns an empty auth overview for invalid projects", async () => {
     const missingProject = path.join(process.cwd(), "missing-project-for-auth");
 

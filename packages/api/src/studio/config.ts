@@ -542,7 +542,7 @@ export async function saveStudioCustomSection(input: {
   const sectionsSnippet = serializeSectionsForJs(nextSections);
   let updated = raw;
 
-  if (/studio\s*:\s*\{/m.test(raw) && /sections\s*:\s*\[/m.test(raw)) {
+  if (hasStudioSectionsArray(raw)) {
     updated = replaceStudioSectionsArray(raw, sectionsSnippet);
   } else if (/studio\s*:\s*\{/m.test(raw)) {
     updated = raw.replace(/studio\s*:\s*\{/m, `studio: {\n    sections: ${sectionsSnippet},`);
@@ -554,6 +554,26 @@ export async function saveStudioCustomSection(input: {
 
   await writeFile(targetPath, `${updated.replace(/\n*$/, "")}\n`, "utf8");
   return nextSections;
+}
+
+function hasStudioSectionsArray(source: string): boolean {
+  const studioKey = source.search(/studio\s*:/m);
+  if (studioKey < 0) {
+    return false;
+  }
+
+  const studioObjectStart = source.indexOf("{", studioKey);
+  if (studioObjectStart < 0) {
+    return false;
+  }
+
+  const studioObjectEnd = findMatchingBracket(source, studioObjectStart, "{", "}");
+  if (studioObjectEnd < 0) {
+    return false;
+  }
+
+  const studioSource = source.slice(studioObjectStart, studioObjectEnd + 1);
+  return /sections\s*:\s*\[/m.test(studioSource);
 }
 
 function serializeSectionsForJs(sections: StudioCustomSectionDefinition[]): string {
