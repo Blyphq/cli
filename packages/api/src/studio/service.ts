@@ -14,11 +14,6 @@ import {
   saveStudioCustomSection,
 } from "./config";
 import {
-  clearStudioDeadLetters,
-  getStudioDeliveryStatus,
-  retryStudioDeadLetters,
-} from "./delivery";
-import {
   buildSyntheticDatabaseFile,
   loadDatabaseRecords,
 } from "./database";
@@ -39,7 +34,6 @@ import type {
   StudioAuthQueryInput,
   StudioConfigDiscovery,
   StudioDetectedSection,
-  StudioDeliveryStatus,
   StudioLogDiscovery,
   StudioLogFacets,
   StudioLogsPage,
@@ -132,26 +126,6 @@ export async function getStudioFiles(projectPath?: string): Promise<StudioLogDis
   }
 
   return discoverLogSource(project.absolutePath, config);
-}
-
-export async function getStudioDeliveryStatusPanel(input: {
-  projectPath?: string;
-  limit?: number;
-  offset?: number;
-  connectorKey?: string;
-}): Promise<StudioDeliveryStatus> {
-  const project = await resolveStudioProject(input.projectPath);
-  const config = await discoverStudioConfig(project);
-
-  return getStudioDeliveryStatus(config, input);
-}
-
-export async function retryStudioDeliveryDeadLetters(input: { ids: string[] }) {
-  return retryStudioDeadLetters(input.ids);
-}
-
-export async function clearStudioDeliveryDeadLetters(input: { ids: string[] }) {
-  return clearStudioDeadLetters(input.ids);
 }
 
 export async function getStudioLogs(input: StudioLogsQueryInput): Promise<StudioLogsPage> {

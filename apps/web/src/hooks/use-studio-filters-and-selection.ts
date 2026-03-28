@@ -135,7 +135,7 @@ export function useSyncSelectionFromEntries(
   enabled = true,
 ) {
   useEffect(() => {
-    if (selection?.kind === "delivery") {
+    if (!enabled) {
       return;
     }
 

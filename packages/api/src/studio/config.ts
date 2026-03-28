@@ -6,12 +6,10 @@ import { createJiti } from "jiti";
 
 import type {
   StudioAiSummary,
-  StudioResolvedBetterStackConnectorSummary,
   StudioClientLoggingSummary,
   StudioConfigDiscovery,
   StudioConfigFileMatch,
   StudioConfigFileType,
-  StudioResolvedDatabuddyConnectorSummary,
   StudioLogFileSummary,
   StudioLogRotationSummary,
   StudioProjectResolution,
@@ -100,18 +98,6 @@ interface StudioConfigInput {
     };
   };
   connectors?: {
-    betterstack?: {
-      enabled?: boolean;
-      mode?: string;
-      sourceToken?: string;
-      ingestingHost?: string;
-    };
-    databuddy?: {
-      enabled?: boolean;
-      mode?: string;
-      apiKey?: string;
-      websiteId?: string;
-    };
     posthog?: {
       enabled?: boolean;
       mode?: string;
@@ -154,8 +140,6 @@ interface StudioConfigInput {
   };
 }
 
-type BetterStackConnectorInput = NonNullable<NonNullable<StudioConfigInput["connectors"]>["betterstack"]>;
-type DatabuddyConnectorInput = NonNullable<NonNullable<StudioConfigInput["connectors"]>["databuddy"]>;
 type PostHogConnectorInput = NonNullable<NonNullable<StudioConfigInput["connectors"]>["posthog"]>;
 type SentryConnectorInput = NonNullable<NonNullable<StudioConfigInput["connectors"]>["sentry"]>;
 type OtlpConnectorInput = NonNullable<NonNullable<StudioConfigInput["connectors"]>["otlp"]>[number];
@@ -595,7 +579,25 @@ function serializeSectionsForJs(sections: StudioCustomSectionDefinition[]): stri
 }
 
 function replaceStudioSectionsArray(source: string, sectionsSnippet: string): string {
-  const sectionsKey = source.search(/sections\s*:/m);
+  const studioKey = source.search(/studio\s*:/m);
+  if (studioKey < 0) {
+    throw new Error("Studio config rewrite could not find studio.");
+  }
+
+  const studioObjectStart = source.indexOf("{", studioKey);
+  if (studioObjectStart < 0) {
+    throw new Error("Studio config rewrite could not find studio object.");
+  }
+
+  const studioObjectEnd = findMatchingBracket(source, studioObjectStart, "{", "}");
+  if (studioObjectEnd < 0) {
+    throw new Error("Studio config rewrite could not find the end of studio.");
+  }
+
+  const studioSource = source.slice(studioObjectStart, studioObjectEnd + 1);
+  const localSectionsKey = studioSource.search(/sections\s*:/m);
+  const sectionsKey =
+    localSectionsKey < 0 ? -1 : studioObjectStart + localSectionsKey;
   if (sectionsKey < 0) {
     throw new Error("Studio config rewrite could not find studio.sections.");
   }
@@ -764,57 +766,9 @@ function mergeConnectorsConfig(
   projectPath: string,
 ): StudioResolvedConnectorsSummary {
   return {
-    betterstack: mergeBetterStackConnector(input?.betterstack),
-    databuddy: mergeDatabuddyConnector(input?.databuddy),
     posthog: mergePostHogConnector(input?.posthog, projectPath),
     sentry: mergeSentryConnector(input?.sentry),
     otlp: mergeOtlpConnectors(input?.otlp, projectPath),
-  };
-}
-
-function mergeBetterStackConnector(
-  input: BetterStackConnectorInput | undefined,
-): StudioResolvedBetterStackConnectorSummary {
-  const enabled = input?.enabled ?? false;
-  const sourceToken = input?.sourceToken;
-  const ingestingHost = input?.ingestingHost;
-  const ready =
-    enabled &&
-    typeof sourceToken === "string" &&
-    sourceToken.trim().length > 0 &&
-    typeof ingestingHost === "string" &&
-    /^https?:\/\//.test(ingestingHost);
-
-  return {
-    enabled,
-    mode: input?.mode ?? "auto",
-    sourceToken,
-    ingestingHost,
-    ready,
-    status: ready ? "enabled" : "missing",
-  };
-}
-
-function mergeDatabuddyConnector(
-  input: DatabuddyConnectorInput | undefined,
-): StudioResolvedDatabuddyConnectorSummary {
-  const enabled = input?.enabled ?? false;
-  const apiKey = input?.apiKey;
-  const websiteId = input?.websiteId;
-  const ready =
-    enabled &&
-    typeof apiKey === "string" &&
-    apiKey.trim().length > 0 &&
-    typeof websiteId === "string" &&
-    websiteId.trim().length > 0;
-
-  return {
-    enabled,
-    mode: input?.mode ?? "auto",
-    apiKey,
-    websiteId,
-    ready,
-    status: ready ? "enabled" : "missing",
   };
 }
 

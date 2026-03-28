@@ -398,5 +398,18 @@ function maxTimestamp(left: string | null, right: string | null): string | null 
   if (!right) {
     return left;
   }
-  return Date.parse(left) >= Date.parse(right) ? left : right;
+
+  const leftTime = Date.parse(left);
+  const rightTime = Date.parse(right);
+  const leftValid = Number.isFinite(leftTime);
+  const rightValid = Number.isFinite(rightTime);
+
+  if (!leftValid) {
+    return rightValid ? right : left;
+  }
+  if (!rightValid) {
+    return left;
+  }
+
+  return leftTime >= rightTime ? left : right;
 }

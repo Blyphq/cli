@@ -617,6 +617,40 @@ describe("studio service", () => {
     ]);
   });
 
+  it("ignores invalid timestamps when computing section timestamps", async () => {
+    const projectDir = await createProject();
+    const logDir = path.join(projectDir, "logs");
+
+    await mkdir(logDir, { recursive: true });
+    await writeFile(
+      path.join(logDir, "log.ndjson"),
+      [
+        createLogLine({
+          timestamp: "not-a-date",
+          level: "error",
+          message: "request crashed",
+          type: "http_request",
+          path: "/api/data",
+          statusCode: 500,
+        }),
+        createLogLine({
+          timestamp: "2026-03-13T11:10:00.000Z",
+          level: "error",
+          message: "request crashed again",
+          type: "http_request",
+          path: "/api/data",
+          statusCode: 500,
+        }),
+      ].join(""),
+    );
+
+    const meta = await getStudioMeta(projectDir);
+    const errors = meta.sections.find((section) => section.id === "errors");
+
+    expect(errors?.lastMatchedAt).toBe("2026-03-13T11:10:00.000Z");
+    expect(errors?.lastErrorAt).toBe("2026-03-13T11:10:00.000Z");
+  });
+
   it("does not classify bare 401 records as auth without corroborating signals", async () => {
     const projectDir = await createProject();
     const logDir = path.join(projectDir, "logs");
@@ -793,6 +827,55 @@ describe("studio service", () => {
 
     const written = await readFile(configPath, "utf8");
     expect(written.match(/name:\s*['"]KYC['"]/g)?.length ?? 0).toBe(1);
+    expect(written).toContain("fields: [\"kyc.*\"]");
+    expect(written).toContain("routes: [\"/kyc/*\"]");
+    expect(written).toContain("messages: [\"kyc\"]");
+  });
+
+  it("rewrites studio.sections instead of an unrelated earlier sections array", async () => {
+    const projectDir = await createProject();
+    const logDir = path.join(projectDir, "logs");
+    const configPath = path.join(projectDir, "blyp.config.ts");
+
+    await mkdir(logDir, { recursive: true });
+    await writeFile(
+      configPath,
+      [
+        "export default {",
+        "  docs: {",
+        "    sections: ['intro', 'advanced'],",
+        "  },",
+        "  studio: {",
+        "    sections: [",
+        "      {",
+        "        name: 'KYC',",
+        "        icon: '🪪',",
+        "        match: {",
+        "          fields: ['kyc.old'],",
+        "          routes: ['/kyc/old'],",
+        "          messages: ['legacy'],",
+        "        },",
+        "      },",
+        "    ],",
+        "  },",
+        "};",
+      ].join("\n"),
+    );
+
+    await addStudioCustomSection({
+      projectPath: projectDir,
+      name: "KYC",
+      icon: "🪪",
+      match: {
+        fields: ["kyc.*"],
+        routes: ["/kyc/*"],
+        messages: ["kyc"],
+      },
+    });
+
+    const written = await readFile(configPath, "utf8");
+    expect(written).toContain("sections: ['intro', 'advanced']");
+    expect(written.match(/name:\s*['\"]KYC['\"]/g)?.length ?? 0).toBe(1);
     expect(written).toContain("fields: [\"kyc.*\"]");
     expect(written).toContain("routes: [\"/kyc/*\"]");
     expect(written).toContain("messages: [\"kyc\"]");
@@ -1304,13 +1387,7 @@ describe("studio DB mode", () => {
         logDir: "",
         clientLogging: { enabled: false, path: "" },
         ai: { apiKeyConfigured: false, apiKeySource: "missing" as const, model: null, modelSource: "missing" as const, enabled: false },
-        connectors: {
-          betterstack: { enabled: false, mode: "auto", ready: false, status: "missing" as const },
-          databuddy: { enabled: false, mode: "auto", ready: false, status: "missing" as const },
-          posthog: { enabled: false, mode: "auto", host: "", serviceName: "", errorTracking: { enabled: false, mode: "auto", enableExceptionAutocapture: false, ready: false, status: "missing" as const } },
-          sentry: { enabled: false, mode: "auto", ready: false, status: "missing" as const },
-          otlp: [],
-        },
+        connectors: { posthog: { enabled: false, mode: "auto", host: "", serviceName: "", errorTracking: { enabled: false, mode: "auto", enableExceptionAutocapture: false, ready: false, status: "missing" as const } }, sentry: { enabled: false, mode: "auto", ready: false, status: "missing" as const }, otlp: [] },
       },
       status: "found" as const,
       winner: null,
@@ -1640,18 +1717,6 @@ function buildDbConfig({
         enabled: false,
       },
       connectors: {
-        betterstack: {
-          enabled: false,
-          mode: "auto",
-          ready: false,
-          status: "missing" as const,
-        },
-        databuddy: {
-          enabled: false,
-          mode: "auto",
-          ready: false,
-          status: "missing" as const,
-        },
         posthog: {
           enabled: false,
           mode: "auto",
