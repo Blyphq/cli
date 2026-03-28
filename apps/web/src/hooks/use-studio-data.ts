@@ -51,6 +51,18 @@ export function useStudioData({
     enabled: metaQuery.isSuccess && metaQuery.data.project.valid,
   });
 
+  const deliveryStatusQuery = useQuery({
+    ...trpc.studio.deliveryStatus.queryOptions({
+      projectPath,
+      limit: 50,
+      offset: 0,
+      connectorKey: selection?.kind === "delivery" ? selection.connectorKey : undefined,
+    }),
+    enabled: metaQuery.isSuccess,
+    refetchInterval: 5_000,
+    refetchOnWindowFocus: true,
+  });
+
   const facetsQuery = useQuery({
     ...trpc.studio.facets.queryOptions({
       projectPath,
@@ -167,6 +179,7 @@ export function useStudioData({
     metaQuery,
     configQuery,
     filesQuery,
+    deliveryStatusQuery,
     facetsQuery,
     logsQuery,
     authQuery,

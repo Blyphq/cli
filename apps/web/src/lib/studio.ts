@@ -20,6 +20,10 @@ export type StudioFacets = RouterOutputs["studio"]["facets"];
 export type StudioAssistantStatus = RouterOutputs["studio"]["assistantStatus"];
 export type StudioAssistantMessage = RouterOutputs["studio"]["assistantReply"];
 export type StudioAssistantReference = StudioAssistantMessage["references"][number];
+export type StudioDeliveryStatus = RouterOutputs["studio"]["deliveryStatus"];
+export type StudioConnectorDeliveryStatus = StudioDeliveryStatus["connectors"][number];
+export type StudioDeadLetterPage = StudioDeliveryStatus["deadLetters"];
+export type StudioDeadLetterRecord = StudioDeadLetterPage["items"][number];
 export type StudioGroupingMode = "grouped" | "flat";
 export type StudioDetectedSection = StudioMeta["sections"][number];
 export type StudioSectionId = StudioDetectedSection["id"] | "overview" | "all-logs";
@@ -41,6 +45,7 @@ export type StudioChatMessage = UIMessage<StudioAssistantMessageMetadata>;
 export type StudioSelection =
   | { kind: "record"; id: string }
   | { kind: "group"; id: string }
+  | { kind: "delivery"; connectorKey?: string }
   | null;
 
 export interface StudioFilters {
@@ -199,6 +204,36 @@ export function getStatusClasses(
     case "error":
     case "invalid":
       return "border-destructive/30 bg-destructive/10 text-destructive";
+  }
+}
+
+export function getDeliveryHealthClasses(
+  health: StudioConnectorDeliveryStatus["health"],
+): string {
+  switch (health) {
+    case "healthy":
+      return "border-primary/30 bg-primary/10 text-primary";
+    case "retrying":
+      return "border-secondary bg-secondary text-secondary-foreground";
+    case "dead-lettered":
+      return "border-destructive/30 bg-destructive/10 text-destructive";
+    default:
+      return "border-border bg-muted text-muted-foreground";
+  }
+}
+
+export function getDeliveryHealthLabel(
+  health: StudioConnectorDeliveryStatus["health"],
+): string {
+  switch (health) {
+    case "healthy":
+      return "healthy";
+    case "retrying":
+      return "retrying";
+    case "dead-lettered":
+      return "dead-lettered";
+    default:
+      return "inactive";
   }
 }
 

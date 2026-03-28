@@ -1,6 +1,8 @@
 import { useEffect } from "react";
 
 import { AuthView } from "@/components/studio/auth-view";
+import { DeliveryStatusPanel } from "@/components/studio/delivery-status-panel";
+import { DeliveryStatusSidebarCard } from "@/components/studio/delivery-status-sidebar-card";
 import { AssistantSheet } from "@/components/studio/assistant-sheet";
 import { EmptyState } from "@/components/studio/empty-state";
 import { ErrorState } from "@/components/studio/error-state";
@@ -136,6 +138,8 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
     selection?.kind === "record" ? studioData.selectedRecord : null;
   const selectedGroup =
     selection?.kind === "group" ? studioData.selectedGroup : null;
+  const selectedConnectorKey =
+    selection?.kind === "delivery" ? selection.connectorKey : undefined;
 
   const describePrompt =
     "Describe the selected log or structured group like an observability copilot. Explain what happened, likely cause, related signals, and what to inspect next.";
@@ -187,6 +191,13 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
                 size="compact"
               />
             )}
+            <DeliveryStatusSidebarCard
+              deliveryStatus={studioData.deliveryStatusQuery.data}
+              loading={studioData.deliveryStatusQuery.isLoading}
+              onOpen={(connectorKey) => {
+                setSelection({ kind: "delivery", connectorKey });
+              }}
+            />
             {filesQuery.isError ? (
               <ErrorState
                 title="Log discovery failed"
@@ -270,6 +281,11 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
                   setSelection({ kind: "record", id: firstRecordId });
                 }
               }}
+          ) : selection?.kind === "delivery" ? (
+            <DeliveryStatusPanel
+              deliveryStatus={studioData.deliveryStatusQuery.data}
+              loading={studioData.deliveryStatusQuery.isLoading}
+              activeConnectorKey={selectedConnectorKey}
             />
           ) : (
             <LogList
@@ -290,7 +306,13 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
           )
         }
         detail={
-          selection?.kind === "group" ? (
+          selection?.kind === "delivery" ? (
+            <EmptyState
+              title="Delivery panel open"
+              description="Connector delivery status is shown in the main panel."
+              size="compact"
+            />
+          ) : selection?.kind === "group" ? (
             <GroupDetailPanel
               group={selectedGroup}
               loading={groupQuery.isLoading}
