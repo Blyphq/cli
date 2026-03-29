@@ -1,9 +1,11 @@
-import { useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { AuthView } from "@/components/studio/auth-view";
 import { AssistantSheet } from "@/components/studio/assistant-sheet";
 import { EmptyState } from "@/components/studio/empty-state";
+import { ErrorDetailPanel } from "@/components/studio/error-detail-panel";
 import { ErrorState } from "@/components/studio/error-state";
+import { ErrorsView } from "@/components/studio/errors-view";
 import { GroupDetailPanel } from "@/components/studio/group-detail-panel";
 import { LogDetailPanel } from "@/components/studio/log-detail-panel";
 import { LogFilesPanel } from "@/components/studio/log-files-panel";
@@ -21,8 +23,8 @@ import {
 } from "@/hooks";
 import { useStudioData } from "@/hooks";
 import {
-  isAllLogsSection,
   isAuthSection,
+  isErrorsSection,
   isOverviewSection,
 } from "@/lib/studio";
 
@@ -33,6 +35,14 @@ export interface StudioPageProps {
 
 export function StudioPage({ navigate, search }: StudioPageProps) {
   const projectPath = search.project ?? "";
+  const [errorView, setErrorView] = useState<"grouped" | "raw">("grouped");
+  const [errorSort, setErrorSort] = useState<"most-recent" | "most-frequent" | "first-seen">("most-recent");
+  const [errorType, setErrorType] = useState("");
+  const [errorSourceFile, setErrorSourceFile] = useState("");
+  const [errorTag, setErrorTag] = useState("");
+  const [selectedErrorGroupId, setSelectedErrorGroupId] = useState<string | null>(null);
+  const [resolvedGroupIds, setResolvedGroupIds] = useState<Set<string>>(new Set());
+  const [ignoredGroupIds, setIgnoredGroupIds] = useState<Set<string>>(new Set());
 
   const {
     filters,
@@ -60,6 +70,12 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
     section,
     authUserId: authUi.selectedUserId,
     selection,
+    errorView,
+    errorSort,
+    errorType,
+    errorSourceFile,
+    errorTag,
+    errorGroupId: selectedErrorGroupId,
   });
 
   const {
@@ -81,8 +97,19 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
   } = studioData;
 
   const shouldSyncSelection =
-    !isOverviewSection(section) && !isAuthSection(section);
+    !isOverviewSection(section) && !isAuthSection(section) && !isErrorsSection(section);
   useSyncSelectionFromEntries(entries, selection, setSelection, shouldSyncSelection);
+
+  useEffect(() => {
+    setResolvedGroupIds(new Set());
+    setIgnoredGroupIds(new Set());
+    setSelectedErrorGroupId(null);
+    setErrorView("grouped");
+    setErrorSort("most-recent");
+    setErrorType("");
+    setErrorSourceFile("");
+    setErrorTag("");
+  }, [projectPath]);
 
   useEffect(() => {
     setOffset(0);
@@ -97,6 +124,11 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
     projectPath,
     section,
     grouping,
+    errorView,
+    errorSort,
+    errorType,
+    errorSourceFile,
+    errorTag,
     setOffset,
   ]);
 
@@ -136,6 +168,56 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
     selection?.kind === "record" ? studioData.selectedRecord : null;
   const selectedGroup =
     selection?.kind === "group" ? studioData.selectedGroup : null;
+  const visibleErrorGroups = useMemo(
+    () =>
+      (studioData.errorsQuery.data?.groups ?? []).filter(
+        (group) => !ignoredGroupIds.has(group.id) && !resolvedGroupIds.has(group.id),
+      ),
+    [ignoredGroupIds, resolvedGroupIds, studioData.errorsQuery.data?.groups],
+  );
+  const resolvedErrorGroups = useMemo(
+    () =>
+      (studioData.errorsQuery.data?.groups ?? []).filter((group) => resolvedGroupIds.has(group.id)),
+    [resolvedGroupIds, studioData.errorsQuery.data?.groups],
+  );
+  const selectedErrorGroup =
+    (visibleErrorGroups.find((group) => group.id === selectedErrorGroupId) ??
+      resolvedErrorGroups.find((group) => group.id === selectedErrorGroupId) ??
+      null);
+
+  useEffect(() => {
+    if (section !== "errors" || errorView !== "grouped") {
+      return;
+    }
+
+    if (!selectedErrorGroupId || !selectedErrorGroup) {
+      const first = visibleErrorGroups[0] ?? resolvedErrorGroups[0] ?? null;
+      setSelectedErrorGroupId(first?.id ?? null);
+    }
+  }, [
+    errorView,
+    resolvedErrorGroups,
+    section,
+    selectedErrorGroup,
+    selectedErrorGroupId,
+    visibleErrorGroups,
+  ]);
+
+  useEffect(() => {
+    if (section !== "errors" || errorView !== "raw") {
+      return;
+    }
+
+    const rawRecords = studioData.errorsQuery.data?.rawRecords ?? [];
+    if (!rawRecords.length) {
+      setSelection(null);
+      return;
+    }
+
+    if (selection?.kind !== "record" || !rawRecords.some((item) => item.record.id === selection.id)) {
+      setSelection({ kind: "record", id: rawRecords[0]!.record.id });
+    }
+  }, [errorView, section, selection, setSelection, studioData.errorsQuery.data?.rawRecords]);
 
   const describePrompt =
     "Describe the selected log or structured group like an observability copilot. Explain what happened, likely cause, related signals, and what to inspect next.";
@@ -143,6 +225,38 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
     section === "all-logs"
       ? "All Logs"
       : metaQuery.data?.sections.find((item) => item.id === section)?.label ?? "Section";
+
+  const handleResolveErrorGroup = (groupId: string) => {
+    setResolvedGroupIds((current) => new Set(current).add(groupId));
+  };
+
+  const handleIgnoreErrorGroup = (groupId: string) => {
+    setIgnoredGroupIds((current) => new Set(current).add(groupId));
+    if (selectedErrorGroupId === groupId) {
+      setSelectedErrorGroupId(null);
+    }
+  };
+
+  const handleAskAiToFixError = () => {
+    const detail = studioData.errorGroupQuery.data;
+    if (!detail) {
+      return;
+    }
+
+    if (detail.traceReference?.kind === "group") {
+      setSection(detail.traceReference.sectionId);
+      setSelection({ kind: "group", id: detail.traceReference.id });
+    } else {
+      setSelection({ kind: "record", id: detail.group.representativeRecordId });
+    }
+
+    const sourceText = detail.group.sourceFile
+      ? ` Source: ${detail.group.sourceFile}:${detail.group.sourceLine ?? "?"}.`
+      : "";
+    assistant.createSelectionChatAndSubmit(
+      `Diagnose this Studio error group and propose a concrete fix. Explain the likely root cause, the code path implicated by the stack trace, and the smallest defensible code change to resolve it.${sourceText} Error type: ${detail.group.errorType ?? "Unknown"}. Message: ${detail.group.message}. Occurrences this session: ${detail.group.occurrenceCount}. The selected Studio context includes the stack trace and source snippet.`,
+    );
+  };
 
   return (
     <>
@@ -271,6 +385,32 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
                 }
               }}
             />
+          ) : section === "errors" ? (
+            <ErrorsView
+              page={studioData.errorsQuery.data}
+              loading={studioData.errorsQuery.isLoading}
+              offset={studioData.errorsQuery.data?.offset ?? offset}
+              limit={studioData.errorsQuery.data?.limit ?? 100}
+              viewMode={errorView}
+              sort={errorSort}
+              errorType={errorType}
+              sourceFile={errorSourceFile}
+              tag={errorTag}
+              selectedGroupId={selectedErrorGroupId}
+              selection={selection}
+              resolvedGroupIds={resolvedGroupIds}
+              ignoredGroupIds={ignoredGroupIds}
+              onViewModeChange={setErrorView}
+              onSortChange={setErrorSort}
+              onErrorTypeChange={setErrorType}
+              onSourceFileChange={setErrorSourceFile}
+              onTagChange={setErrorTag}
+              onSelectGroup={setSelectedErrorGroupId}
+              onSelectRawRecord={setSelection}
+              onResolveGroup={handleResolveErrorGroup}
+              onIgnoreGroup={handleIgnoreErrorGroup}
+              onPageChange={setOffset}
+            />
           ) : (
             <LogList
               entries={entries}
@@ -290,7 +430,38 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
           )
         }
         detail={
-          selection?.kind === "group" ? (
+          section === "errors" && errorView === "grouped" ? (
+            <ErrorDetailPanel
+              detail={studioData.errorGroupQuery.data ?? null}
+              loading={studioData.errorGroupQuery.isLoading}
+              statusLabel={
+                selectedErrorGroup
+                  ? resolvedGroupIds.has(selectedErrorGroup.id)
+                    ? "Resolved"
+                    : selectedErrorGroup.statusHint === "new"
+                      ? "New"
+                      : "Recurring"
+                  : undefined
+              }
+              onAskAi={handleAskAiToFixError}
+              onViewTrace={
+                studioData.errorGroupQuery.data?.traceReference
+                  ? () => {
+                      const traceReference = studioData.errorGroupQuery.data?.traceReference;
+                      if (!traceReference) {
+                        return;
+                      }
+                      setSection(traceReference.sectionId);
+                      setSelection(
+                        traceReference.kind === "group"
+                          ? { kind: "group", id: traceReference.id }
+                          : { kind: "record", id: traceReference.id },
+                      );
+                    }
+                  : undefined
+              }
+            />
+          ) : selection?.kind === "group" ? (
             <GroupDetailPanel
               group={selectedGroup}
               loading={groupQuery.isLoading}

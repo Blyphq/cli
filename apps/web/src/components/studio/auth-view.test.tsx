@@ -72,6 +72,7 @@ describe("SectionNavPanel", () => {
     const onSelect = vi.fn();
     const { rerender } = render(
       <SectionNavPanel
+        projectPath="/project"
         meta={{
           project: {} as never,
           config: {} as never,
@@ -89,6 +90,7 @@ describe("SectionNavPanel", () => {
 
     rerender(
       <SectionNavPanel
+        projectPath="/project"
         meta={{
           project: {} as never,
           config: {} as never,

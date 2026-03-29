@@ -2,12 +2,19 @@ import { useQuery } from "@tanstack/react-query";
 import { useDeferredValue } from "react";
 
 import type {
+  StudioErrorSort,
+  StudioErrorViewMode,
   StudioFilters,
   StudioGroupingMode,
   StudioSectionId,
   StudioSelection,
 } from "@/lib/studio";
-import { isAllLogsSection, isAuthSection, isOverviewSection } from "@/lib/studio";
+import {
+  isAllLogsSection,
+  isAuthSection,
+  isErrorsSection,
+  isOverviewSection,
+} from "@/lib/studio";
 import { useTRPC } from "@/utils/trpc";
 
 export interface UseStudioDataParams {
@@ -18,6 +25,12 @@ export interface UseStudioDataParams {
   section: StudioSectionId;
   authUserId: string | null;
   selection: StudioSelection;
+  errorView?: StudioErrorViewMode;
+  errorSort?: StudioErrorSort;
+  errorType?: string;
+  errorSourceFile?: string;
+  errorTag?: string;
+  errorGroupId?: string | null;
 }
 
 export function useStudioData({
@@ -28,6 +41,12 @@ export function useStudioData({
   section,
   authUserId,
   selection,
+  errorView = "grouped",
+  errorSort = "most-recent",
+  errorType = "",
+  errorSourceFile = "",
+  errorTag = "",
+  errorGroupId = null,
 }: UseStudioDataParams) {
   const trpc = useTRPC();
   const deferredSearch = useDeferredValue(filters.search);
@@ -82,7 +101,8 @@ export function useStudioData({
       metaQuery.isSuccess &&
       metaQuery.data.project.valid &&
       !isOverviewSection(section) &&
-      !isAuthSection(section),
+      !isAuthSection(section) &&
+      !isErrorsSection(section),
     refetchInterval: 1000,
   });
 
@@ -99,6 +119,37 @@ export function useStudioData({
     }),
     enabled: metaQuery.isSuccess && metaQuery.data.project.valid && section === "auth",
     refetchInterval: 1000,
+  });
+
+  const errorsQuery = useQuery({
+    ...trpc.studio.errors.queryOptions({
+      projectPath,
+      offset,
+      limit: 100,
+      view: errorView,
+      sort: errorSort,
+      type: errorType || undefined,
+      sourceFile: errorSourceFile || undefined,
+      sectionId: errorTag || undefined,
+      fileId: filters.fileId || undefined,
+      from: filters.from || undefined,
+      to: filters.to || undefined,
+      search: deferredSearch || undefined,
+    }),
+    enabled: metaQuery.isSuccess && metaQuery.data.project.valid && isErrorsSection(section),
+    refetchInterval: 1000,
+  });
+
+  const errorGroupQuery = useQuery({
+    ...trpc.studio.errorGroup.queryOptions({
+      projectPath,
+      groupId: errorGroupId ?? "",
+    }),
+    enabled:
+      metaQuery.isSuccess &&
+      metaQuery.data.project.valid &&
+      isErrorsSection(section) &&
+      Boolean(errorGroupId),
   });
 
   const groupQuery = useQuery({
@@ -170,6 +221,8 @@ export function useStudioData({
     facetsQuery,
     logsQuery,
     authQuery,
+    errorsQuery,
+    errorGroupQuery,
     groupQuery,
     recordQuery,
     recordSourceQuery,

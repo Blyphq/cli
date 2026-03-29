@@ -3,6 +3,8 @@ export type StudioLogFileKind = "active" | "archive";
 export type StudioLogStream = "combined" | "error" | "unknown";
 export type StudioRecordSource = "server" | "client" | "structured" | "http" | "unknown";
 export type StudioGroupingMode = "flat" | "grouped";
+export type StudioErrorSort = "most-recent" | "most-frequent" | "first-seen";
+export type StudioErrorViewMode = "grouped" | "raw";
 export type StudioBuiltinSectionId =
   | "overview"
   | "errors"
@@ -310,6 +312,108 @@ export interface StudioLogsPage {
   totalEntries: number;
   scannedRecords: number;
   returnedCount: number;
+  offset: number;
+  limit: number;
+  truncated: boolean;
+}
+
+export interface StudioErrorsQueryInput {
+  projectPath?: string;
+  fileId?: string;
+  from?: string;
+  to?: string;
+  search?: string;
+  type?: string;
+  sourceFile?: string;
+  sectionId?: string;
+  sort?: StudioErrorSort;
+  view?: StudioErrorViewMode;
+  offset?: number;
+  limit?: number;
+}
+
+export interface StudioErrorFrequencyBucket {
+  bucketStart: string | null;
+  count: number;
+}
+
+export interface StudioErrorHttpContext {
+  method: string | null;
+  route: string | null;
+  statusCode: number | null;
+}
+
+export interface StudioErrorTag {
+  id: StudioSectionId;
+  label: string;
+}
+
+export interface StudioErrorGroupSummary {
+  id: string;
+  fingerprint: string;
+  errorType: string | null;
+  message: string;
+  occurrenceCount: number;
+  firstSeen: string | null;
+  lastSeen: string | null;
+  sourceFile: string | null;
+  sourceLine: number | null;
+  sourceColumn: number | null;
+  http: StudioErrorHttpContext | null;
+  tags: StudioErrorTag[];
+  statusHint: "new" | "recurring";
+  sparkline: StudioErrorFrequencyBucket[];
+  representativeRecordId: string;
+  traceId: string | null;
+  correlationId: string | null;
+}
+
+export interface StudioErrorOccurrence {
+  record: StudioNormalizedRecord;
+  errorType: string | null;
+  message: string;
+  sourceFile: string | null;
+  sourceLine: number | null;
+  sourceColumn: number | null;
+  http: StudioErrorHttpContext | null;
+}
+
+export interface StudioErrorStructuredField {
+  key: string;
+  value: string;
+}
+
+export interface StudioErrorTraceReference {
+  kind: "group" | "record";
+  id: string;
+  sectionId: StudioSectionId | "all-logs";
+  label: string;
+}
+
+export interface StudioErrorGroupDetail {
+  group: StudioErrorGroupSummary;
+  occurrences: StudioErrorOccurrence[];
+  structuredFields: StudioErrorStructuredField[];
+  traceReference: StudioErrorTraceReference | null;
+}
+
+export interface StudioErrorsStats {
+  totalUniqueErrorTypes: number;
+  totalErrorOccurrences: number;
+  mostFrequentError: {
+    errorType: string | null;
+    message: string;
+    count: number;
+  } | null;
+  newErrorsThisSession: number;
+}
+
+export interface StudioErrorsPage {
+  groups: StudioErrorGroupSummary[];
+  rawRecords: StudioErrorOccurrence[];
+  stats: StudioErrorsStats;
+  totalGroups: number;
+  totalRawRecords: number;
   offset: number;
   limit: number;
   truncated: boolean;

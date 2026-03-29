@@ -10,6 +10,8 @@ import {
   addStudioCustomSection,
   getStudioAuth,
   getStudioConfig,
+  getStudioErrorGroup,
+  getStudioErrors,
   getStudioFacets,
   getStudioFiles,
   getStudioGroup,
@@ -44,6 +46,21 @@ const studioAuthInput = z.object({
   limit: z.number().int().positive().max(500).optional(),
   userId: z.string().optional(),
   sectionId: z.string().optional(),
+});
+
+const studioErrorsInput = z.object({
+  projectPath: z.string().optional(),
+  fileId: z.string().optional(),
+  from: z.string().optional(),
+  to: z.string().optional(),
+  search: z.string().optional(),
+  type: z.string().optional(),
+  sourceFile: z.string().optional(),
+  sectionId: z.string().optional(),
+  sort: z.enum(["most-recent", "most-frequent", "first-seen"]).optional(),
+  view: z.enum(["grouped", "raw"]).optional(),
+  offset: z.number().int().min(0).optional(),
+  limit: z.number().int().positive().max(500).optional(),
 });
 
 const assistantInput = z.object({
@@ -82,6 +99,9 @@ export const studioRouter = router({
   auth: publicProcedure
     .input(studioAuthInput.optional())
     .query(({ input }) => getStudioAuth(input ?? {})),
+  errors: publicProcedure
+    .input(studioErrorsInput.optional())
+    .query(({ input }) => getStudioErrors(input ?? {})),
   fileLogs: publicProcedure
     .input(
       z.object({
@@ -135,6 +155,14 @@ export const studioRouter = router({
       }),
     )
     .query(({ input }) => getStudioGroup(input)),
+  errorGroup: publicProcedure
+    .input(
+      z.object({
+        projectPath: z.string().optional(),
+        groupId: z.string(),
+      }),
+    )
+    .query(({ input }) => getStudioErrorGroup(input)),
   record: publicProcedure
     .input(
       z.object({

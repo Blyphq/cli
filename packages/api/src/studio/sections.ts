@@ -3,6 +3,7 @@ import type {
   StudioDetectedSection,
   StudioNormalizedRecord,
   StudioSectionId,
+  StudioErrorTag,
 } from "./types";
 
 interface SectionDefinition {
@@ -22,16 +23,11 @@ const BUILTIN_SECTION_DEFINITIONS: SectionDefinition[] = [
     icon: "⚠",
     kind: "builtin",
     match(record) {
-      const status = record.http?.statusCode ?? getNumber(record, ["statusCode", "status"]);
-      const fieldHit = hasFieldPattern(record, ["error.*", "stack", "exception"]);
-      const messageHit = hasMessagePattern(record, ["error", "exception", "failed", "crash", "unhandled"]);
-      const errorTypeHit = hasErrorTypePattern(record, ["error", "exception", "panic", "prisma"]);
-      const statusHit = typeof status === "number" && status >= 500;
-      if (!fieldHit && !messageHit && !errorTypeHit && !statusHit) {
+      if (!matchesErrorSignal(record)) {
         return null;
       }
       return {
-        score: (fieldHit ? 5 : 0) + (statusHit ? 3 : 0) + (messageHit ? 2 : 0) + (errorTypeHit ? 2 : 0),
+        score: getErrorSignalScore(record),
         unreadError: true,
       };
     },
@@ -125,10 +121,7 @@ export function buildDetectedSections(
   records: StudioNormalizedRecord[],
   customSections: StudioCustomSectionDefinition[] = [],
 ): StudioDetectedSection[] {
-  const definitions = [
-    ...BUILTIN_SECTION_DEFINITIONS,
-    ...customSections.map(toCustomDefinition),
-  ];
+  const definitions = getSectionDefinitions(customSections);
 
   const detected: StudioDetectedSection[] = [];
 
@@ -180,12 +173,25 @@ export function matchesDetectedSection(
     return true;
   }
 
-  const definition = [
-    ...BUILTIN_SECTION_DEFINITIONS,
-    ...customSections.map(toCustomDefinition),
-  ].find((item) => item.id === sectionId);
+  const definition = getSectionDefinitions(customSections).find((item) => item.id === sectionId);
 
   return definition ? Boolean(definition.match(record)) : true;
+}
+
+export function getMatchedSectionTags(
+  record: StudioNormalizedRecord,
+  customSections: StudioCustomSectionDefinition[] = [],
+): StudioErrorTag[] {
+  return getSectionDefinitions(customSections)
+    .filter((definition) => definition.id !== "errors" && Boolean(definition.match(record)))
+    .map((definition) => ({
+      id: definition.id,
+      label: definition.label,
+    }));
+}
+
+export function matchesErrorSignal(record: StudioNormalizedRecord): boolean {
+  return getErrorSignalScore(record) > 0;
 }
 
 function toCustomDefinition(section: StudioCustomSectionDefinition): SectionDefinition {
@@ -203,6 +209,15 @@ function toCustomDefinition(section: StudioCustomSectionDefinition): SectionDefi
       });
     },
   };
+}
+
+function getSectionDefinitions(
+  customSections: StudioCustomSectionDefinition[] = [],
+): SectionDefinition[] {
+  return [
+    ...BUILTIN_SECTION_DEFINITIONS,
+    ...customSections.map(toCustomDefinition),
+  ];
 }
 
 function buildDomainMatch(
@@ -327,6 +342,20 @@ function sortSections(sections: StudioDetectedSection[]): StudioDetectedSection[
 function isErrorRecord(record: StudioNormalizedRecord): boolean {
   const status = record.http?.statusCode ?? getNumber(record, ["statusCode", "status"]);
   return record.level === "error" || Boolean(record.error) || (typeof status === "number" && status >= 500);
+}
+
+function getErrorSignalScore(record: StudioNormalizedRecord): number {
+  const status = record.http?.statusCode ?? getNumber(record, ["statusCode", "status"]);
+  const fieldHit = hasFieldPattern(record, ["error.*", "stack", "exception"]);
+  const messageHit = hasMessagePattern(record, ["error", "exception", "failed", "crash", "unhandled"]);
+  const errorTypeHit = hasErrorTypePattern(record, ["error", "exception", "panic", "prisma"]);
+  const statusHit = typeof status === "number" && status >= 500;
+
+  if (!fieldHit && !messageHit && !errorTypeHit && !statusHit) {
+    return 0;
+  }
+
+  return (fieldHit ? 5 : 0) + (statusHit ? 3 : 0) + (messageHit ? 2 : 0) + (errorTypeHit ? 2 : 0);
 }
 
 function getString(record: StudioNormalizedRecord, keys: string[]): string | null {

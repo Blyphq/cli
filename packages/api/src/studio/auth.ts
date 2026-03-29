@@ -364,7 +364,7 @@ function detectBruteForce(events: StudioAuthEvent[]): StudioAuthSuspiciousPatter
     groups.set(key, bucket);
   }
 
-  return detectWindowedPatterns(groups, 3, "brute-force", (key, windowEvents) => {
+  return detectWindowedPatterns(groups, 3, "brute-force", (_key, windowEvents) => {
     const first = windowEvents[0]!;
     const title = first.ip ? `Brute force indicator from ${first.ip}` : `Brute force indicator for ${first.userId}`;
     return {
@@ -392,7 +392,7 @@ function detectInvalidTokenSpikes(events: StudioAuthEvent[]): StudioAuthSuspicio
     groups.set(key, bucket);
   }
 
-  return detectWindowedPatterns(groups, 5, "invalid-token-spike", (key, windowEvents) => {
+  return detectWindowedPatterns(groups, 5, "invalid-token-spike", (_key, windowEvents) => {
     const first = windowEvents[0]!;
     return {
       title: "Invalid token spike",

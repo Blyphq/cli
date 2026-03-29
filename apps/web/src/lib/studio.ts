@@ -8,6 +8,7 @@ export type StudioConfig = RouterOutputs["studio"]["config"];
 export type StudioFiles = RouterOutputs["studio"]["files"];
 export type StudioFile = StudioFiles["files"][number];
 export type StudioLogsPage = RouterOutputs["studio"]["logs"];
+export type StudioErrorsPage = RouterOutputs["studio"]["errors"];
 export type StudioAuthOverview = RouterOutputs["studio"]["auth"];
 export type StudioAuthEvent = StudioAuthOverview["timeline"][number];
 export type StudioAuthSuspiciousPattern = StudioAuthOverview["suspiciousPatterns"][number];
@@ -16,11 +17,17 @@ export type StudioRecord = StudioLogsPage["records"][number];
 export type StudioRecordSourceContext = RouterOutputs["studio"]["recordSource"];
 export type StudioLogEntry = StudioLogsPage["entries"][number];
 export type StudioGroupDetail = NonNullable<RouterOutputs["studio"]["group"]>;
+export type StudioErrorGroupDetail = NonNullable<RouterOutputs["studio"]["errorGroup"]>;
+export type StudioErrorGroup = StudioErrorsPage["groups"][number];
+export type StudioErrorOccurrence = StudioErrorsPage["rawRecords"][number];
+export type StudioErrorStats = StudioErrorsPage["stats"];
 export type StudioFacets = RouterOutputs["studio"]["facets"];
 export type StudioAssistantStatus = RouterOutputs["studio"]["assistantStatus"];
 export type StudioAssistantMessage = RouterOutputs["studio"]["assistantReply"];
 export type StudioAssistantReference = StudioAssistantMessage["references"][number];
 export type StudioGroupingMode = "grouped" | "flat";
+export type StudioErrorSort = "most-recent" | "most-frequent" | "first-seen";
+export type StudioErrorViewMode = "grouped" | "raw";
 export type StudioDetectedSection = StudioMeta["sections"][number];
 export type StudioSectionId = StudioDetectedSection["id"] | "overview" | "all-logs";
 export type StudioChatStatus = "submitted" | "streaming" | "ready" | "error";
@@ -439,6 +446,10 @@ export function isAllLogsSection(section: StudioSectionId): boolean {
 
 export function isAuthSection(section: StudioSectionId): boolean {
   return section === "auth";
+}
+
+export function isErrorsSection(section: StudioSectionId): boolean {
+  return section === "errors";
 }
 
 function readStructuredEvents(value: Record<string, unknown>): unknown[] {

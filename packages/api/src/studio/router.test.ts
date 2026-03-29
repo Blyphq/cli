@@ -146,6 +146,71 @@ describe("studio router", () => {
     expect(description.references.length).toBeGreaterThan(0);
   });
 
+  it("serves grouped error summaries and error detail routes", async () => {
+    const projectDir = await createProject();
+    const logDir = path.join(projectDir, "logs");
+
+    await mkdir(logDir, { recursive: true });
+    await writeFile(
+      path.join(projectDir, "blyp.config.json"),
+      JSON.stringify({ file: { dir: "./logs" } }, null, 2),
+    );
+    await writeFile(
+      path.join(logDir, "log.ndjson"),
+      [
+        JSON.stringify({
+          timestamp: "2026-03-13T12:00:00.000Z",
+          level: "error",
+          message: "checkout failed",
+          type: "TypeError",
+          caller: "src/routes/checkout.ts:4",
+          error: {
+            name: "TypeError",
+            message: "checkout failed",
+            stack: "TypeError: checkout failed\n    at src/routes/checkout.ts:4:2",
+          },
+        }),
+        JSON.stringify({
+          timestamp: "2026-03-13T12:00:01.000Z",
+          level: "error",
+          message: "checkout failed",
+          type: "TypeError",
+          caller: "src/routes/checkout.ts:4",
+          error: {
+            name: "TypeError",
+            message: "checkout failed",
+            stack: "TypeError: checkout failed\n    at src/routes/checkout.ts:4:2",
+          },
+        }),
+      ].join("\n") + "\n",
+    );
+
+    const caller = appRouter.createCaller({ session: null });
+    const errors = await caller.studio.errors({
+      projectPath: projectDir,
+      view: "grouped",
+      sort: "most-frequent",
+      limit: 10,
+    });
+
+    expect(errors.stats.totalUniqueErrorTypes).toBe(1);
+    expect(errors.stats.totalErrorOccurrences).toBe(2);
+    expect(errors.groups[0]?.occurrenceCount).toBe(2);
+
+    const detail = await caller.studio.errorGroup({
+      projectPath: projectDir,
+      groupId: errors.groups[0]?.id ?? "",
+    });
+
+    expect(detail?.occurrences).toHaveLength(2);
+    expect(detail?.occurrences.map((item) => item.record.id)).toEqual(
+      expect.arrayContaining([
+        expect.stringMatching(/:1$/),
+        expect.stringMatching(/:2$/),
+      ]),
+    );
+  });
+
   it("serves DB-backed Studio routes through tRPC callers", async () => {
     const projectDir = await createProject();
     process.env.DATABASE_URL = "postgresql://user:pass@localhost:5432/test";
