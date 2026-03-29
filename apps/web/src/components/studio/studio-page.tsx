@@ -528,38 +528,6 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
                 }
               }}
             />
-          ) : isBackgroundSection(section) ? (
-            <BackgroundJobsView
-              page={studioData.backgroundJobsQuery.data}
-              loading={studioData.backgroundJobsQuery.isLoading}
-              selectedRunId={selection?.kind === "background-run" ? selection.id : null}
-              expandedRunId={expandedBackgroundRunId}
-              expandedRunDetail={
-                expandedBackgroundRunId &&
-                selection?.kind === "background-run" &&
-                expandedBackgroundRunId === selection.id
-                  ? studioData.backgroundJobRunQuery.data
-                  : null
-              }
-              expandedRunLoading={
-                Boolean(expandedBackgroundRunId) &&
-                selection?.kind === "background-run" &&
-                expandedBackgroundRunId === selection.id &&
-                studioData.backgroundJobRunQuery.isLoading
-              }
-              onSelectRun={(runId) => {
-                setExpandedBackgroundRunId(null);
-                setSelection({ kind: "background-run", id: runId });
-              }}
-              onToggleExpand={(runId) => {
-                const nextExpandedRunId =
-                  expandedBackgroundRunId === runId ? null : runId;
-                setExpandedBackgroundRunId(nextExpandedRunId);
-                if (nextExpandedRunId) {
-                  setSelection({ kind: "background-run", id: nextExpandedRunId });
-                }
-              }}
-            />
           ) : (
             <LogList
               entries={entries}
@@ -579,7 +547,6 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
           )
         }
         detail={
-          isOverviewSection(section) ? null :
           isOverviewSection(section) ? null :
           selection?.kind === "group" ? (
             <GroupDetailPanel
