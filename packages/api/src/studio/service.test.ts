@@ -31,6 +31,7 @@ import {
   getStudioFacets,
   getStudioFiles,
   getStudioGroup,
+  getStudioHttp,
   getStudioLogs,
   getStudioMeta,
   getStudioOverview,
@@ -75,6 +76,116 @@ describe("studio project resolution", () => {
     expect(resolved.resolvedFrom).toBe("env");
     expect(resolved.valid).toBe(false);
     expect(resolved.error).toContain("does not exist");
+  });
+});
+
+describe("studio http section", () => {
+  it("builds http aggregates, normalizes routes, and links traces", async () => {
+    const projectDir = await createProject();
+    const logDir = path.join(projectDir, "logs");
+
+    await mkdir(logDir, { recursive: true });
+    await writeFile(
+      path.join(logDir, "log.ndjson"),
+      [
+        createLogLine({
+          timestamp: "2026-03-13T10:00:00.000Z",
+          type: "http_request",
+          method: "GET",
+          path: "/api/users/1842?tab=profile",
+          route: "/api/users/:id",
+          statusCode: 200,
+          responseTime: 120,
+          requestId: "req-1",
+        }),
+        createLogLine({
+          timestamp: "2026-03-13T10:01:00.000Z",
+          type: "http_request",
+          method: "GET",
+          path: "/api/users/99",
+          statusCode: 503,
+          responseTime: 1800,
+          traceId: "trace-1",
+        }),
+        createLogLine({
+          timestamp: "2026-03-13T10:01:00.500Z",
+          level: "info",
+          message: "trace companion",
+          traceId: "trace-1",
+        }),
+      ].join(""),
+    );
+
+    const http = await getStudioHttp({ projectPath: projectDir });
+
+    expect(http.stats.totalRequests).toBe(2);
+    expect(http.stats.errorRate).toBe(0.5);
+    expect(http.stats.statusGroups["2xx"]).toBe(1);
+    expect(http.stats.statusGroups["5xx"]).toBe(1);
+    expect(http.requests[0]?.route).toBe("/api/users/:id");
+    expect(http.performance[0]?.route).toBe("/api/users/:id");
+    expect(http.performance[0]?.highlight).toBe("error");
+    expect(http.requests[0]?.traceGroupId).toBeTruthy();
+    expect(http.timeseries.length).toBeGreaterThan(0);
+    expect(http.facets.routes).toContain("/api/users/:id");
+  });
+
+  it("redacts sensitive http headers and request bodies", async () => {
+    const projectDir = await createProject();
+    const logDir = path.join(projectDir, "logs");
+
+    await mkdir(logDir, { recursive: true });
+    await writeFile(
+      path.join(logDir, "log.ndjson"),
+      createLogLine({
+        type: "http_request",
+        method: "POST",
+        path: "/session/create",
+        statusCode: 200,
+        responseTime: 45,
+        request: {
+          headers: {
+            authorization: "Bearer super-secret",
+            "x-request-id": "req-1",
+          },
+          body: {
+            password: "hunter2",
+            safe: "value",
+          },
+        },
+        response: {
+          headers: {
+            "set-cookie": "session=abc",
+          },
+          body: {
+            token: "secret-token",
+            ok: true,
+          },
+        },
+      }),
+    );
+
+    const logs = await getStudioLogs({
+      projectPath: projectDir,
+      sectionId: "http",
+      grouping: "flat",
+    });
+
+    expect(logs.records[0]?.http?.requestHeaders).toEqual({
+      authorization: "[redacted]",
+      "x-request-id": "req-1",
+    });
+    expect(logs.records[0]?.http?.requestBody).toEqual({
+      password: "[redacted]",
+      safe: "value",
+    });
+    expect(logs.records[0]?.http?.responseHeaders).toEqual({
+      "set-cookie": "[redacted]",
+    });
+    expect(logs.records[0]?.http?.responseBody).toEqual({
+      token: "[redacted]",
+      ok: true,
+    });
   });
 });
 

@@ -10,6 +10,7 @@ import { EmptyState } from "@/components/studio/empty-state";
 import { ErrorDetailPanel } from "@/components/studio/error-detail-panel";
 import { ErrorState } from "@/components/studio/error-state";
 import { GroupDetailPanel } from "@/components/studio/group-detail-panel";
+import { HttpView } from "@/components/studio/http-view";
 import { LogDetailPanel } from "@/components/studio/log-detail-panel";
 import { LogFilesPanel } from "@/components/studio/log-files-panel";
 import { LogList } from "@/components/studio/log-list";
@@ -22,6 +23,7 @@ import { useAssistantChat } from "@/hooks/use-assistant-chat";
 import {
   useErrorSessionState,
   DEFAULT_FILTERS,
+  DEFAULT_HTTP_UI,
   useStudioFiltersAndSelection,
   useSyncErrorSelectionFromEntries,
   useSyncSelectionFromEntries,
@@ -32,6 +34,7 @@ import {
   isBackgroundSection,
   isDatabaseSection,
   isErrorsSection,
+  isHttpSection,
   isOverviewSection,
 } from "@/lib/studio";
 import { formatDurationMs } from "@/lib/studio";
@@ -68,6 +71,8 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
     setAuthUi,
     errorUi,
     setErrorUi,
+    httpUi,
+    setHttpUi,
     draftProjectPath,
     setDraftProjectPath,
   } = useStudioFiltersAndSelection(projectPath);
@@ -80,6 +85,7 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
     grouping,
     section,
     errorUi,
+    httpUi,
     authUserId: authUi.selectedUserId,
     selection,
   });
@@ -107,6 +113,7 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
     !isAuthSection(section) &&
     !isDatabaseSection(section) &&
     !isBackgroundSection(section) &&
+    !isHttpSection(section) &&
     !isErrorsSection(section);
   useSyncSelectionFromEntries(entries, selection, setSelection, shouldSyncSelection);
   useSyncErrorSelectionFromEntries(
@@ -116,6 +123,36 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
     errorUi.view === "grouped",
     isErrorsSection(section),
   );
+
+  useEffect(() => {
+    if (!isHttpSection(section)) {
+      return;
+    }
+
+    if (studioData.httpQuery.isLoading && !studioData.httpQuery.data) {
+      return;
+    }
+
+    const requests = studioData.httpQuery.data?.requests ?? [];
+    if (requests.length === 0) {
+      setSelection(null);
+      return;
+    }
+
+    const hasMatchingSelection =
+      selection?.kind === "record" &&
+      requests.some((request) => request.recordId === selection.id);
+
+    if (!hasMatchingSelection) {
+      setSelection({ kind: "record", id: requests[0]!.recordId });
+    }
+  }, [
+    section,
+    selection,
+    setSelection,
+    studioData.httpQuery.isLoading,
+    studioData.httpQuery.data,
+  ]);
 
   useEffect(() => {
     setOverviewConnectedAt(new Date().toISOString());
@@ -143,6 +180,10 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
     errorUi.type,
     errorUi.sourceFile,
     errorUi.sectionTag,
+    httpUi.method,
+    httpUi.statusGroup,
+    httpUi.route,
+    httpUi.minDurationMs,
     setOffset,
   ]);
 
@@ -330,6 +371,12 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
     assistant.createSelectionChatAndSubmit(prompt);
   };
 
+  const handleViewHttpTrace = (traceGroupId: string) => {
+    setGrouping("grouped");
+    setSection("all-logs");
+    setSelection({ kind: "group", id: traceGroupId });
+  };
+
   return (
     <>
       <StudioShell
@@ -404,6 +451,7 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
                 studioData.overviewQuery.error?.message ??
                 studioData.authQuery.error?.message ??
                 studioData.backgroundJobsQuery.error?.message ??
+                studioData.httpQuery.error?.message ??
                 studioData.backgroundJobRunQuery.error?.message ??
                 studioData.databaseQuery.error?.message ??
                 groupQuery.error?.message ??
@@ -495,6 +543,22 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
                 });
                 setSelection({ kind: "record", id: query.recordId });
               }}
+            />
+          ) : isHttpSection(section) ? (
+            <HttpView
+              page={studioData.httpQuery.data}
+              loading={studioData.httpQuery.isLoading}
+              selectedRecordId={selection?.kind === "record" ? selection.id : null}
+              httpUi={httpUi}
+              onHttpUiChange={setHttpUi}
+              onResetHttpFilters={() => setHttpUi(DEFAULT_HTTP_UI)}
+              onSelectRecord={(recordId) => setSelection({ kind: "record", id: recordId })}
+              onPageChange={setOffset}
+              onSelectRoute={(route) => {
+                setOffset(0);
+                setHttpUi((current) => ({ ...current, route }));
+              }}
+              onViewTrace={handleViewHttpTrace}
             />
           ) : isBackgroundSection(section) ? (
             <BackgroundJobsView

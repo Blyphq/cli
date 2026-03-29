@@ -4,6 +4,7 @@ export { useErrorSessionState } from "./use-error-session-state";
 export {
   DEFAULT_ERROR_UI,
   DEFAULT_FILTERS,
+  DEFAULT_HTTP_UI,
   useStudioFiltersAndSelection,
   useSyncErrorSelectionFromEntries,
   useSyncSelectionFromEntries,
