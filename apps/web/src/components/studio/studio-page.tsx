@@ -418,6 +418,7 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
                 }
                 record={selectedRecord}
                 recordSource={recordSourceQuery.data ?? null}
+                recordSourceLoading={recordSourceQuery.isLoading}
               />
             ) : (
               <LogDetailPanel

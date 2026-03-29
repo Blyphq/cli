@@ -70,6 +70,9 @@ export function ErrorsView({
     return true;
   });
   const resolvedGroups = groups.filter((group) => isGroupResolved(group, resolvedAtByFingerprint[group.fingerprint]));
+  const visibleResolvedGroups = resolvedGroups.filter(
+    (group) => !ignoredByFingerprint[group.fingerprint],
+  );
   const ignoredGroups = groups.filter((group) => Boolean(ignoredByFingerprint[group.fingerprint]));
 
   return (
@@ -198,7 +201,7 @@ export function ErrorsView({
                   />
                 ))}
               </div>
-              {ui.showResolved && resolvedGroups.length > 0 ? (
+              {ui.showResolved && visibleResolvedGroups.length > 0 ? (
                 <div className="border-t border-border/60 p-4">
                   <button
                     type="button"
@@ -206,11 +209,11 @@ export function ErrorsView({
                     onClick={() => onToggleResolvedCollapsed(!resolvedCollapsed)}
                   >
                     <span>{resolvedCollapsed ? "Show" : "Hide"} resolved</span>
-                    <Badge variant="secondary">{resolvedGroups.length}</Badge>
+                    <Badge variant="secondary">{visibleResolvedGroups.length}</Badge>
                   </button>
                   {!resolvedCollapsed ? (
                     <div className="mt-3">
-                      {resolvedGroups.map((group) => (
+                      {visibleResolvedGroups.map((group) => (
                         <ErrorGroupRow
                           key={`resolved:${group.fingerprint}`}
                           group={group}

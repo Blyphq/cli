@@ -163,6 +163,9 @@ export async function getStudioErrors(
   input: StudioErrorsQueryInput,
 ): Promise<StudioErrorsPage> {
   const { files, project, config } = await getStudioProjectFiles(input.projectPath);
+  const candidateFiles = input.fileId
+    ? files.files.filter((file) => file.id === input.fileId)
+    : files.files;
 
   const loaded =
     files.mode === "database"
@@ -171,7 +174,12 @@ export async function getStudioErrors(
           config,
           input,
         })
-      : await loadProjectRecords(project.absolutePath, config, files, input);
+      : await loadProjectRecords(
+          project.absolutePath,
+          config,
+          { ...files, files: candidateFiles },
+          input,
+        );
 
   return buildErrorsPage({
     records: loaded.records,

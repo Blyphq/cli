@@ -108,7 +108,11 @@ function writeState(projectPath: string, state: StoredErrorSessionState) {
     return;
   }
 
-  window.sessionStorage.setItem(getStorageKey(projectPath), JSON.stringify(state));
+  try {
+    window.sessionStorage.setItem(getStorageKey(projectPath), JSON.stringify(state));
+  } catch {
+    // Ignore storage quota/privacy-mode failures; session UI state is best effort.
+  }
 }
 
 function omitKey<T extends Record<string, unknown>>(value: T, key: string): T {

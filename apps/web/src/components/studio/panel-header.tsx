@@ -30,7 +30,7 @@ export function PanelHeader({
         {action ? <CardAction>{action}</CardAction> : null}
       </div>
       {description ? (
-        <CardDescription className="min-w-0 w- break-words">
+        <CardDescription className="min-w-0 w-full break-words">
           {description}
         </CardDescription>
       ) : null}

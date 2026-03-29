@@ -24,6 +24,7 @@ interface ErrorDetailPanelProps {
   occurrence: StudioErrorOccurrence | null;
   record: StudioRecord | null;
   recordSource?: StudioRecordSourceContext | null;
+  recordSourceLoading?: boolean;
   loading?: boolean;
   resolvedAt?: string | null;
   ignored?: boolean;
@@ -38,6 +39,7 @@ export function ErrorDetailPanel({
   occurrence,
   record,
   recordSource,
+  recordSourceLoading = false,
   loading = false,
   resolvedAt,
   ignored,
@@ -46,8 +48,23 @@ export function ErrorDetailPanel({
   onIgnore,
   onViewTrace,
 }: ErrorDetailPanelProps) {
-  if (occurrence && record) {
-    return <LogDetailPanel record={record} source={recordSource} />;
+  if (occurrence) {
+    if (!record) {
+      return (
+        <EmptyState
+          title="Loading occurrence"
+          description="Resolving the selected error occurrence and source context."
+        />
+      );
+    }
+
+    return (
+      <LogDetailPanel
+        record={record}
+        source={recordSource}
+        sourceLoading={recordSourceLoading}
+      />
+    );
   }
 
   if (loading && !group) {
@@ -122,9 +139,8 @@ export function ErrorDetailPanel({
               {
                 label: "Source",
                 value:
-                  group.group.fingerprintSource.relativePath &&
-                  group.group.fingerprintSource.line
-                    ? `${group.group.fingerprintSource.relativePath}:${group.group.fingerprintSource.line}`
+                  group.group.fingerprintSource.relativePath
+                    ? `${group.group.fingerprintSource.relativePath}${group.group.fingerprintSource.line ? `:${group.group.fingerprintSource.line}` : ""}`
                     : "Unknown source",
               },
               {
