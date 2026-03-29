@@ -3,7 +3,6 @@ import type {
   StudioDetectedSection,
   StudioNormalizedRecord,
   StudioSectionId,
-  StudioErrorTag,
 } from "./types";
 
 interface SectionDefinition {
@@ -23,11 +22,16 @@ const BUILTIN_SECTION_DEFINITIONS: SectionDefinition[] = [
     icon: "⚠",
     kind: "builtin",
     match(record) {
-      if (!matchesErrorSignal(record)) {
+      const status = record.http?.statusCode ?? getNumber(record, ["statusCode", "status"]);
+      const fieldHit = hasFieldPattern(record, ["error.*", "stack", "exception"]);
+      const messageHit = hasMessagePattern(record, ["error", "exception", "failed", "crash", "unhandled"]);
+      const errorTypeHit = hasErrorTypePattern(record, ["error", "exception", "panic", "prisma"]);
+      const statusHit = typeof status === "number" && status >= 500;
+      if (!fieldHit && !messageHit && !errorTypeHit && !statusHit) {
         return null;
       }
       return {
-        score: getErrorSignalScore(record),
+        score: (fieldHit ? 5 : 0) + (statusHit ? 3 : 0) + (messageHit ? 2 : 0) + (errorTypeHit ? 2 : 0),
         unreadError: true,
       };
     },
@@ -121,7 +125,10 @@ export function buildDetectedSections(
   records: StudioNormalizedRecord[],
   customSections: StudioCustomSectionDefinition[] = [],
 ): StudioDetectedSection[] {
-  const definitions = getSectionDefinitions(customSections);
+  const definitions = [
+    ...BUILTIN_SECTION_DEFINITIONS,
+    ...customSections.map(toCustomDefinition),
+  ];
 
   const detected: StudioDetectedSection[] = [];
 
@@ -173,25 +180,24 @@ export function matchesDetectedSection(
     return true;
   }
 
-  const definition = getSectionDefinitions(customSections).find((item) => item.id === sectionId);
+  const definition = [
+    ...BUILTIN_SECTION_DEFINITIONS,
+    ...customSections.map(toCustomDefinition),
+  ].find((item) => item.id === sectionId);
 
   return definition ? Boolean(definition.match(record)) : true;
 }
 
-export function getMatchedSectionTags(
+export function getMatchedSectionIds(
   record: StudioNormalizedRecord,
   customSections: StudioCustomSectionDefinition[] = [],
-): StudioErrorTag[] {
-  return getSectionDefinitions(customSections)
-    .filter((definition) => definition.id !== "errors" && Boolean(definition.match(record)))
-    .map((definition) => ({
-      id: definition.id,
-      label: definition.label,
-    }));
-}
-
-export function matchesErrorSignal(record: StudioNormalizedRecord): boolean {
-  return getErrorSignalScore(record) > 0;
+): StudioSectionId[] {
+  return [
+    ...BUILTIN_SECTION_DEFINITIONS,
+    ...customSections.map(toCustomDefinition),
+  ]
+    .filter((definition) => Boolean(definition.match(record)))
+    .map((definition) => definition.id);
 }
 
 function toCustomDefinition(section: StudioCustomSectionDefinition): SectionDefinition {
@@ -209,15 +215,6 @@ function toCustomDefinition(section: StudioCustomSectionDefinition): SectionDefi
       });
     },
   };
-}
-
-function getSectionDefinitions(
-  customSections: StudioCustomSectionDefinition[] = [],
-): SectionDefinition[] {
-  return [
-    ...BUILTIN_SECTION_DEFINITIONS,
-    ...customSections.map(toCustomDefinition),
-  ];
 }
 
 function buildDomainMatch(
@@ -339,23 +336,15 @@ function sortSections(sections: StudioDetectedSection[]): StudioDetectedSection[
   });
 }
 
-function isErrorRecord(record: StudioNormalizedRecord): boolean {
+export function isErrorRecord(record: StudioNormalizedRecord): boolean {
   const status = record.http?.statusCode ?? getNumber(record, ["statusCode", "status"]);
-  return record.level === "error" || Boolean(record.error) || (typeof status === "number" && status >= 500);
-}
-
-function getErrorSignalScore(record: StudioNormalizedRecord): number {
-  const status = record.http?.statusCode ?? getNumber(record, ["statusCode", "status"]);
-  const fieldHit = hasFieldPattern(record, ["error.*", "stack", "exception"]);
-  const messageHit = hasMessagePattern(record, ["error", "exception", "failed", "crash", "unhandled"]);
-  const errorTypeHit = hasErrorTypePattern(record, ["error", "exception", "panic", "prisma"]);
-  const statusHit = typeof status === "number" && status >= 500;
-
-  if (!fieldHit && !messageHit && !errorTypeHit && !statusHit) {
-    return 0;
-  }
-
-  return (fieldHit ? 5 : 0) + (statusHit ? 3 : 0) + (messageHit ? 2 : 0) + (errorTypeHit ? 2 : 0);
+  return (
+    record.level === "error" ||
+    record.level === "critical" ||
+    Boolean(record.error) ||
+    Boolean(record.stack) ||
+    (typeof status === "number" && status >= 500)
+  );
 }
 
 function getString(record: StudioNormalizedRecord, keys: string[]): string | null {

@@ -1,12 +1,12 @@
 import type { StudioErrorGroup } from "@/lib/studio";
 
 interface SparklineProps {
-  points: StudioErrorGroup["sparkline"];
+  points: StudioErrorGroup["sparklineBuckets"];
   className?: string;
 }
 
 export function Sparkline({ points, className }: SparklineProps) {
-  const max = Math.max(1, ...points.map((point) => point.count));
+  const max = Math.max(1, ...points);
   const width = 96;
   const height = 24;
 
@@ -17,7 +17,7 @@ export function Sparkline({ points, className }: SparklineProps) {
   const path = points
     .map((point, index) => {
       const x = points.length === 1 ? width : (index / (points.length - 1)) * width;
-      const y = height - (point.count / max) * (height - 2) - 1;
+      const y = height - (point / max) * (height - 2) - 1;
       return `${index === 0 ? "M" : "L"}${x.toFixed(1)} ${y.toFixed(1)}`;
     })
     .join(" ");

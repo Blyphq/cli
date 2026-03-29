@@ -1,18 +1,18 @@
 import { Card, CardContent } from "@/components/ui/card";
 import type { StudioErrorStats } from "@/lib/studio";
 
-interface ErrorsStatsBarProps {
+interface ErrorStatsBarProps {
   stats: StudioErrorStats;
 }
 
-export function ErrorsStatsBar({ stats }: ErrorsStatsBarProps) {
+export function ErrorStatsBar({ stats }: ErrorStatsBarProps) {
   const items = [
     {
-      label: "Unique error types",
+      label: "Unique errors",
       value: String(stats.uniqueErrorTypes),
     },
     {
-      label: "Error occurrences",
+      label: "Occurrences",
       value: String(stats.totalOccurrences),
     },
     {
@@ -30,17 +30,17 @@ export function ErrorsStatsBar({ stats }: ErrorsStatsBarProps) {
   ];
 
   return (
-    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-      {items.map((item) => (
-        <Card key={item.label} size="sm">
-          <CardContent className="space-y-1 p-4">
+    <Card size="sm">
+      <CardContent className="grid gap-3 px-4 py-4 md:grid-cols-4">
+        {items.map((item) => (
+          <div key={item.label} className="space-y-1">
             <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
               {item.label}
             </div>
-            <div className="text-sm font-medium break-words">{item.value}</div>
-          </CardContent>
-        </Card>
-      ))}
-    </div>
+            <div className="text-sm font-medium">{item.value}</div>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
   );
 }

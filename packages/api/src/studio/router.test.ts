@@ -146,15 +146,11 @@ describe("studio router", () => {
     expect(description.references.length).toBeGreaterThan(0);
   });
 
-  it("serves grouped error summaries and error detail routes", async () => {
+  it("serves error grouping routes through tRPC callers", async () => {
     const projectDir = await createProject();
     const logDir = path.join(projectDir, "logs");
 
     await mkdir(logDir, { recursive: true });
-    await writeFile(
-      path.join(projectDir, "blyp.config.json"),
-      JSON.stringify({ file: { dir: "./logs" } }, null, 2),
-    );
     await writeFile(
       path.join(logDir, "log.ndjson"),
       [
@@ -162,25 +158,23 @@ describe("studio router", () => {
           timestamp: "2026-03-13T12:00:00.000Z",
           level: "error",
           message: "checkout failed",
-          type: "TypeError",
-          caller: "src/routes/checkout.ts:4",
-          error: {
-            name: "TypeError",
-            message: "checkout failed",
-            stack: "TypeError: checkout failed\n    at src/routes/checkout.ts:4:2",
-          },
+          error: { name: "CheckoutError", message: "checkout failed" },
+          stack: "CheckoutError: checkout failed\n    at checkout (/tmp/project/src/routes/checkout.ts:4:1)",
+          groupId: "checkout-1",
+          path: "/checkout",
+          method: "POST",
+          statusCode: 500,
         }),
         JSON.stringify({
           timestamp: "2026-03-13T12:00:01.000Z",
           level: "error",
           message: "checkout failed",
-          type: "TypeError",
-          caller: "src/routes/checkout.ts:4",
-          error: {
-            name: "TypeError",
-            message: "checkout failed",
-            stack: "TypeError: checkout failed\n    at src/routes/checkout.ts:4:2",
-          },
+          error: { name: "CheckoutError", message: "checkout failed" },
+          stack: "CheckoutError: checkout failed\n    at checkout (/tmp/project/src/routes/checkout.ts:4:1)",
+          groupId: "checkout-1",
+          path: "/checkout",
+          method: "POST",
+          statusCode: 500,
         }),
       ].join("\n") + "\n",
     );
@@ -189,83 +183,20 @@ describe("studio router", () => {
     const errors = await caller.studio.errors({
       projectPath: projectDir,
       view: "grouped",
-      sort: "most-frequent",
       limit: 10,
     });
 
-    expect(errors.stats.totalUniqueErrorTypes).toBe(1);
-    expect(errors.stats.totalErrorOccurrences).toBe(2);
-    expect(errors.groups[0]?.occurrenceCount).toBe(2);
+    expect(errors.groups[0]).toMatchObject({
+      errorType: "CheckoutError",
+      occurrenceCount: 2,
+    });
 
     const detail = await caller.studio.errorGroup({
       projectPath: projectDir,
-      groupId: errors.groups[0]?.id ?? "",
+      fingerprint: errors.groups[0]!.fingerprint,
     });
 
     expect(detail?.occurrences).toHaveLength(2);
-    expect(detail?.occurrences.map((item) => item.record.id)).toEqual(
-      expect.arrayContaining([
-        expect.stringMatching(/:1$/),
-        expect.stringMatching(/:2$/),
-      ]),
-    );
-  });
-
-  it("serves background job routes and accepts background-run assistant selections", async () => {
-    const projectDir = await createProject();
-    const logDir = path.join(projectDir, "logs");
-
-    await mkdir(logDir, { recursive: true });
-    await writeFile(
-      path.join(projectDir, "blyp.config.json"),
-      JSON.stringify({ file: { dir: "./logs" } }, null, 2),
-    );
-    await writeFile(
-      path.join(logDir, "log.ndjson"),
-      [
-        JSON.stringify({
-          timestamp: "2026-03-13T15:00:00.000Z",
-          level: "info",
-          message: "sync catalog job started",
-          job: { name: "Sync Catalog", runId: "catalog-1", status: "started" },
-        }),
-        JSON.stringify({
-          timestamp: "2026-03-13T15:00:20.000Z",
-          level: "error",
-          message: "sync catalog job failed",
-          job: { name: "Sync Catalog", runId: "catalog-1", step: "publish", status: "failed" },
-          error: { message: "catalog publish rejected" },
-        }),
-      ].join("\n") + "\n",
-    );
-
-    process.env.OPENROUTER_API_KEY = "test-key";
-    process.env.OPENROUTER_MODEL = "openai/gpt-5.4";
-    __setGenerateTextForTests(
-      async () => ({
-        text: "Inspect the failed background run.",
-      }),
-    );
-
-    const caller = appRouter.createCaller({ session: null });
-    const overview = await caller.studio.backgroundJobs({
-      projectPath: projectDir,
-      limit: 10,
-    });
-    const detail = await caller.studio.backgroundJobRun({
-      projectPath: projectDir,
-      runId: overview.runs[0]?.id ?? "",
-    });
-    const description = await caller.studio.describeSelection({
-      projectPath: projectDir,
-      history: [],
-      filters: {},
-      selectedBackgroundRunId: overview.runs[0]?.id,
-    });
-
-    expect(overview.runs[0]?.jobName).toBe("Sync Catalog");
-    expect(detail?.run.failure?.message).toBe("catalog publish rejected");
-    expect(description.references.some((reference) => reference.kind === "background-run")).toBe(true);
   });
 
   it("serves DB-backed Studio routes through tRPC callers", async () => {
@@ -286,11 +217,15 @@ describe("studio router", () => {
         record: {
           timestamp: "2026-03-13T12:00:00.000Z",
           level: "error",
-          message: "hello from db caller",
-          type: "checkout_flow",
+          message: "query executed",
+          type: "prisma_query",
           caller: "src/routes/db.ts:4",
-          groupId: "checkout-1",
-          events: ["error"],
+          query: {
+            operation: "select",
+            model: "Order",
+            durationMs: 120,
+            sql: "SELECT * FROM orders WHERE id = $1",
+          },
         },
       },
     ]);
@@ -321,6 +256,10 @@ describe("studio router", () => {
       grouping: "flat",
       limit: 10,
     });
+    const database = await caller.studio.database({
+      projectPath: projectDir,
+      limit: 10,
+    });
 
     expect(meta.logs.mode).toBe("database");
     expect(meta.logs.database).toMatchObject({
@@ -334,6 +273,80 @@ describe("studio router", () => {
       filePath: "database://blyp_logs",
       lineNumber: 0,
     });
+    expect(database.totalQueries).toBe(1);
+    expect(database.queries[0]).toMatchObject({
+      operation: "SELECT",
+      modelOrTable: "Order",
+      durationMs: 120,
+      status: "slow",
+    });
+  });
+
+  it("serves background job routes and accepts background-run assistant selections", async () => {
+    const projectDir = await createProject();
+    const logDir = path.join(projectDir, "logs");
+
+    await mkdir(logDir, { recursive: true });
+    await writeFile(
+      path.join(logDir, "log.ndjson"),
+      [
+        JSON.stringify({
+          timestamp: "2026-03-13T14:00:00.000Z",
+          level: "info",
+          message: "queue rebuild job started",
+          queue: { name: "Queue Rebuild", runId: "rebuild-1", status: "started" },
+        }),
+        JSON.stringify({
+          timestamp: "2026-03-13T14:00:15.000Z",
+          level: "error",
+          message: "queue rebuild job failed",
+          queue: {
+            name: "Queue Rebuild",
+            runId: "rebuild-1",
+            step: "publish",
+            status: "failed",
+          },
+          error: { message: "publish rejected" },
+        }),
+      ].join("\n") + "\n",
+    );
+
+    process.env.OPENROUTER_API_KEY = "test-key";
+    process.env.OPENROUTER_MODEL = "openai/gpt-5.4";
+    __setGenerateTextForTests(async () => ({ text: "Use the failed run timeline." }));
+
+    const caller = appRouter.createCaller({ session: null });
+    const overview = await caller.studio.backgroundJobs({
+      projectPath: projectDir,
+      limit: 10,
+    });
+    const detail = await caller.studio.backgroundJobRun({
+      projectPath: projectDir,
+      runId: overview.runs[0]?.id ?? "",
+    });
+    const description = await caller.studio.describeSelection({
+      projectPath: projectDir,
+      history: [],
+      filters: {},
+      selectedBackgroundRunId: overview.runs[0]?.id,
+    });
+
+    expect(overview.runs[0]).toMatchObject({
+      jobName: "Queue Rebuild",
+      status: "FAILED",
+    });
+    expect(detail?.run.failure).toMatchObject({
+      message: "publish rejected",
+      step: "publish",
+    });
+    expect(description.references).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "background-run",
+          label: "Queue Rebuild",
+        }),
+      ]),
+    );
   });
 });
 

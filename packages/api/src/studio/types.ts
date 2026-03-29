@@ -5,6 +5,7 @@ export type StudioRecordSource = "server" | "client" | "structured" | "http" | "
 export type StudioGroupingMode = "flat" | "grouped";
 export type StudioErrorSort = "most-recent" | "most-frequent" | "first-seen";
 export type StudioErrorViewMode = "grouped" | "raw";
+export type StudioErrorStatus = "active" | "resolved" | "ignored";
 export type StudioBuiltinSectionId =
   | "overview"
   | "errors"
@@ -303,6 +304,88 @@ export type StudioBackgroundJobTrend =
   | "faster"
   | "insufficient_data";
 
+export interface StudioErrorFingerprintSource {
+  key: string;
+  kind: "source-location" | "stack-frame" | "caller" | "unknown";
+  relativePath: string | null;
+  line: number | null;
+  column: number | null;
+}
+
+export interface StudioErrorStackFrame {
+  raw: string;
+  relativePath: string | null;
+  absolutePath: string | null;
+  line: number | null;
+  column: number | null;
+  inProject: boolean;
+}
+
+export interface StudioErrorOccurrence {
+  kind: "occurrence";
+  id: string;
+  fingerprint: string;
+  timestamp: string | null;
+  level: string;
+  type: string;
+  message: string;
+  messageFirstLine: string;
+  fileId: string;
+  fileName: string;
+  filePath: string;
+  lineNumber: number;
+  caller: string | null;
+  stack: string | null;
+  stackFrames: StudioErrorStackFrame[];
+  http: StudioHttpDetails | null;
+  sourceLocation: StudioResolvedSourceLocation | null;
+  fingerprintSource: StudioErrorFingerprintSource;
+  sectionTags: string[];
+  relatedTraceGroupId: string | null;
+  structuredFields: Record<string, unknown>;
+  raw: unknown;
+}
+
+export interface StudioErrorGroupSummary {
+  kind: "error-group";
+  fingerprint: string;
+  errorType: string;
+  message: string;
+  messageFirstLine: string;
+  occurrenceCount: number;
+  firstSeenAt: string | null;
+  lastSeenAt: string | null;
+  sourceLocation: StudioResolvedSourceLocation | null;
+  fingerprintSource: StudioErrorFingerprintSource;
+  http: Pick<StudioHttpDetails, "method" | "path" | "statusCode" | "url"> | null;
+  sectionTags: string[];
+  sparklineBuckets: number[];
+  representativeOccurrenceId: string;
+  relatedTraceGroupId: string | null;
+}
+
+export interface StudioErrorGroupDetail {
+  group: StudioErrorGroupSummary;
+  occurrences: StudioErrorOccurrence[];
+}
+
+export interface StudioErrorStats {
+  uniqueErrorTypes: number;
+  totalOccurrences: number;
+  mostFrequentError:
+    | {
+        fingerprint: string;
+        type: string;
+        messageFirstLine: string;
+        count: number;
+      }
+    | null;
+  newErrorsComparedToPreviousSessions: {
+    available: boolean;
+    count: number | null;
+  };
+}
+
 export interface StudioLogsQueryInput {
   projectPath?: string;
   limit?: number;
@@ -317,6 +400,31 @@ export interface StudioLogsQueryInput {
   sectionId?: string;
 }
 
+export interface StudioErrorsQueryInput {
+  projectPath?: string;
+  limit?: number;
+  offset?: number;
+  view?: StudioErrorViewMode;
+  sort?: StudioErrorSort;
+  type?: string;
+  sourceFile?: string;
+  search?: string;
+  fileId?: string;
+  from?: string;
+  to?: string;
+  sectionId?: string;
+}
+
+export interface StudioBackgroundJobsQueryInput {
+  projectPath?: string;
+  fileId?: string;
+  from?: string;
+  to?: string;
+  search?: string;
+  offset?: number;
+  limit?: number;
+}
+
 export interface StudioLogsPage {
   records: StudioNormalizedRecord[];
   entries: StudioLogListEntry[];
@@ -329,22 +437,75 @@ export interface StudioLogsPage {
   truncated: boolean;
 }
 
-export interface StudioErrorsQueryInput {
-  projectPath?: string;
-  fileId?: string;
-  from?: string;
-  to?: string;
-  search?: string;
-  type?: string;
-  sourceFile?: string;
-  sectionId?: string;
-  sort?: StudioErrorSort;
-  view?: StudioErrorViewMode;
-  offset?: number;
-  limit?: number;
+export type StudioDatabaseQueryStatus = "success" | "error" | "slow";
+export type StudioDatabaseEventKind =
+  | "query"
+  | "transaction-start"
+  | "transaction-commit"
+  | "transaction-rollback"
+  | "migration"
+  | "connection"
+  | "unknown";
+
+export interface StudioDatabaseStats {
+  totalQueries: number;
+  slowQueries: number;
+  failedQueries: number;
+  avgQueryTimeMs: number | null;
+  activeTransactions: number;
 }
 
-export interface StudioBackgroundJobsQueryInput {
+export interface StudioDatabaseQueryEvent {
+  id: string;
+  recordId: string;
+  timestamp: string | null;
+  operation: string;
+  modelOrTable: string | null;
+  durationMs: number | null;
+  status: StudioDatabaseQueryStatus;
+  transactionId: string | null;
+  requestId: string | null;
+  traceId: string | null;
+  queryText: string | null;
+  params: unknown;
+  errorMessage: string | null;
+  durationBreakdown: Record<string, number> | null;
+  adapter: "prisma" | "drizzle" | null;
+}
+
+export interface StudioDatabaseTransactionSummary {
+  id: string;
+  startRecordId: string;
+  timestampStart: string | null;
+  timestampEnd: string | null;
+  durationMs: number | null;
+  result: "committed" | "rolled_back" | "open";
+  requestId: string | null;
+  traceId: string | null;
+  queries: StudioDatabaseQueryEvent[];
+}
+
+export interface StudioDatabaseMigrationEvent {
+  id: string;
+  recordId: string;
+  timestamp: string | null;
+  name: string | null;
+  version: string | null;
+  durationMs: number | null;
+  success: boolean;
+  errorMessage: string | null;
+}
+
+export interface StudioDatabaseOverview {
+  stats: StudioDatabaseStats;
+  queries: StudioDatabaseQueryEvent[];
+  totalQueries: number;
+  slowQueries: StudioDatabaseQueryEvent[];
+  transactions: StudioDatabaseTransactionSummary[];
+  migrationEvents: StudioDatabaseMigrationEvent[];
+}
+
+export interface StudioDatabaseQueryInput {
   projectPath?: string;
   fileId?: string;
   from?: string;
@@ -424,91 +585,23 @@ export interface StudioBackgroundJobsOverview {
   truncated: boolean;
 }
 
-export interface StudioErrorFrequencyBucket {
-  bucketStart: string | null;
-  count: number;
-}
-
-export interface StudioErrorHttpContext {
-  method: string | null;
-  route: string | null;
-  statusCode: number | null;
-}
-
-export interface StudioErrorTag {
-  id: StudioSectionId;
-  label: string;
-}
-
-export interface StudioErrorGroupSummary {
-  id: string;
-  fingerprint: string;
-  errorType: string | null;
-  message: string;
-  occurrenceCount: number;
-  firstSeen: string | null;
-  lastSeen: string | null;
-  sourceFile: string | null;
-  sourceLine: number | null;
-  sourceColumn: number | null;
-  http: StudioErrorHttpContext | null;
-  tags: StudioErrorTag[];
-  statusHint: "new" | "recurring";
-  sparkline: StudioErrorFrequencyBucket[];
-  representativeRecordId: string;
-  traceId: string | null;
-  correlationId: string | null;
-}
-
-export interface StudioErrorOccurrence {
-  record: StudioNormalizedRecord;
-  errorType: string | null;
-  message: string;
-  sourceFile: string | null;
-  sourceLine: number | null;
-  sourceColumn: number | null;
-  http: StudioErrorHttpContext | null;
-}
-
-export interface StudioErrorStructuredField {
-  key: string;
-  value: string;
-}
-
-export interface StudioErrorTraceReference {
-  kind: "group" | "record";
-  id: string;
-  sectionId: StudioSectionId | "all-logs";
-  label: string;
-}
-
-export interface StudioErrorGroupDetail {
-  group: StudioErrorGroupSummary;
-  occurrences: StudioErrorOccurrence[];
-  structuredFields: StudioErrorStructuredField[];
-  traceReference: StudioErrorTraceReference | null;
-}
-
-export interface StudioErrorsStats {
-  totalUniqueErrorTypes: number;
-  totalErrorOccurrences: number;
-  mostFrequentError: {
-    errorType: string | null;
-    message: string;
-    count: number;
-  } | null;
-  newErrorsThisSession: number;
-}
-
 export interface StudioErrorsPage {
+  entries: Array<StudioErrorGroupSummary | StudioErrorOccurrence>;
   groups: StudioErrorGroupSummary[];
-  rawRecords: StudioErrorOccurrence[];
-  stats: StudioErrorsStats;
-  totalGroups: number;
-  totalRawRecords: number;
+  occurrences: StudioErrorOccurrence[];
+  stats: StudioErrorStats;
+  totalMatched: number;
+  totalEntries: number;
+  scannedRecords: number;
+  returnedCount: number;
   offset: number;
   limit: number;
   truncated: boolean;
+  earliestTimestamp: string | null;
+  latestTimestamp: string | null;
+  availableTypes: string[];
+  availableSourceFiles: string[];
+  availableSectionTags: string[];
 }
 
 export interface StudioAuthQueryInput {

@@ -153,6 +153,8 @@ export function useAssistantChat({
         ? "selected log"
         : selection?.kind === "group"
           ? "selected structured group"
+          : selection?.kind === "background-run"
+            ? "selected background run"
           : "no selection";
 
   useEffect(() => {

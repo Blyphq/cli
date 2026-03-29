@@ -9,6 +9,7 @@ import {
 import { generateAssistantText, getAssistantStatus } from "./assistant-provider";
 import { analyzeAuthRecords } from "./auth";
 import { buildBackgroundJobRunDetail, buildBackgroundJobsOverview } from "./background-jobs";
+import { analyzeDatabaseRecords } from "./database-section";
 import {
   discoverStudioConfig,
   resolveStudioAiCredentials,
@@ -38,13 +39,15 @@ import type {
   StudioBackgroundJobsOverview,
   StudioBackgroundJobsQueryInput,
   StudioConfigDiscovery,
+  StudioDatabaseOverview,
+  StudioDatabaseQueryInput,
   StudioDetectedSection,
   StudioErrorGroupDetail,
-  StudioErrorsPage,
-  StudioErrorsQueryInput,
   StudioLogDiscovery,
   StudioLogFacets,
+  StudioErrorsPage,
   StudioLogsPage,
+  StudioErrorsQueryInput,
   StudioLogsQueryInput,
   StudioMeta,
   StudioNormalizedRecord,
@@ -77,10 +80,7 @@ async function loadProjectRecords(
   projectPath: string,
   config: StudioConfigDiscovery,
   files: StudioLogDiscovery,
-  filters: Pick<
-    StudioLogsQueryInput,
-    "level" | "type" | "from" | "to" | "search" | "fileId" | "sectionId"
-  > = {},
+  filters: Pick<StudioLogsQueryInput, "level" | "type" | "from" | "to" | "search"> = {},
 ): Promise<{
   records: StudioNormalizedRecord[];
   scannedRecords: number;
@@ -166,6 +166,38 @@ export async function getStudioLogs(input: StudioLogsQueryInput): Promise<Studio
   });
 }
 
+export async function getStudioErrors(
+  input: StudioErrorsQueryInput,
+): Promise<StudioErrorsPage> {
+  const { files, project, config } = await getStudioProjectFiles(input.projectPath);
+  const candidateFiles = input.fileId
+    ? files.files.filter((file) => file.id === input.fileId)
+    : files.files;
+
+  const loaded =
+    files.mode === "database"
+      ? await loadDatabaseRecords({
+          projectPath: project.absolutePath,
+          config,
+          input,
+        })
+      : await loadProjectRecords(
+          project.absolutePath,
+          config,
+          { ...files, files: candidateFiles },
+          input,
+        );
+
+  return buildErrorsPage({
+    records: loaded.records,
+    query: input,
+    customSections: config.resolved.studio.sections,
+    scannedRecords: loaded.scannedRecords,
+    truncated: loaded.truncated,
+    projectPath: project.absolutePath,
+  });
+}
+
 export async function getStudioSections(projectPath?: string): Promise<StudioDetectedSection[]> {
   const { files, project, config } = await getStudioProjectFiles(projectPath);
   if (!project.valid) {
@@ -215,42 +247,45 @@ export async function getStudioAuth(input: StudioAuthQueryInput): Promise<Studio
   return analyzeAuthRecords(filtered, input);
 }
 
-export async function getStudioErrors(input: StudioErrorsQueryInput): Promise<StudioErrorsPage> {
+export async function getStudioDatabase(
+  input: StudioDatabaseQueryInput,
+): Promise<StudioDatabaseOverview> {
   const { files, project, config } = await getStudioProjectFiles(input.projectPath);
   if (!project.valid) {
     return {
-      groups: [],
-      rawRecords: [],
       stats: {
-        totalUniqueErrorTypes: 0,
-        totalErrorOccurrences: 0,
-        mostFrequentError: null,
-        newErrorsThisSession: 0,
+        totalQueries: 0,
+        slowQueries: 0,
+        failedQueries: 0,
+        avgQueryTimeMs: null,
+        activeTransactions: 0,
       },
-      totalGroups: 0,
-      totalRawRecords: 0,
-      offset: input.offset ?? 0,
-      limit: input.limit ?? 100,
-      truncated: false,
+      queries: [],
+      totalQueries: 0,
+      slowQueries: [],
+      transactions: [],
+      migrationEvents: [],
     };
   }
 
   const loaded = await loadProjectRecords(project.absolutePath, config, files, {
-    fileId: input.fileId,
     from: input.from,
     to: input.to,
     search: input.search,
-    type: input.type,
-    sectionId: input.sectionId,
   });
+  const filtered = filterRecords(
+    loaded.records,
+    {
+      fileId: input.fileId,
+      from: input.from,
+      to: input.to,
+      search: input.search,
+      sectionId: "database",
+    },
+    config.resolved.studio.sections,
+  );
 
-  return buildErrorsPage({
-    records: loaded.records,
-    input,
-    projectPath: project.absolutePath,
-    customSections: config.resolved.studio.sections,
-    truncated: loaded.truncated,
-  });
+  return analyzeDatabaseRecords(filtered, input);
 }
 
 export async function getStudioBackgroundJobs(
@@ -277,15 +312,24 @@ export async function getStudioBackgroundJobs(
   }
 
   const loaded = await loadProjectRecords(project.absolutePath, config, files, {
-    fileId: input.fileId,
     from: input.from,
     to: input.to,
     search: input.search,
-    sectionId: "background",
   });
+  const filtered = filterRecords(
+    loaded.records,
+    {
+      fileId: input.fileId,
+      from: input.from,
+      to: input.to,
+      search: input.search,
+      sectionId: "background",
+    },
+    config.resolved.studio.sections,
+  );
 
   return buildBackgroundJobsOverview({
-    records: loaded.records,
+    records: filtered,
     query: input,
     customSections: config.resolved.studio.sections,
     truncated: loaded.truncated,
@@ -306,16 +350,25 @@ export async function getStudioBackgroundJobRun(input: {
   }
 
   const loaded = await loadProjectRecords(project.absolutePath, config, files, {
-    fileId: input.fileId,
     from: input.from,
     to: input.to,
     search: input.search,
-    sectionId: "background",
   });
+  const filtered = filterRecords(
+    loaded.records,
+    {
+      fileId: input.fileId,
+      from: input.from,
+      to: input.to,
+      search: input.search,
+      sectionId: "background",
+    },
+    config.resolved.studio.sections,
+  );
 
   return buildBackgroundJobRunDetail({
     runId: input.runId,
-    records: loaded.records,
+    records: filtered,
     customSections: config.resolved.studio.sections,
   });
 }
@@ -372,19 +425,16 @@ export async function getStudioGroup(input: {
 
 export async function getStudioErrorGroup(input: {
   projectPath?: string;
-  groupId: string;
+  fingerprint: string;
 }): Promise<StudioErrorGroupDetail | null> {
   const { files, project, config } = await getStudioProjectFiles(input.projectPath);
-  if (!project.valid) {
-    return null;
-  }
   const loaded = await loadProjectRecords(project.absolutePath, config, files);
 
   return buildErrorGroupDetail({
-    groupId: input.groupId,
     records: loaded.records,
-    projectPath: project.absolutePath,
+    fingerprint: input.fingerprint,
     customSections: config.resolved.studio.sections,
+    projectPath: project.absolutePath,
   });
 }
 

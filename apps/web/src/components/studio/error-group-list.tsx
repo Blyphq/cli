@@ -64,9 +64,9 @@ export function ErrorGroupList({
           <div className="space-y-3">
             {groups.map((group) => (
               <ErrorGroupCard
-                key={group.id}
+                key={group.fingerprint}
                 group={group}
-                selected={selectedGroupId === group.id}
+                selected={selectedGroupId === group.fingerprint}
                 onSelect={onSelect}
                 onResolve={onResolve}
                 onIgnore={onIgnore}
@@ -83,9 +83,9 @@ export function ErrorGroupList({
             <CollapsibleContent className="space-y-3 border-t border-border/60 p-4">
               {resolvedGroups.map((group) => (
                 <ErrorGroupCard
-                  key={group.id}
+                  key={group.fingerprint}
                   group={group}
-                  selected={selectedGroupId === group.id}
+                  selected={selectedGroupId === group.fingerprint}
                   onSelect={onSelect}
                   onResolve={() => {}}
                   onIgnore={onIgnore}

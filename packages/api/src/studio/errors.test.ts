@@ -31,20 +31,20 @@ describe("studio errors aggregation", () => {
 
     const page = buildErrorsPage({
       records,
-      input: { view: "grouped", sort: "most-frequent" },
+      query: { view: "grouped", sort: "most-frequent" },
+      scannedRecords: records.length,
+      truncated: false,
       projectPath: "/project",
     });
 
-    expect(page.totalGroups).toBe(2);
+    expect(page.groups).toHaveLength(2);
     expect(page.groups[0]).toMatchObject({
       occurrenceCount: 2,
-      sourceLine: 12,
-      statusHint: "recurring",
+      fingerprintSource: { line: 12 },
     });
     expect(page.groups[1]).toMatchObject({
       occurrenceCount: 1,
-      sourceLine: 14,
-      statusHint: "new",
+      fingerprintSource: { line: 14 },
     });
   });
 
@@ -66,17 +66,23 @@ describe("studio errors aggregation", () => {
 
     const grouped = buildErrorsPage({
       records,
-      input: { view: "grouped" },
+      query: { view: "grouped" },
+      scannedRecords: records.length,
+      truncated: false,
       projectPath: "/project",
     });
     const detail = buildErrorGroupDetail({
-      groupId: grouped.groups[0]!.id,
+      fingerprint: grouped.groups[0]!.fingerprint,
       records,
       projectPath: "/project",
     });
 
-    expect(detail?.occurrences.map((item) => item.record.id)).toEqual(["a", "b"]);
-    expect(detail?.structuredFields.some((field) => field.key === "error.message")).toBe(true);
+    expect(detail?.occurrences.map((item) => item.id)).toEqual(["a", "b"]);
+    expect(detail?.occurrences[0]?.structuredFields).toMatchObject({
+      error: {
+        message: "Primary line\n    at stack frame",
+      },
+    });
   });
 });
 
