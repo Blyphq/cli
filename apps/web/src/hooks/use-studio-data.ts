@@ -98,6 +98,7 @@ export function useStudioData({
       metaQuery.data.project.valid &&
       !isOverviewSection(section) &&
       !isAuthSection(section) &&
+      !isBackgroundSection(section) &&
       !isDatabaseSection(section) &&
       !isErrorsSection(section),
     refetchInterval: 1000,

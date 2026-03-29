@@ -200,8 +200,9 @@ export function formatDuration(value: number | null | undefined): string {
     return `${(value / 1_000).toFixed(1)} s`;
   }
 
-  const minutes = Math.floor(value / 60_000);
-  const seconds = Math.round((value % 60_000) / 1_000);
+  const totalSeconds = Math.round(value / 1_000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
   return `${minutes}m ${seconds}s`;
 }
 

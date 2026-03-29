@@ -12,7 +12,7 @@ interface ErrorGroupCardProps {
   group: StudioErrorGroup;
   selected: boolean;
   onSelect(groupId: string): void;
-  onResolve(groupId: string): void;
+  onResolve?(groupId: string): void;
   onIgnore(groupId: string): void;
 }
 
@@ -83,18 +83,20 @@ export function ErrorGroupCard({
         <Sparkline points={group.sparklineBuckets} className="h-6 w-24 shrink-0 text-primary" />
       </div>
       <div className="flex flex-wrap justify-end gap-2">
-        <Button
-          type="button"
-          aria-label={`Resolve ${group.errorType ?? group.message}`}
-          variant="outline"
-          size="xs"
-          onClick={(event) => {
-            event.stopPropagation();
-            onResolve(group.fingerprint);
-          }}
-        >
-          Resolved
-        </Button>
+        {onResolve ? (
+          <Button
+            type="button"
+            aria-label={`Resolve ${group.errorType ?? group.message}`}
+            variant="outline"
+            size="xs"
+            onClick={(event) => {
+              event.stopPropagation();
+              onResolve(group.fingerprint);
+            }}
+          >
+            Resolved
+          </Button>
+        ) : null}
         <Button
           type="button"
           aria-label={`Ignore ${group.errorType ?? group.message}`}
@@ -117,6 +119,10 @@ function handleCardKeyDown(
   groupId: string,
   onSelect: (groupId: string) => void,
 ) {
+  if (event.target !== event.currentTarget) {
+    return;
+  }
+
   if (event.key === "Enter" || event.key === " ") {
     event.preventDefault();
     onSelect(groupId);

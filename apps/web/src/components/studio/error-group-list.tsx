@@ -87,7 +87,6 @@ export function ErrorGroupList({
                   group={group}
                   selected={selectedGroupId === group.fingerprint}
                   onSelect={onSelect}
-                  onResolve={() => {}}
                   onIgnore={onIgnore}
                 />
               ))}

@@ -453,6 +453,7 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
                 studioData.backgroundJobRunQuery.isLoading
               }
               onSelectRun={(runId) => {
+                setExpandedBackgroundRunId(null);
                 setSelection({ kind: "background-run", id: runId });
               }}
               onToggleExpand={(runId) => {

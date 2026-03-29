@@ -41,6 +41,9 @@ export async function buildAssistantContext(
   input: BuildAssistantContextInput,
 ): Promise<StudioAssistantContext> {
   const groups = buildGroupDetails(input.allRecords);
+  const recordsById = new Map(
+    input.allRecords.map((record) => [record.id, record] as const),
+  );
   const selectedRecord =
     input.selectedRecordId
       ? input.allRecords.find((record) => record.id === input.selectedRecordId) ?? null
@@ -72,7 +75,7 @@ export async function buildAssistantContext(
 
   if (selectedBackgroundRun) {
     for (const event of selectedBackgroundRun.timeline) {
-      const matched = input.allRecords.find((record) => record.id === event.recordId);
+      const matched = recordsById.get(event.recordId);
       if (matched) {
         addRecord(matched, 1_050);
       }

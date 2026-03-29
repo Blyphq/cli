@@ -177,5 +177,6 @@ describe("ErrorsView", () => {
     );
 
     expect(screen.getByText(/hide resolved/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /resolve checkouterror/i })).not.toBeInTheDocument();
   });
 });
