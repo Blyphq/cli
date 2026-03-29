@@ -15,6 +15,7 @@ import {
   isDatabaseSection,
   isErrorsSection,
   isOverviewSection,
+  isPaymentsSection,
 } from "@/lib/studio";
 import { useTRPC } from "@/utils/trpc";
 
@@ -47,6 +48,7 @@ export function useStudioData({
     isAuthSection(section) ||
     isDatabaseSection(section) ||
     isBackgroundSection(section) ||
+    isPaymentsSection(section) ||
     isErrorsSection(section)
       ? undefined
       : section;
@@ -99,6 +101,7 @@ export function useStudioData({
       !isOverviewSection(section) &&
       !isAuthSection(section) &&
       !isBackgroundSection(section) &&
+      !isPaymentsSection(section) &&
       !isDatabaseSection(section) &&
       !isErrorsSection(section),
     refetchInterval: 1000,
@@ -162,6 +165,35 @@ export function useStudioData({
     }),
     enabled: metaQuery.isSuccess && metaQuery.data.project.valid && section === "background",
     refetchInterval: 1000,
+  });
+
+  const paymentsQuery = useQuery({
+    ...trpc.studio.payments.queryOptions({
+      projectPath,
+      offset,
+      limit: 100,
+      fileId: filters.fileId || undefined,
+      from: filters.from || undefined,
+      to: filters.to || undefined,
+      search: deferredSearch || undefined,
+    }),
+    enabled: metaQuery.isSuccess && metaQuery.data.project.valid && isPaymentsSection(section),
+    refetchInterval: 1000,
+  });
+
+  const paymentTraceQuery = useQuery({
+    ...trpc.studio.paymentTrace.queryOptions({
+      projectPath,
+      traceId: selection?.kind === "payment-trace" ? selection.id : "",
+      fileId: filters.fileId || undefined,
+      from: filters.from || undefined,
+      to: filters.to || undefined,
+      search: deferredSearch || undefined,
+    }),
+    enabled:
+      metaQuery.isSuccess &&
+      metaQuery.data.project.valid &&
+      selection?.kind === "payment-trace",
   });
 
   const databaseQuery = useQuery({
@@ -257,6 +289,8 @@ export function useStudioData({
     selection?.kind === "group" ? groupQuery.data ?? null : null;
   const selectedBackgroundRun =
     selection?.kind === "background-run" ? backgroundJobRunQuery.data ?? null : null;
+  const selectedPaymentTrace =
+    selection?.kind === "payment-trace" ? paymentTraceQuery.data ?? null : null;
   const selectedErrorGroup =
     selection?.kind === "error-group" ? errorGroupQuery.data ?? null : null;
 
@@ -272,6 +306,8 @@ export function useStudioData({
     overviewQuery.isError ||
     authQuery.isError ||
     backgroundJobsQuery.isError ||
+    paymentsQuery.isError ||
+    paymentTraceQuery.isError ||
     backgroundJobRunQuery.isError ||
     databaseQuery.isError ||
     groupQuery.isError ||
@@ -294,6 +330,8 @@ export function useStudioData({
     overviewQuery,
     authQuery,
     backgroundJobsQuery,
+    paymentsQuery,
+    paymentTraceQuery,
     backgroundJobRunQuery,
     databaseQuery,
     groupQuery,
@@ -306,6 +344,7 @@ export function useStudioData({
     selectedRecord,
     selectedGroup,
     selectedBackgroundRun,
+    selectedPaymentTrace,
     selectedErrorGroup,
     isLoadingMeta,
     isProjectInvalid,

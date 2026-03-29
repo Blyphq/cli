@@ -21,6 +21,8 @@ import {
   getStudioLogs,
   getStudioMeta,
   getStudioOverview,
+  getStudioPaymentTrace,
+  getStudioPayments,
   getStudioRecord,
   getStudioRecordSource,
   replyWithStudioAssistant,
@@ -87,6 +89,16 @@ const studioBackgroundJobsInput = z.object({
   limit: z.number().int().positive().max(500).optional(),
 });
 
+const studioPaymentsInput = z.object({
+  projectPath: z.string().optional(),
+  fileId: z.string().optional(),
+  from: z.string().optional(),
+  to: z.string().optional(),
+  search: z.string().optional(),
+  offset: z.number().int().min(0).optional(),
+  limit: z.number().int().positive().max(500).optional(),
+});
+
 const studioOverviewInput = z.object({
   projectPath: z.string().optional(),
   fileId: z.string().optional(),
@@ -114,6 +126,7 @@ const assistantInput = z.object({
   selectedRecordId: z.string().optional(),
   selectedGroupId: z.string().optional(),
   selectedBackgroundRunId: z.string().optional(),
+  selectedPaymentTraceId: z.string().optional(),
 });
 
 export const studioRouter = router({
@@ -141,6 +154,21 @@ export const studioRouter = router({
   backgroundJobs: publicProcedure
     .input(studioBackgroundJobsInput.optional())
     .query(({ input }) => getStudioBackgroundJobs(input ?? {})),
+  payments: publicProcedure
+    .input(studioPaymentsInput.optional())
+    .query(({ input }) => getStudioPayments(input ?? {})),
+  paymentTrace: publicProcedure
+    .input(
+      z.object({
+        projectPath: z.string().optional(),
+        traceId: z.string(),
+        fileId: z.string().optional(),
+        from: z.string().optional(),
+        to: z.string().optional(),
+        search: z.string().optional(),
+      }),
+    )
+    .query(({ input }) => getStudioPaymentTrace(input)),
   backgroundJobRun: publicProcedure
     .input(
       z.object({

@@ -350,6 +350,70 @@ describe("studio router", () => {
       ]),
     );
   });
+
+  it("serves payments routes and accepts payment-trace assistant selections", async () => {
+    const projectDir = await createProject();
+    const logDir = path.join(projectDir, "logs");
+
+    await mkdir(logDir, { recursive: true });
+    await writeFile(
+      path.join(logDir, "log.ndjson"),
+      [
+        JSON.stringify({
+          timestamp: "2026-03-13T15:00:00.000Z",
+          level: "info",
+          message: "checkout started",
+          traceId: "trace-pay-1",
+          path: "/checkout/start",
+          cart: { total: 2599, currency: "usd" },
+          user: { id: "55" },
+        }),
+        JSON.stringify({
+          timestamp: "2026-03-13T15:00:00.200Z",
+          level: "error",
+          message: "payment declined",
+          traceId: "trace-pay-1",
+          path: "/payment/confirm",
+          statusCode: 402,
+          payment: { status: "declined", amount: 2599, currency: "usd" },
+          stripe: { error: { code: "card_declined" } },
+          error: { message: "card declined" },
+        }),
+      ].join("\n") + "\n",
+    );
+
+    process.env.OPENROUTER_API_KEY = "test-key";
+    process.env.OPENROUTER_MODEL = "openai/gpt-5.4";
+    __setGenerateTextForTests(async () => ({ text: "Inspect the failed payment trace." }));
+
+    const caller = appRouter.createCaller({ session: null });
+    const payments = await caller.studio.payments({ projectPath: projectDir, limit: 10 });
+    const traceId = payments.traces[0]?.id ?? "";
+    const detail = await caller.studio.paymentTrace({
+      projectPath: projectDir,
+      traceId,
+    });
+    const description = await caller.studio.describeSelection({
+      projectPath: projectDir,
+      history: [],
+      filters: {},
+      selectedPaymentTraceId: traceId,
+    });
+
+    expect(payments.traces[0]).toMatchObject({
+      status: "DECLINED",
+      webhookEventCount: 0,
+    });
+    expect(detail?.trace.failureReason).toBe("Card declined");
+    expect(description.references).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "payment-trace",
+          id: traceId,
+        }),
+      ]),
+    );
+  });
 });
 
 async function createProject(): Promise<string> {
