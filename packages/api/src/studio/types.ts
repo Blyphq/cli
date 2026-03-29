@@ -3,6 +3,9 @@ export type StudioLogFileKind = "active" | "archive";
 export type StudioLogStream = "combined" | "error" | "unknown";
 export type StudioRecordSource = "server" | "client" | "structured" | "http" | "unknown";
 export type StudioGroupingMode = "flat" | "grouped";
+export type StudioErrorSort = "most-recent" | "most-frequent" | "first-seen";
+export type StudioErrorViewMode = "grouped" | "raw";
+export type StudioErrorStatus = "active" | "resolved" | "ignored";
 export type StudioBuiltinSectionId =
   | "overview"
   | "errors"
@@ -289,6 +292,88 @@ export interface StudioStructuredGroupDetail {
 
 export type StudioLogListEntry = StudioNormalizedRecordListItem | StudioStructuredGroupSummary;
 
+export interface StudioErrorFingerprintSource {
+  key: string;
+  kind: "source-location" | "stack-frame" | "caller" | "unknown";
+  relativePath: string | null;
+  line: number | null;
+  column: number | null;
+}
+
+export interface StudioErrorStackFrame {
+  raw: string;
+  relativePath: string | null;
+  absolutePath: string | null;
+  line: number | null;
+  column: number | null;
+  inProject: boolean;
+}
+
+export interface StudioErrorOccurrence {
+  kind: "occurrence";
+  id: string;
+  fingerprint: string;
+  timestamp: string | null;
+  level: string;
+  type: string;
+  message: string;
+  messageFirstLine: string;
+  fileId: string;
+  fileName: string;
+  filePath: string;
+  lineNumber: number;
+  caller: string | null;
+  stack: string | null;
+  stackFrames: StudioErrorStackFrame[];
+  http: StudioHttpDetails | null;
+  sourceLocation: StudioResolvedSourceLocation | null;
+  fingerprintSource: StudioErrorFingerprintSource;
+  sectionTags: string[];
+  relatedTraceGroupId: string | null;
+  structuredFields: Record<string, unknown>;
+  raw: unknown;
+}
+
+export interface StudioErrorGroupSummary {
+  kind: "error-group";
+  fingerprint: string;
+  errorType: string;
+  message: string;
+  messageFirstLine: string;
+  occurrenceCount: number;
+  firstSeenAt: string | null;
+  lastSeenAt: string | null;
+  sourceLocation: StudioResolvedSourceLocation | null;
+  fingerprintSource: StudioErrorFingerprintSource;
+  http: Pick<StudioHttpDetails, "method" | "path" | "statusCode" | "url"> | null;
+  sectionTags: string[];
+  sparklineBuckets: number[];
+  representativeOccurrenceId: string;
+  relatedTraceGroupId: string | null;
+}
+
+export interface StudioErrorGroupDetail {
+  group: StudioErrorGroupSummary;
+  occurrences: StudioErrorOccurrence[];
+}
+
+export interface StudioErrorStats {
+  uniqueErrorTypes: number;
+  totalOccurrences: number;
+  mostFrequentError:
+    | {
+        fingerprint: string;
+        type: string;
+        messageFirstLine: string;
+        count: number;
+      }
+    | null;
+  newErrorsComparedToPreviousSessions: {
+    available: boolean;
+    count: number | null;
+  };
+}
+
 export interface StudioLogsQueryInput {
   projectPath?: string;
   limit?: number;
@@ -303,6 +388,21 @@ export interface StudioLogsQueryInput {
   sectionId?: string;
 }
 
+export interface StudioErrorsQueryInput {
+  projectPath?: string;
+  limit?: number;
+  offset?: number;
+  view?: StudioErrorViewMode;
+  sort?: StudioErrorSort;
+  type?: string;
+  sourceFile?: string;
+  search?: string;
+  fileId?: string;
+  from?: string;
+  to?: string;
+  sectionId?: string;
+}
+
 export interface StudioLogsPage {
   records: StudioNormalizedRecord[];
   entries: StudioLogListEntry[];
@@ -313,6 +413,25 @@ export interface StudioLogsPage {
   offset: number;
   limit: number;
   truncated: boolean;
+}
+
+export interface StudioErrorsPage {
+  entries: Array<StudioErrorGroupSummary | StudioErrorOccurrence>;
+  groups: StudioErrorGroupSummary[];
+  occurrences: StudioErrorOccurrence[];
+  stats: StudioErrorStats;
+  totalMatched: number;
+  totalEntries: number;
+  scannedRecords: number;
+  returnedCount: number;
+  offset: number;
+  limit: number;
+  truncated: boolean;
+  earliestTimestamp: string | null;
+  latestTimestamp: string | null;
+  availableTypes: string[];
+  availableSourceFiles: string[];
+  availableSectionTags: string[];
 }
 
 export interface StudioAuthQueryInput {

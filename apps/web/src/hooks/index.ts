@@ -1,8 +1,11 @@
 export { useAssistantChat } from "./use-assistant-chat";
 export type { UseAssistantChatParams } from "./use-assistant-chat";
+export { useErrorSessionState } from "./use-error-session-state";
 export {
+  DEFAULT_ERROR_UI,
   DEFAULT_FILTERS,
   useStudioFiltersAndSelection,
+  useSyncErrorSelectionFromEntries,
   useSyncSelectionFromEntries,
 } from "./use-studio-filters-and-selection";
 export { useMediaQuery } from "./use-media-query";

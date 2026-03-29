@@ -17,6 +17,7 @@ import {
   buildSyntheticDatabaseFile,
   loadDatabaseRecords,
 } from "./database";
+import { buildErrorGroupDetail, buildErrorsPage } from "./errors";
 import { getLogFacets } from "./facets";
 import { buildGroupDetails } from "./grouping";
 import { discoverLogFiles } from "./logs";
@@ -34,9 +35,12 @@ import type {
   StudioAuthQueryInput,
   StudioConfigDiscovery,
   StudioDetectedSection,
+  StudioErrorGroupDetail,
   StudioLogDiscovery,
   StudioLogFacets,
+  StudioErrorsPage,
   StudioLogsPage,
+  StudioErrorsQueryInput,
   StudioLogsQueryInput,
   StudioMeta,
   StudioNormalizedRecord,
@@ -155,6 +159,30 @@ export async function getStudioLogs(input: StudioLogsQueryInput): Promise<Studio
   });
 }
 
+export async function getStudioErrors(
+  input: StudioErrorsQueryInput,
+): Promise<StudioErrorsPage> {
+  const { files, project, config } = await getStudioProjectFiles(input.projectPath);
+
+  const loaded =
+    files.mode === "database"
+      ? await loadDatabaseRecords({
+          projectPath: project.absolutePath,
+          config,
+          input,
+        })
+      : await loadProjectRecords(project.absolutePath, config, files, input);
+
+  return buildErrorsPage({
+    records: loaded.records,
+    query: input,
+    customSections: config.resolved.studio.sections,
+    scannedRecords: loaded.scannedRecords,
+    truncated: loaded.truncated,
+    projectPath: project.absolutePath,
+  });
+}
+
 export async function getStudioSections(projectPath?: string): Promise<StudioDetectedSection[]> {
   const { files, project, config } = await getStudioProjectFiles(projectPath);
   if (!project.valid) {
@@ -252,6 +280,21 @@ export async function getStudioGroup(input: {
   const groups = buildGroupDetails(loaded.records);
 
   return groups.get(input.groupId) ?? null;
+}
+
+export async function getStudioErrorGroup(input: {
+  projectPath?: string;
+  fingerprint: string;
+}): Promise<StudioErrorGroupDetail | null> {
+  const { files, project, config } = await getStudioProjectFiles(input.projectPath);
+  const loaded = await loadProjectRecords(project.absolutePath, config, files);
+
+  return buildErrorGroupDetail({
+    records: loaded.records,
+    fingerprint: input.fingerprint,
+    customSections: config.resolved.studio.sections,
+    projectPath: project.absolutePath,
+  });
 }
 
 export async function getStudioRecord(input: {

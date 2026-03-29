@@ -188,6 +188,18 @@ export function matchesDetectedSection(
   return definition ? Boolean(definition.match(record)) : true;
 }
 
+export function getMatchedSectionIds(
+  record: StudioNormalizedRecord,
+  customSections: StudioCustomSectionDefinition[] = [],
+): StudioSectionId[] {
+  return [
+    ...BUILTIN_SECTION_DEFINITIONS,
+    ...customSections.map(toCustomDefinition),
+  ]
+    .filter((definition) => Boolean(definition.match(record)))
+    .map((definition) => definition.id);
+}
+
 function toCustomDefinition(section: StudioCustomSectionDefinition): SectionDefinition {
   return {
     id: section.id,
@@ -324,9 +336,15 @@ function sortSections(sections: StudioDetectedSection[]): StudioDetectedSection[
   });
 }
 
-function isErrorRecord(record: StudioNormalizedRecord): boolean {
+export function isErrorRecord(record: StudioNormalizedRecord): boolean {
   const status = record.http?.statusCode ?? getNumber(record, ["statusCode", "status"]);
-  return record.level === "error" || Boolean(record.error) || (typeof status === "number" && status >= 500);
+  return (
+    record.level === "error" ||
+    record.level === "critical" ||
+    Boolean(record.error) ||
+    Boolean(record.stack) ||
+    (typeof status === "number" && status >= 500)
+  );
 }
 
 function getString(record: StudioNormalizedRecord, keys: string[]): string | null {
