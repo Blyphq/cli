@@ -23,6 +23,7 @@ import {
   getStudioAssistantStatus,
   getStudioAuth,
   getStudioConfig,
+  getStudioDatabase,
   getStudioErrorGroup,
   getStudioErrors,
   getStudioFacets,
@@ -1800,6 +1801,318 @@ describe("studio DB mode", () => {
 
     expect(result.truncated).toBe(true);
     expect(result.records).toHaveLength(MAX_DB_SCANNED_RECORDS);
+  });
+
+  it("builds a database overview with stats, slow queries, transactions, and migrations", async () => {
+    const projectDir = await createProject();
+    const logDir = path.join(projectDir, "logs");
+
+    await mkdir(logDir, { recursive: true });
+    await writeFile(
+      path.join(logDir, "log.ndjson"),
+      [
+        createLogLine({
+          timestamp: "2026-03-13T10:00:00.000Z",
+          level: "info",
+          message: "transaction start",
+          type: "db_transaction_start",
+          transaction: { id: "tx-1", event: "start" },
+          requestId: "req-1",
+          traceId: "trace-1",
+        }),
+        createLogLine({
+          timestamp: "2026-03-13T10:00:00.050Z",
+          level: "info",
+          message: "query executed",
+          type: "prisma_query",
+          query: {
+            operation: "select",
+            model: "User",
+            durationMs: 45,
+            sql: "SELECT * FROM users WHERE id = $1",
+            params: { id: "user-1", accessToken: "secret-token" },
+            transactionId: "tx-1",
+          },
+          requestId: "req-1",
+          traceId: "trace-1",
+        }),
+        createLogLine({
+          timestamp: "2026-03-13T10:00:00.250Z",
+          level: "info",
+          message: "slow query detected",
+          type: "prisma_query",
+          query: {
+            operation: "update",
+            model: "Order",
+            durationMs: 250,
+            sql: "UPDATE orders SET status = $1 WHERE id = $2",
+            params: { status: "paid", id: "ord-1" },
+            transactionId: "tx-1",
+          },
+          requestId: "req-1",
+        }),
+        createLogLine({
+          timestamp: "2026-03-13T10:00:00.300Z",
+          level: "error",
+          message: "query failed",
+          type: "drizzle_query",
+          db: {
+            operation: "insert",
+            table: "audit_logs",
+            durationMs: 15,
+            params: { password: "plain-text", actorId: "user-1" },
+          },
+          error: { message: "duplicate key" },
+        }),
+        createLogLine({
+          timestamp: "2026-03-13T10:00:00.500Z",
+          level: "info",
+          message: "transaction commit",
+          type: "db_transaction_commit",
+          transaction: { id: "tx-1", event: "commit" },
+        }),
+        createLogLine({
+          timestamp: "2026-03-13T10:01:00.000Z",
+          level: "info",
+          message: "transaction start",
+          type: "db_transaction_start",
+          transaction: { id: "tx-open", event: "start" },
+        }),
+        createLogLine({
+          timestamp: "2026-03-13T10:02:00.000Z",
+          level: "info",
+          message: "migration complete",
+          type: "prisma_migration",
+          migration: { name: "add_users", version: "20260313_add_users", durationMs: 920 },
+        }),
+      ].join(""),
+    );
+
+    const database = await getStudioDatabase({
+      projectPath: projectDir,
+      limit: 10,
+    });
+
+    expect(database.stats).toMatchObject({
+      totalQueries: 3,
+      slowQueries: 1,
+      failedQueries: 1,
+      activeTransactions: 1,
+    });
+    expect(database.stats.avgQueryTimeMs).toBeCloseTo((45 + 250 + 15) / 3, 5);
+    expect(database.queries[0]?.operation).toBe("INSERT");
+    expect(database.slowQueries[0]).toMatchObject({
+      operation: "UPDATE",
+      modelOrTable: "Order",
+      durationMs: 250,
+    });
+    expect(database.queries.find((item) => item.operation === "SELECT")?.params).toMatchObject({
+      id: "user-1",
+      accessToken: "[redacted]",
+    });
+    expect(database.queries.find((item) => item.operation === "INSERT")?.params).toMatchObject({
+      password: "[redacted]",
+      actorId: "user-1",
+    });
+    expect(database.transactions[0]).toMatchObject({
+      id: "tx-open",
+      result: "open",
+    });
+    expect(database.transactions.find((item) => item.id === "tx-1")).toMatchObject({
+      result: "committed",
+    });
+    expect(database.migrationEvents[0]).toMatchObject({
+      name: "add_users",
+      version: "20260313_add_users",
+      success: true,
+      durationMs: 920,
+    });
+  });
+
+  it("filters database overview results by search text", async () => {
+    const projectDir = await createProject();
+    const logDir = path.join(projectDir, "logs");
+
+    await mkdir(logDir, { recursive: true });
+    await writeFile(
+      path.join(logDir, "log.ndjson"),
+      [
+        createLogLine({
+          timestamp: "2026-03-13T10:00:00.000Z",
+          level: "info",
+          message: "query executed",
+          type: "prisma_query",
+          query: { operation: "select", model: "User", durationMs: 20, sql: "SELECT * FROM users" },
+        }),
+        createLogLine({
+          timestamp: "2026-03-13T10:00:01.000Z",
+          level: "info",
+          message: "query executed",
+          type: "prisma_query",
+          query: { operation: "select", model: "Order", durationMs: 30, sql: "SELECT * FROM orders" },
+        }),
+      ].join(""),
+    );
+
+    const database = await getStudioDatabase({
+      projectPath: projectDir,
+      search: "orders",
+    });
+
+    expect(database.totalQueries).toBe(1);
+    expect(database.queries[0]?.modelOrTable).toBe("Order");
+  });
+
+  it("keeps valid transaction timestamps when later records contain invalid timestamps", async () => {
+    const projectDir = await createProject();
+    const logDir = path.join(projectDir, "logs");
+
+    await mkdir(logDir, { recursive: true });
+    await writeFile(
+      path.join(logDir, "log.ndjson"),
+      [
+        createLogLine({
+          timestamp: "2026-03-13T10:00:00.000Z",
+          level: "info",
+          message: "transaction start",
+          type: "db_transaction_start",
+          transaction: { id: "tx-bad", event: "start" },
+        }),
+        createLogLine({
+          timestamp: "not-a-start-timestamp",
+          level: "info",
+          message: "transaction start",
+          type: "db_transaction_start",
+          transaction: { id: "tx-bad", event: "start" },
+        }),
+        createLogLine({
+          timestamp: "2026-03-13T10:00:00.200Z",
+          level: "info",
+          message: "query executed",
+          type: "prisma_query",
+          query: {
+            operation: "select",
+            model: "User",
+            durationMs: 20,
+            transactionId: "tx-bad",
+            sql: "SELECT * FROM users",
+          },
+        }),
+        createLogLine({
+          timestamp: "2026-03-13T10:00:00.400Z",
+          level: "info",
+          message: "transaction commit",
+          type: "db_transaction_commit",
+          transaction: { id: "tx-bad", event: "commit" },
+        }),
+        createLogLine({
+          timestamp: "not-a-timestamp",
+          level: "info",
+          message: "transaction commit",
+          type: "db_transaction_commit",
+          transaction: { id: "tx-bad", event: "commit" },
+        }),
+      ].join(""),
+    );
+
+    const database = await getStudioDatabase({
+      projectPath: projectDir,
+      limit: 10,
+    });
+
+    expect(database.transactions).toHaveLength(1);
+    expect(database.transactions[0]).toMatchObject({
+      id: "tx-bad",
+      timestampStart: "2026-03-13T10:00:00.000Z",
+      timestampEnd: "2026-03-13T10:00:00.400Z",
+      durationMs: 400,
+      result: "committed",
+    });
+  });
+
+  it("derives transaction result from the winning terminal timestamp", async () => {
+    const projectDir = await createProject();
+    const logDir = path.join(projectDir, "logs");
+
+    await mkdir(logDir, { recursive: true });
+    await writeFile(
+      path.join(logDir, "log.ndjson"),
+      [
+        createLogLine({
+          timestamp: "2026-03-13T10:00:00.000Z",
+          level: "info",
+          message: "transaction start",
+          type: "db_transaction_start",
+          transaction: { id: "tx-conflict", event: "start" },
+        }),
+        createLogLine({
+          timestamp: "2026-03-13T10:00:00.200Z",
+          level: "info",
+          message: "transaction rollback",
+          type: "db_transaction_rollback",
+          transaction: { id: "tx-conflict", event: "rollback" },
+        }),
+        createLogLine({
+          timestamp: "2026-03-13T10:00:00.100Z",
+          level: "info",
+          message: "transaction commit",
+          type: "db_transaction_commit",
+          transaction: { id: "tx-conflict", event: "commit" },
+        }),
+      ].join(""),
+    );
+
+    const database = await getStudioDatabase({
+      projectPath: projectDir,
+      limit: 10,
+    });
+
+    expect(database.transactions).toHaveLength(1);
+    expect(database.transactions[0]).toMatchObject({
+      id: "tx-conflict",
+      timestampEnd: "2026-03-13T10:00:00.200Z",
+      durationMs: 200,
+      result: "rolled_back",
+    });
+  });
+
+  it("marks transactions as completed when the first terminal event has a null timestamp", async () => {
+    const projectDir = await createProject();
+    const logDir = path.join(projectDir, "logs");
+
+    await mkdir(logDir, { recursive: true });
+    await writeFile(
+      path.join(logDir, "log.ndjson"),
+      [
+        createLogLine({
+          timestamp: "2026-03-13T10:00:00.000Z",
+          level: "info",
+          message: "transaction start",
+          type: "db_transaction_start",
+          transaction: { id: "tx-null-end", event: "start" },
+        }),
+        createLogLine({
+          timestamp: null,
+          level: "info",
+          message: "transaction commit",
+          type: "db_transaction_commit",
+          transaction: { id: "tx-null-end", event: "commit" },
+        }),
+      ].join(""),
+    );
+
+    const database = await getStudioDatabase({
+      projectPath: projectDir,
+      limit: 10,
+    });
+
+    expect(database.transactions).toHaveLength(1);
+    expect(database.transactions[0]).toMatchObject({
+      id: "tx-null-end",
+      timestampEnd: null,
+      durationMs: null,
+      result: "committed",
+    });
   });
 });
 

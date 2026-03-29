@@ -10,9 +10,13 @@ export type StudioFile = StudioFiles["files"][number];
 export type StudioLogsPage = RouterOutputs["studio"]["logs"];
 export type StudioErrorsPage = RouterOutputs["studio"]["errors"];
 export type StudioAuthOverview = RouterOutputs["studio"]["auth"];
+export type StudioDatabaseOverview = RouterOutputs["studio"]["database"];
 export type StudioAuthEvent = StudioAuthOverview["timeline"][number];
 export type StudioAuthSuspiciousPattern = StudioAuthOverview["suspiciousPatterns"][number];
 export type StudioAuthUserSummary = StudioAuthOverview["users"][number];
+export type StudioDatabaseQueryEvent = StudioDatabaseOverview["queries"][number];
+export type StudioDatabaseTransactionSummary = StudioDatabaseOverview["transactions"][number];
+export type StudioDatabaseMigrationEvent = StudioDatabaseOverview["migrationEvents"][number];
 export type StudioRecord = StudioLogsPage["records"][number];
 export type StudioRecordSourceContext = RouterOutputs["studio"]["recordSource"];
 export type StudioLogEntry = StudioLogsPage["entries"][number];
@@ -141,6 +145,42 @@ export function formatDateTime(value: string | null | undefined): string {
   return parsed.toLocaleString();
 }
 
+export function formatRelativeTime(value: string | null | undefined): string {
+  if (!value) {
+    return "Unknown";
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return value;
+  }
+
+  const diffMs = parsed.getTime() - Date.now();
+  const formatter = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
+  const divisions: Array<[Intl.RelativeTimeFormatUnit, number]> = [
+    ["day", 1000 * 60 * 60 * 24],
+    ["hour", 1000 * 60 * 60],
+    ["minute", 1000 * 60],
+    ["second", 1000],
+  ];
+
+  for (const [unit, size] of divisions) {
+    if (Math.abs(diffMs) >= size || unit === "second") {
+      return formatter.format(Math.round(diffMs / size), unit);
+    }
+  }
+
+  return value;
+}
+
+export function formatDurationMs(value: number | null | undefined): string {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return "n/a";
+  }
+
+  return value >= 1000 ? `${(value / 1000).toFixed(2)}s` : `${Math.round(value)}ms`;
+}
+
 export function formatCalendarDate(value: Date | null | undefined): string {
   if (!value) {
     return "Pick a date";
@@ -255,6 +295,22 @@ export function getSourceBadgeVariant(
     default:
       return "muted";
   }
+}
+
+export function getDurationClasses(value: number | null | undefined): string {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return "text-muted-foreground";
+  }
+
+  if (value > 500) {
+    return "text-destructive";
+  }
+
+  if (value > 100) {
+    return "text-amber-600";
+  }
+
+  return "text-foreground";
 }
 
 export function getAssistantStatusLabel(status: StudioAssistantStatus): string {
@@ -460,6 +516,8 @@ export function isAuthSection(section: StudioSectionId): boolean {
   return section === "auth";
 }
 
+export function isDatabaseSection(section: StudioSectionId): boolean {
+  return section === "database";
 export function isErrorsSection(section: StudioSectionId): boolean {
   return section === "errors";
 }

@@ -11,6 +11,7 @@ import type {
 import {
   isAllLogsSection,
   isAuthSection,
+  isDatabaseSection,
   isErrorsSection,
   isOverviewSection,
 } from "@/lib/studio";
@@ -40,7 +41,11 @@ export function useStudioData({
   const trpc = useTRPC();
   const deferredSearch = useDeferredValue(filters.search);
   const logsSectionId =
-    isOverviewSection(section) || isAllLogsSection(section) || isAuthSection(section) || isErrorsSection(section)
+    isOverviewSection(section) ||
+    isAllLogsSection(section) ||
+    isAuthSection(section) ||
+    isDatabaseSection(section) || 
+    isErrorsSection(section)
       ? undefined
       : section;
 
@@ -91,6 +96,7 @@ export function useStudioData({
       metaQuery.data.project.valid &&
       !isOverviewSection(section) &&
       !isAuthSection(section) &&
+      !isDatabaseSection(section) &&
       !isErrorsSection(section),
     refetchInterval: 1000,
   });
@@ -126,6 +132,20 @@ export function useStudioData({
       userId: authUserId || undefined,
     }),
     enabled: metaQuery.isSuccess && metaQuery.data.project.valid && section === "auth",
+    refetchInterval: 1000,
+  });
+
+  const databaseQuery = useQuery({
+    ...trpc.studio.database.queryOptions({
+      projectPath,
+      offset,
+      limit: 100,
+      fileId: filters.fileId || undefined,
+      from: filters.from || undefined,
+      to: filters.to || undefined,
+      search: deferredSearch || undefined,
+    }),
+    enabled: metaQuery.isSuccess && metaQuery.data.project.valid && section === "database",
     refetchInterval: 1000,
   });
 
@@ -204,6 +224,7 @@ export function useStudioData({
     logsQuery.isError ||
     errorsQuery.isError ||
     authQuery.isError ||
+    databaseQuery.isError ||
     groupQuery.isError ||
     errorGroupQuery.isError ||
     recordQuery.isError;
@@ -222,6 +243,7 @@ export function useStudioData({
     logsQuery,
     errorsQuery,
     authQuery,
+    databaseQuery,
     groupQuery,
     errorGroupQuery,
     recordQuery,

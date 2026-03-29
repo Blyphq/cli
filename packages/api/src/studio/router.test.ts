@@ -217,11 +217,15 @@ describe("studio router", () => {
         record: {
           timestamp: "2026-03-13T12:00:00.000Z",
           level: "error",
-          message: "hello from db caller",
-          type: "checkout_flow",
+          message: "query executed",
+          type: "prisma_query",
           caller: "src/routes/db.ts:4",
-          groupId: "checkout-1",
-          events: ["error"],
+          query: {
+            operation: "select",
+            model: "Order",
+            durationMs: 120,
+            sql: "SELECT * FROM orders WHERE id = $1",
+          },
         },
       },
     ]);
@@ -252,6 +256,10 @@ describe("studio router", () => {
       grouping: "flat",
       limit: 10,
     });
+    const database = await caller.studio.database({
+      projectPath: projectDir,
+      limit: 10,
+    });
 
     expect(meta.logs.mode).toBe("database");
     expect(meta.logs.database).toMatchObject({
@@ -264,6 +272,13 @@ describe("studio router", () => {
       message: "hello from db caller",
       filePath: "database://blyp_logs",
       lineNumber: 0,
+    });
+    expect(database.totalQueries).toBe(1);
+    expect(database.queries[0]).toMatchObject({
+      operation: "SELECT",
+      modelOrTable: "Order",
+      durationMs: 120,
+      status: "slow",
     });
   });
 });

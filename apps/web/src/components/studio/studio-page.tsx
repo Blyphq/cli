@@ -1,8 +1,9 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 import { ErrorsView } from "@/components/studio/errors-view";
 import { AuthView } from "@/components/studio/auth-view";
 import { AssistantSheet } from "@/components/studio/assistant-sheet";
+import { DatabaseView } from "@/components/studio/database-view";
 import { EmptyState } from "@/components/studio/empty-state";
 import { ErrorDetailPanel } from "@/components/studio/error-detail-panel";
 import { ErrorState } from "@/components/studio/error-state";
@@ -25,11 +26,12 @@ import {
 } from "@/hooks";
 import { useStudioData } from "@/hooks";
 import {
-  isAllLogsSection,
   isAuthSection,
+  isDatabaseSection,
   isErrorsSection,
   isOverviewSection,
 } from "@/lib/studio";
+import { formatDurationMs } from "@/lib/studio";
 
 export interface StudioPageProps {
   navigate: (opts: { search: { project?: string } }) => void;
@@ -38,6 +40,10 @@ export interface StudioPageProps {
 
 export function StudioPage({ navigate, search }: StudioPageProps) {
   const projectPath = search.project ?? "";
+  const [pendingDatabaseAiPrompt, setPendingDatabaseAiPrompt] = useState<{
+    recordId: string;
+    prompt: string;
+  } | null>(null);
 
   const {
     filters,
@@ -90,7 +96,7 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
   } = studioData;
 
   const shouldSyncSelection =
-    !isOverviewSection(section) && !isAuthSection(section) && !isErrorsSection(section);
+    !isOverviewSection(section) && !isAuthSection(section) && !isDatabaseSection(section)  && !isErrorsSection(section);
   useSyncSelectionFromEntries(entries, selection, setSelection, shouldSyncSelection);
   useSyncErrorSelectionFromEntries(
     studioData.errorsQuery.data?.entries ?? [],
@@ -144,6 +150,37 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
     fallbackModel,
     assistantStatusData: studioData.assistantStatusQuery.data,
   });
+
+  useEffect(() => {
+    if (!pendingDatabaseAiPrompt) {
+      return;
+    }
+
+    if (selection?.kind !== "record" || selection.id !== pendingDatabaseAiPrompt.recordId) {
+      return;
+    }
+
+    const prompt = pendingDatabaseAiPrompt.prompt;
+    setPendingDatabaseAiPrompt(null);
+
+    if (!assistant.activeChatId || assistant.assistantScopeMode === "standalone") {
+      assistant.createSelectionChatAndSubmit(prompt);
+      return;
+    }
+
+    assistant.openAssistant();
+    void assistant.submitAssistantPrompt(prompt, "chat", {
+      scopeMode: "selection",
+    });
+  }, [
+    assistant.activeChatId,
+    assistant.assistantScopeMode,
+    assistant.createSelectionChatAndSubmit,
+    assistant.openAssistant,
+    assistant.submitAssistantPrompt,
+    pendingDatabaseAiPrompt,
+    selection,
+  ]);
 
   const canEdit = Boolean(projectPath && assistant.activeChatId);
 
@@ -283,6 +320,7 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
                 logsQuery.error?.message ??
                 studioData.errorsQuery.error?.message ??
                 studioData.authQuery.error?.message ??
+                studioData.databaseQuery.error?.message ??
                 groupQuery.error?.message ??
                 studioData.errorGroupQuery.error?.message ??
                 recordQuery.error?.message ??
@@ -352,6 +390,21 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
                 if (firstRecordId) {
                   setSelection({ kind: "record", id: firstRecordId });
                 }
+              }}
+            />
+          ) : section === "database" ? (
+            <DatabaseView
+              database={studioData.databaseQuery.data}
+              loading={studioData.databaseQuery.isLoading}
+              selectedRecordId={selection?.kind === "record" ? selection.id : null}
+              onSelectRecord={(recordId) => setSelection({ kind: "record", id: recordId })}
+              onAskAi={(query) => {
+                const prompt = buildSlowQueryPrompt(query);
+                setPendingDatabaseAiPrompt({
+                  recordId: query.recordId,
+                  prompt,
+                });
+                setSelection({ kind: "record", id: query.recordId });
               }}
             />
           ) : (
@@ -485,4 +538,41 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
       )}
     </>
   );
+}
+
+function buildSlowQueryPrompt(
+  query: {
+    operation: string;
+    modelOrTable: string | null;
+    durationMs: number | null;
+    requestId: string | null;
+    traceId: string | null;
+    queryText: string | null;
+    params: unknown;
+  },
+): string {
+  const context = [
+    `Slow database query detected above the 100ms threshold.`,
+    `Operation: ${query.operation}`,
+    `Model or table: ${query.modelOrTable ?? "Unknown"}`,
+    `Duration: ${formatDurationMs(query.durationMs)}`,
+    query.requestId ? `Request ID: ${query.requestId}` : null,
+    query.traceId ? `Trace ID: ${query.traceId}` : null,
+    query.queryText ? `Query: ${query.queryText}` : null,
+    query.params !== undefined && query.params !== null
+      ? `Redacted params: ${safeStringify(query.params)}`
+      : null,
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  return `${context}\n\nSuggest likely causes, indexing or query-shape improvements, and what to inspect next. Keep recommendations grounded in the query details above.`;
+}
+
+function safeStringify(value: unknown): string {
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
 }
