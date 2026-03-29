@@ -1,6 +1,11 @@
 import type { ReactNode } from "react";
 
-import { CardAction, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  CardAction,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
 interface PanelHeaderProps {
@@ -17,14 +22,18 @@ export function PanelHeader({
   className,
 }: PanelHeaderProps) {
   return (
-    <CardHeader className={cn("min-w-0 border-b border-border/60", className)}>
-      <CardTitle className="min-w-0">{title}</CardTitle>
+    <CardHeader
+      className={cn("min-w-0 border-b border-border/60 w-full flex flex-col gap-2", className)}
+    >
+      <div className="flex items-center gap-2">
+        <CardTitle className="min-w-0">{title}</CardTitle>
+        {action ? <CardAction>{action}</CardAction> : null}
+      </div>
       {description ? (
-        <CardDescription className="min-w-0 break-words">
+        <CardDescription className="min-w-0 w-full break-words">
           {description}
         </CardDescription>
       ) : null}
-      {action ? <CardAction>{action}</CardAction> : null}
     </CardHeader>
   );
 }

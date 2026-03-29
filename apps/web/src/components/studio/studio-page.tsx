@@ -1,8 +1,10 @@
 import { useEffect } from "react";
 
+import { ErrorsView } from "@/components/studio/errors-view";
 import { AuthView } from "@/components/studio/auth-view";
 import { AssistantSheet } from "@/components/studio/assistant-sheet";
 import { EmptyState } from "@/components/studio/empty-state";
+import { ErrorDetailPanel } from "@/components/studio/error-detail-panel";
 import { ErrorState } from "@/components/studio/error-state";
 import { GroupDetailPanel } from "@/components/studio/group-detail-panel";
 import { LogDetailPanel } from "@/components/studio/log-detail-panel";
@@ -15,14 +17,17 @@ import { StudioShell } from "@/components/studio/studio-shell";
 import { StudioToolbar } from "@/components/studio/studio-toolbar";
 import { useAssistantChat } from "@/hooks/use-assistant-chat";
 import {
+  useErrorSessionState,
   DEFAULT_FILTERS,
   useStudioFiltersAndSelection,
+  useSyncErrorSelectionFromEntries,
   useSyncSelectionFromEntries,
 } from "@/hooks";
 import { useStudioData } from "@/hooks";
 import {
   isAllLogsSection,
   isAuthSection,
+  isErrorsSection,
   isOverviewSection,
 } from "@/lib/studio";
 
@@ -48,9 +53,12 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
     visitedAtBySection,
     authUi,
     setAuthUi,
+    errorUi,
+    setErrorUi,
     draftProjectPath,
     setDraftProjectPath,
   } = useStudioFiltersAndSelection(projectPath);
+  const errorSessionState = useErrorSessionState(projectPath);
 
   const studioData = useStudioData({
     projectPath,
@@ -58,6 +66,7 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
     offset,
     grouping,
     section,
+    errorUi,
     authUserId: authUi.selectedUserId,
     selection,
   });
@@ -81,8 +90,15 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
   } = studioData;
 
   const shouldSyncSelection =
-    !isOverviewSection(section) && !isAuthSection(section);
+    !isOverviewSection(section) && !isAuthSection(section) && !isErrorsSection(section);
   useSyncSelectionFromEntries(entries, selection, setSelection, shouldSyncSelection);
+  useSyncErrorSelectionFromEntries(
+    studioData.errorsQuery.data?.entries ?? [],
+    selection,
+    setSelection,
+    errorUi.view === "grouped",
+    isErrorsSection(section),
+  );
 
   useEffect(() => {
     setOffset(0);
@@ -97,6 +113,11 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
     projectPath,
     section,
     grouping,
+    errorUi.view,
+    errorUi.sort,
+    errorUi.type,
+    errorUi.sourceFile,
+    errorUi.sectionTag,
     setOffset,
   ]);
 
@@ -133,9 +154,13 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
   };
 
   const selectedRecord =
-    selection?.kind === "record" ? studioData.selectedRecord : null;
+    selection?.kind === "record" || selection?.kind === "error-occurrence"
+      ? studioData.selectedRecord
+      : null;
   const selectedGroup =
     selection?.kind === "group" ? studioData.selectedGroup : null;
+  const selectedErrorGroup =
+    selection?.kind === "error-group" ? studioData.selectedErrorGroup : null;
 
   const describePrompt =
     "Describe the selected log or structured group like an observability copilot. Explain what happened, likely cause, related signals, and what to inspect next.";
@@ -143,6 +168,48 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
     section === "all-logs"
       ? "All Logs"
       : metaQuery.data?.sections.find((item) => item.id === section)?.label ?? "Section";
+
+  const handleAskAiToFix = () => {
+    if (!selectedErrorGroup) {
+      return;
+    }
+
+    const representative =
+      selectedErrorGroup.occurrences.find(
+        (item) => item.id === selectedErrorGroup.group.representativeOccurrenceId,
+      ) ?? selectedErrorGroup.occurrences[0];
+    if (!representative) {
+      return;
+    }
+
+    const prompt = [
+      "Help me fix this recurring error in my local Studio session.",
+      `Fingerprint: ${selectedErrorGroup.group.fingerprint}`,
+      `Type: ${selectedErrorGroup.group.errorType}`,
+      `Message: ${selectedErrorGroup.group.messageFirstLine}`,
+      `Count: ${selectedErrorGroup.group.occurrenceCount}`,
+      `First seen: ${selectedErrorGroup.group.firstSeenAt ?? "unknown"}`,
+      `Last seen: ${selectedErrorGroup.group.lastSeenAt ?? "unknown"}`,
+      representative.fingerprintSource.relativePath
+        ? `Source: ${representative.fingerprintSource.relativePath}${representative.fingerprintSource.line ? `:${representative.fingerprintSource.line}` : ""}`
+        : null,
+      representative.http
+        ? `HTTP: ${[representative.http.method, representative.http.path ?? representative.http.url, representative.http.statusCode]
+            .filter(Boolean)
+            .join(" ")}`
+        : null,
+      `Structured fields: ${JSON.stringify(representative.structuredFields, null, 2)}`,
+      representative.stack ? `Stack trace:\n${representative.stack}` : null,
+      representative.messageFirstLine === selectedErrorGroup.group.messageFirstLine &&
+      selectedErrorGroup.group.occurrenceCount === 1
+        ? "This appears new in the current session."
+        : "This is recurring in the current session.",
+    ]
+      .filter(Boolean)
+      .join("\n\n");
+
+    assistant.createSelectionChatAndSubmit(prompt);
+  };
 
   return (
     <>
@@ -214,8 +281,10 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
                 configQuery.error?.message ??
                 filesQuery.error?.message ??
                 logsQuery.error?.message ??
+                studioData.errorsQuery.error?.message ??
                 studioData.authQuery.error?.message ??
                 groupQuery.error?.message ??
+                studioData.errorGroupQuery.error?.message ??
                 recordQuery.error?.message ??
                 "Unknown Studio error"
               }
@@ -234,6 +303,20 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
             <OverviewView
               sections={metaQuery.data?.sections ?? []}
               onSelect={setSection}
+            />
+          ) : isErrorsSection(section) ? (
+            <ErrorsView
+              data={studioData.errorsQuery.data}
+              loading={studioData.errorsQuery.isLoading}
+              selection={selection}
+              ui={errorUi}
+              resolvedAtByFingerprint={errorSessionState.state.resolvedAtByFingerprint}
+              ignoredByFingerprint={errorSessionState.state.ignoredByFingerprint}
+              resolvedCollapsed={errorSessionState.state.resolvedCollapsed}
+              onUiChange={setErrorUi}
+              onSelect={setSelection}
+              onToggleResolvedCollapsed={errorSessionState.setResolvedCollapsed}
+              onUnignore={errorSessionState.unignore}
             />
           ) : section === "auth" ? (
             <AuthView
@@ -303,17 +386,52 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
                 setSelection({ kind: "record", id: recordId });
               }}
             />
-          ) : (
-            <LogDetailPanel
-              record={selectedRecord}
-              source={recordSourceQuery.data ?? null}
-              sourceLoading={recordSourceQuery.isLoading}
-              onDescribeWithAi={() => {
-                assistant.handleDescribeSelection(
-                  "Describe the selected log like an observability copilot. Explain what happened, likely cause, related signals, and what to inspect next.",
-                );
+          ) : selection?.kind === "error-group" ? (
+            <ErrorDetailPanel
+              group={selectedErrorGroup}
+              occurrence={null}
+              record={null}
+              loading={studioData.errorGroupQuery.isLoading}
+              resolvedAt={
+                errorSessionState.state.resolvedAtByFingerprint[selection.id] ?? null
+              }
+              ignored={Boolean(errorSessionState.state.ignoredByFingerprint[selection.id])}
+              onAskAi={handleAskAiToFix}
+              onMarkResolved={() => errorSessionState.markResolved(selection.id)}
+              onIgnore={() => errorSessionState.ignore(selection.id)}
+              onViewTrace={() => {
+                const traceGroupId = selectedErrorGroup?.group.relatedTraceGroupId;
+                if (!traceGroupId) {
+                  return;
+                }
+                setGrouping("grouped");
+                setSection("all-logs");
+                setSelection({ kind: "group", id: traceGroupId });
               }}
             />
+          ) : (
+            selection?.kind === "error-occurrence" ? (
+              <ErrorDetailPanel
+                group={null}
+                occurrence={
+                  studioData.errorsQuery.data?.occurrences.find((item) => item.id === selection.id) ?? null
+                }
+                record={selectedRecord}
+                recordSource={recordSourceQuery.data ?? null}
+                recordSourceLoading={recordSourceQuery.isLoading}
+              />
+            ) : (
+              <LogDetailPanel
+                record={selectedRecord}
+                source={recordSourceQuery.data ?? null}
+                sourceLoading={recordSourceQuery.isLoading}
+                onDescribeWithAi={() => {
+                  assistant.handleDescribeSelection(
+                    "Describe the selected log like an observability copilot. Explain what happened, likely cause, related signals, and what to inspect next.",
+                  );
+                }}
+              />
+            )
           )
         }
       />
@@ -342,7 +460,13 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
               assistant.updateChatModel(projectPath, assistant.activeChatId!, value);
             }
           }}
-          onDescribeSelection={() => assistant.handleDescribeSelection(describePrompt)}
+          onDescribeSelection={() => {
+            if (selection?.kind === "error-group") {
+              handleAskAiToFix();
+              return;
+            }
+            assistant.handleDescribeSelection(describePrompt);
+          }}
           onOpenChange={(next) => (next ? assistant.openAssistant() : assistant.closeAssistant())}
           onQuickAction={(prompt) => {
             void assistant.submitAssistantPrompt(prompt, "chat", {
