@@ -74,14 +74,21 @@ export function StudioToolbar({
 }: StudioToolbarProps) {
   const currentTarget = meta?.project.absolutePath || draftProjectPath;
   const authMode = section === "auth";
+  const backgroundMode = section === "background";
   const overviewMode = section === "overview";
-  const disableClassificationControls = authMode || overviewMode;
+  const disableClassificationControls = authMode || overviewMode || backgroundMode;
   const disabledControlText = overviewMode
     ? {
         level: "Overview doesn't filter by level",
         type: "Overview doesn't filter by type",
         view: "Overview has no log grouping",
       }
+    : backgroundMode
+      ? {
+          level: "Background Jobs uses run analysis",
+          type: "Background Jobs doesn't filter by type",
+          view: "Background Jobs has no log grouping",
+        }
     : {
         level: "Auth view controls classification",
         type: "Auth view uses domain event types",

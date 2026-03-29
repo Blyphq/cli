@@ -10,9 +10,14 @@ export type StudioFile = StudioFiles["files"][number];
 export type StudioLogsPage = RouterOutputs["studio"]["logs"];
 export type StudioErrorsPage = RouterOutputs["studio"]["errors"];
 export type StudioAuthOverview = RouterOutputs["studio"]["auth"];
+export type StudioBackgroundJobsOverview = RouterOutputs["studio"]["backgroundJobs"];
+export type StudioBackgroundJobRunDetail = NonNullable<RouterOutputs["studio"]["backgroundJobRun"]>;
 export type StudioAuthEvent = StudioAuthOverview["timeline"][number];
 export type StudioAuthSuspiciousPattern = StudioAuthOverview["suspiciousPatterns"][number];
 export type StudioAuthUserSummary = StudioAuthOverview["users"][number];
+export type StudioBackgroundJobRun = StudioBackgroundJobsOverview["runs"][number];
+export type StudioBackgroundJobPerformanceRow = StudioBackgroundJobsOverview["performance"][number];
+export type StudioBackgroundJobTimelineEvent = StudioBackgroundJobRunDetail["timeline"][number];
 export type StudioRecord = StudioLogsPage["records"][number];
 export type StudioRecordSourceContext = RouterOutputs["studio"]["recordSource"];
 export type StudioLogEntry = StudioLogsPage["entries"][number];
@@ -48,6 +53,7 @@ export type StudioChatMessage = UIMessage<StudioAssistantMessageMetadata>;
 export type StudioSelection =
   | { kind: "record"; id: string }
   | { kind: "group"; id: string }
+  | { kind: "background-run"; id: string }
   | null;
 
 export interface StudioFilters {
@@ -127,6 +133,28 @@ export function formatDateTime(value: string | null | undefined): string {
   }
 
   return parsed.toLocaleString();
+}
+
+export function formatDuration(durationMs: number | null | undefined): string {
+  if (durationMs == null || !Number.isFinite(durationMs)) {
+    return "Unknown";
+  }
+
+  if (durationMs < 1_000) {
+    return `${Math.round(durationMs)} ms`;
+  }
+
+  if (durationMs < 60_000) {
+    return `${(durationMs / 1_000).toFixed(1)} s`;
+  }
+
+  const minutes = Math.floor(durationMs / 60_000);
+  const seconds = Math.round((durationMs % 60_000) / 1_000);
+  return `${minutes}m ${seconds}s`;
+}
+
+export function formatPercent(value: number): string {
+  return `${Math.round(value * 100)}%`;
 }
 
 export function formatCalendarDate(value: Date | null | undefined): string {
@@ -436,6 +464,35 @@ export function getAuthOutcomeBadgeVariant(
   }
 }
 
+export function getBackgroundJobStatusBadgeVariant(
+  status: StudioBackgroundJobRun["status"],
+): StudioBadgeVariant {
+  switch (status) {
+    case "COMPLETED":
+      return "default";
+    case "FAILED":
+    case "TIMEOUT":
+      return "destructive";
+    default:
+      return "secondary";
+  }
+}
+
+export function getBackgroundJobTrendLabel(
+  trend: StudioBackgroundJobPerformanceRow["trend"],
+): string {
+  switch (trend) {
+    case "slower":
+      return "Slower";
+    case "faster":
+      return "Faster";
+    case "stable":
+      return "Stable";
+    default:
+      return "Insufficient data";
+  }
+}
+
 export function isOverviewSection(section: StudioSectionId): boolean {
   return section === "overview";
 }
@@ -450,6 +507,10 @@ export function isAuthSection(section: StudioSectionId): boolean {
 
 export function isErrorsSection(section: StudioSectionId): boolean {
   return section === "errors";
+}
+
+export function isBackgroundSection(section: StudioSectionId): boolean {
+  return section === "background";
 }
 
 function readStructuredEvents(value: Record<string, unknown>): unknown[] {

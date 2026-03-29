@@ -121,6 +121,20 @@ export function useStudioData({
     refetchInterval: 1000,
   });
 
+  const backgroundJobsQuery = useQuery({
+    ...trpc.studio.backgroundJobs.queryOptions({
+      projectPath,
+      offset,
+      limit: 100,
+      fileId: filters.fileId || undefined,
+      from: filters.from || undefined,
+      to: filters.to || undefined,
+      search: deferredSearch || undefined,
+    }),
+    enabled: metaQuery.isSuccess && metaQuery.data.project.valid && section === "background",
+    refetchInterval: 1000,
+  });
+
   const errorsQuery = useQuery({
     ...trpc.studio.errors.queryOptions({
       projectPath,
@@ -163,6 +177,21 @@ export function useStudioData({
       selection?.kind === "group",
   });
 
+  const backgroundJobRunQuery = useQuery({
+    ...trpc.studio.backgroundJobRun.queryOptions({
+      projectPath,
+      runId: selection?.kind === "background-run" ? selection.id : "",
+      fileId: filters.fileId || undefined,
+      from: filters.from || undefined,
+      to: filters.to || undefined,
+      search: deferredSearch || undefined,
+    }),
+    enabled:
+      metaQuery.isSuccess &&
+      metaQuery.data.project.valid &&
+      selection?.kind === "background-run",
+  });
+
   const recordQuery = useQuery({
     ...trpc.studio.record.queryOptions({
       projectPath,
@@ -195,6 +224,8 @@ export function useStudioData({
     selection?.kind === "record" ? recordQuery.data ?? null : null;
   const selectedGroup =
     selection?.kind === "group" ? groupQuery.data ?? null : null;
+  const selectedBackgroundRun =
+    selection?.kind === "background-run" ? backgroundJobRunQuery.data ?? null : null;
 
   const isLoadingMeta = !metaQuery.data && metaQuery.isLoading;
   const isProjectInvalid = Boolean(metaQuery.data && !metaQuery.data.project.valid);
@@ -205,6 +236,8 @@ export function useStudioData({
     filesQuery.isError ||
     logsQuery.isError ||
     authQuery.isError ||
+    backgroundJobsQuery.isError ||
+    backgroundJobRunQuery.isError ||
     groupQuery.isError ||
     recordQuery.isError;
   const hasBackendError =
@@ -221,6 +254,8 @@ export function useStudioData({
     facetsQuery,
     logsQuery,
     authQuery,
+    backgroundJobsQuery,
+    backgroundJobRunQuery,
     errorsQuery,
     errorGroupQuery,
     groupQuery,
@@ -231,6 +266,7 @@ export function useStudioData({
     entries,
     selectedRecord,
     selectedGroup,
+    selectedBackgroundRun,
     isLoadingMeta,
     isProjectInvalid,
     projectError,

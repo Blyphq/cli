@@ -89,15 +89,15 @@ const BUILTIN_SECTION_DEFINITIONS: SectionDefinition[] = [
   },
   {
     id: "background",
-    label: "Background",
+    label: "Background Jobs",
     icon: "⚙",
     kind: "builtin",
     match(record) {
       return buildDomainMatch(record, {
         routes: [],
-        fields: ["job.*", "task.*", "queue.*", "cron.*", "worker.*"],
+        fields: ["job.*", "task.*", "queue.*", "cron.*", "worker.*", "schedule.*"],
         statuses: [],
-        messages: ["job started", "job completed", "scheduled", "worker"],
+        messages: ["job started", "job completed", "job failed", "scheduled", "worker", "queue", "cron", "processing"],
       });
     },
   },

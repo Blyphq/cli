@@ -211,6 +211,63 @@ describe("studio router", () => {
     );
   });
 
+  it("serves background job routes and accepts background-run assistant selections", async () => {
+    const projectDir = await createProject();
+    const logDir = path.join(projectDir, "logs");
+
+    await mkdir(logDir, { recursive: true });
+    await writeFile(
+      path.join(projectDir, "blyp.config.json"),
+      JSON.stringify({ file: { dir: "./logs" } }, null, 2),
+    );
+    await writeFile(
+      path.join(logDir, "log.ndjson"),
+      [
+        JSON.stringify({
+          timestamp: "2026-03-13T15:00:00.000Z",
+          level: "info",
+          message: "sync catalog job started",
+          job: { name: "Sync Catalog", runId: "catalog-1", status: "started" },
+        }),
+        JSON.stringify({
+          timestamp: "2026-03-13T15:00:20.000Z",
+          level: "error",
+          message: "sync catalog job failed",
+          job: { name: "Sync Catalog", runId: "catalog-1", step: "publish", status: "failed" },
+          error: { message: "catalog publish rejected" },
+        }),
+      ].join("\n") + "\n",
+    );
+
+    process.env.OPENROUTER_API_KEY = "test-key";
+    process.env.OPENROUTER_MODEL = "openai/gpt-5.4";
+    __setGenerateTextForTests(
+      async () => ({
+        text: "Inspect the failed background run.",
+      }),
+    );
+
+    const caller = appRouter.createCaller({ session: null });
+    const overview = await caller.studio.backgroundJobs({
+      projectPath: projectDir,
+      limit: 10,
+    });
+    const detail = await caller.studio.backgroundJobRun({
+      projectPath: projectDir,
+      runId: overview.runs[0]?.id ?? "",
+    });
+    const description = await caller.studio.describeSelection({
+      projectPath: projectDir,
+      history: [],
+      filters: {},
+      selectedBackgroundRunId: overview.runs[0]?.id,
+    });
+
+    expect(overview.runs[0]?.jobName).toBe("Sync Catalog");
+    expect(detail?.run.failure?.message).toBe("catalog publish rejected");
+    expect(description.references.some((reference) => reference.kind === "background-run")).toBe(true);
+  });
+
   it("serves DB-backed Studio routes through tRPC callers", async () => {
     const projectDir = await createProject();
     process.env.DATABASE_URL = "postgresql://user:pass@localhost:5432/test";

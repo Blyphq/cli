@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { AuthView } from "@/components/studio/auth-view";
+import { BackgroundJobDetailPanel } from "@/components/studio/background-job-detail-panel";
+import { BackgroundJobsView } from "@/components/studio/background-jobs-view";
 import { AssistantSheet } from "@/components/studio/assistant-sheet";
 import { EmptyState } from "@/components/studio/empty-state";
 import { ErrorDetailPanel } from "@/components/studio/error-detail-panel";
@@ -24,6 +26,7 @@ import {
 import { useStudioData } from "@/hooks";
 import {
   isAuthSection,
+  isBackgroundSection,
   isErrorsSection,
   isOverviewSection,
 } from "@/lib/studio";
@@ -43,6 +46,7 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
   const [selectedErrorGroupId, setSelectedErrorGroupId] = useState<string | null>(null);
   const [resolvedGroupIds, setResolvedGroupIds] = useState<Set<string>>(new Set());
   const [ignoredGroupIds, setIgnoredGroupIds] = useState<Set<string>>(new Set());
+  const [expandedBackgroundRunId, setExpandedBackgroundRunId] = useState<string | null>(null);
 
   const {
     filters,
@@ -97,7 +101,10 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
   } = studioData;
 
   const shouldSyncSelection =
-    !isOverviewSection(section) && !isAuthSection(section) && !isErrorsSection(section);
+    !isOverviewSection(section) &&
+    !isAuthSection(section) &&
+    !isErrorsSection(section) &&
+    !isBackgroundSection(section);
   useSyncSelectionFromEntries(entries, selection, setSelection, shouldSyncSelection);
 
   useEffect(() => {
@@ -109,6 +116,7 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
     setErrorType("");
     setErrorSourceFile("");
     setErrorTag("");
+    setExpandedBackgroundRunId(null);
   }, [projectPath]);
 
   useEffect(() => {
@@ -168,6 +176,8 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
     selection?.kind === "record" ? studioData.selectedRecord : null;
   const selectedGroup =
     selection?.kind === "group" ? studioData.selectedGroup : null;
+  const selectedBackgroundRun =
+    selection?.kind === "background-run" ? studioData.selectedBackgroundRun : null;
   const visibleErrorGroups = useMemo(
     () =>
       (studioData.errorsQuery.data?.groups ?? []).filter(
@@ -258,6 +268,19 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
     );
   };
 
+  const handleAskAiOnBackgroundRun = () => {
+    const detail = studioData.backgroundJobRunQuery.data;
+    if (!detail) {
+      return;
+    }
+
+    setSection("background");
+    setSelection({ kind: "background-run", id: detail.run.id });
+    assistant.createSelectionChatAndSubmit(
+      `Diagnose this failed background job run. Use the full run timeline, identify the failing step, explain the likely root cause, and propose the smallest defensible fix. Job: ${detail.run.jobName}. Status: ${detail.run.status}. Failure: ${detail.run.failure?.message ?? "Unknown failure"}.`,
+    );
+  };
+
   return (
     <>
       <StudioShell
@@ -329,6 +352,8 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
                 filesQuery.error?.message ??
                 logsQuery.error?.message ??
                 studioData.authQuery.error?.message ??
+                studioData.backgroundJobsQuery.error?.message ??
+                studioData.backgroundJobRunQuery.error?.message ??
                 groupQuery.error?.message ??
                 recordQuery.error?.message ??
                 "Unknown Studio error"
@@ -382,6 +407,31 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
                 const firstRecordId = pattern.recordIds[0];
                 if (firstRecordId) {
                   setSelection({ kind: "record", id: firstRecordId });
+                }
+              }}
+            />
+          ) : section === "background" ? (
+            <BackgroundJobsView
+              page={studioData.backgroundJobsQuery.data}
+              loading={studioData.backgroundJobsQuery.isLoading}
+              selectedRunId={selection?.kind === "background-run" ? selection.id : null}
+              expandedRunId={expandedBackgroundRunId}
+              expandedRunDetail={
+                expandedBackgroundRunId === selection?.id
+                  ? studioData.backgroundJobRunQuery.data
+                  : null
+              }
+              expandedRunLoading={
+                expandedBackgroundRunId === selection?.id
+                  ? studioData.backgroundJobRunQuery.isLoading
+                  : false
+              }
+              onSelectRun={(runId) => setSelection({ kind: "background-run", id: runId })}
+              onToggleExpand={(runId) => {
+                const nextExpanded = expandedBackgroundRunId === runId ? null : runId;
+                setExpandedBackgroundRunId(nextExpanded);
+                if (nextExpanded) {
+                  setSelection({ kind: "background-run", id: nextExpanded });
                 }
               }}
             />
@@ -460,6 +510,12 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
                     }
                   : undefined
               }
+            />
+          ) : section === "background" ? (
+            <BackgroundJobDetailPanel
+              detail={selectedBackgroundRun}
+              loading={studioData.backgroundJobRunQuery.isLoading}
+              onAskAi={handleAskAiOnBackgroundRun}
             />
           ) : selection?.kind === "group" ? (
             <GroupDetailPanel
