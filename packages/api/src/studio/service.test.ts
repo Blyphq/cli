@@ -1866,6 +1866,73 @@ describe("studio DB mode", () => {
     expect(database.totalQueries).toBe(1);
     expect(database.queries[0]?.modelOrTable).toBe("Order");
   });
+
+  it("keeps valid transaction timestamps when later records contain invalid timestamps", async () => {
+    const projectDir = await createProject();
+    const logDir = path.join(projectDir, "logs");
+
+    await mkdir(logDir, { recursive: true });
+    await writeFile(
+      path.join(logDir, "log.ndjson"),
+      [
+        createLogLine({
+          timestamp: "2026-03-13T10:00:00.000Z",
+          level: "info",
+          message: "transaction start",
+          type: "db_transaction_start",
+          transaction: { id: "tx-bad", event: "start" },
+        }),
+        createLogLine({
+          timestamp: "not-a-start-timestamp",
+          level: "info",
+          message: "transaction start",
+          type: "db_transaction_start",
+          transaction: { id: "tx-bad", event: "start" },
+        }),
+        createLogLine({
+          timestamp: "2026-03-13T10:00:00.200Z",
+          level: "info",
+          message: "query executed",
+          type: "prisma_query",
+          query: {
+            operation: "select",
+            model: "User",
+            durationMs: 20,
+            transactionId: "tx-bad",
+            sql: "SELECT * FROM users",
+          },
+        }),
+        createLogLine({
+          timestamp: "2026-03-13T10:00:00.400Z",
+          level: "info",
+          message: "transaction commit",
+          type: "db_transaction_commit",
+          transaction: { id: "tx-bad", event: "commit" },
+        }),
+        createLogLine({
+          timestamp: "not-a-timestamp",
+          level: "info",
+          message: "transaction commit",
+          type: "db_transaction_commit",
+          transaction: { id: "tx-bad", event: "commit" },
+        }),
+      ].join(""),
+    );
+
+    const database = await getStudioDatabase({
+      projectPath: projectDir,
+      limit: 10,
+    });
+
+    expect(database.transactions).toHaveLength(1);
+    expect(database.transactions[0]).toMatchObject({
+      id: "tx-bad",
+      timestampStart: "2026-03-13T10:00:00.000Z",
+      timestampEnd: "2026-03-13T10:00:00.400Z",
+      durationMs: 400,
+      result: "committed",
+    });
+  });
 });
 
 function buildDbConfig({

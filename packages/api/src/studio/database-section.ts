@@ -646,13 +646,33 @@ function compareTimestampsAscending(left: string | null, right: string | null): 
 function minTimestamp(current: string | null, next: string | null): string | null {
   if (!current) return next;
   if (!next) return current;
-  return Date.parse(current) <= Date.parse(next) ? current : next;
+  const currentMs = Date.parse(current);
+  const nextMs = Date.parse(next);
+
+  if (Number.isNaN(currentMs)) {
+    return Number.isNaN(nextMs) ? current : next;
+  }
+  if (Number.isNaN(nextMs)) {
+    return current;
+  }
+
+  return currentMs <= nextMs ? current : next;
 }
 
 function maxTimestamp(current: string | null, next: string | null): string | null {
   if (!current) return next;
   if (!next) return current;
-  return Date.parse(current) >= Date.parse(next) ? current : next;
+  const currentMs = Date.parse(current);
+  const nextMs = Date.parse(next);
+
+  if (Number.isNaN(currentMs)) {
+    return Number.isNaN(nextMs) ? current : next;
+  }
+  if (Number.isNaN(nextMs)) {
+    return current;
+  }
+
+  return currentMs >= nextMs ? current : next;
 }
 
 function looksFailed(value: string): boolean {
