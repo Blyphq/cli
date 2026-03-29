@@ -60,8 +60,8 @@ const BUILTIN_SECTION_DEFINITIONS: SectionDefinition[] = [
         routes: [
           "/checkout/*",
           "/payment/*",
-          "/webhook/*",
           "/webhook/stripe",
+          "/webhook/stripe/*",
           "/billing/*",
           "/subscribe/*",
           "/order/*",

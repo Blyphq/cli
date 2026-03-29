@@ -549,7 +549,10 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
                 expandedPaymentTraceId === selection.id &&
                 studioData.paymentTraceQuery.isLoading
               }
-              onSelectTrace={(traceId) => setSelection({ kind: "payment-trace", id: traceId })}
+              onSelectTrace={(traceId) => {
+                setExpandedPaymentTraceId(null);
+                setSelection({ kind: "payment-trace", id: traceId });
+              }}
               onToggleExpand={(traceId) => {
                 const nextExpandedTraceId =
                   expandedPaymentTraceId === traceId ? null : traceId;

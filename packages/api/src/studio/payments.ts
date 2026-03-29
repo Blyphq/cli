@@ -232,6 +232,9 @@ function buildTraceBuckets(events: CandidateEvent[]): TraceBucket[] {
       const bucket = ensureBucket(explicit, traceId, event);
       bucket.events.push(event);
       addSignals(bucket, event);
+      for (const key of event.correlationKeys) {
+        keyed.set(key, bucket);
+      }
       continue;
     }
 
@@ -883,7 +886,7 @@ function splitSignal(signal: string): [string, string] {
 function maxTimestamp(current: string | null, next: string | null): string | null {
   if (!current) return next;
   if (!next) return current;
-  return compareTimestampsDescending(current, next) <= 0 ? next : current;
+  return compareTimestampsDescending(current, next) > 0 ? next : current;
 }
 
 function serialize(value: unknown): string {

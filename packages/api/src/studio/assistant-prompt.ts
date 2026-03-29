@@ -112,7 +112,7 @@ function renderEvidence(input: PromptEvidence): string {
             paymentTrace: {
               trace: input.selectedPaymentTrace.trace,
               timeline: input.selectedPaymentTrace.timeline.slice(0, 20),
-              webhooks: input.selectedPaymentTrace.webhooks,
+              webhooks: input.selectedPaymentTrace.webhooks.slice(0, 10),
             },
           }
     : input.selectedRecord

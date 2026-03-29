@@ -48,6 +48,7 @@ function PaginationLink({
 }: PaginationLinkProps) {
   return (
     <button
+      type="button"
       aria-current={isActive ? "page" : undefined}
       data-slot="pagination-link"
       className={cn(
