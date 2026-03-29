@@ -3,6 +3,7 @@ import { startTransition, useEffect, useMemo, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import type { StudioRecord } from "@/lib/studio";
 import { buildHttpPreview } from "@/lib/studio";
+import { JsonDetailBlock } from "./json-detail-block";
 import { PanelHeader } from "./panel-header";
 import { TruncatedPath } from "./truncated-path";
 
@@ -69,6 +70,12 @@ export function HttpLogDetail({ record }: HttpLogDetailProps) {
           <DetailStat label="Duration" value={record.http?.durationMs ? `${record.http.durationMs}ms` : "Unknown"} />
           <DetailStat label="Kind" value={record.http?.kind ?? "Unknown"} />
         </div>
+        <div className="grid gap-2 text-[11px] uppercase tracking-[0.18em] text-muted-foreground sm:grid-cols-2 xl:grid-cols-4">
+          <DetailStat label="Route template" value={record.http?.routeTemplate ?? "Unknown"} />
+          <DetailStat label="Request ID" value={record.http?.requestId ?? "Unknown"} />
+          <DetailStat label="Trace ID" value={record.http?.traceId ?? "Unknown"} />
+          <DetailStat label="Path" value={record.http?.path ?? record.http?.url ?? "Unknown"} />
+        </div>
         {html ? (
           <div
             className="overflow-x-auto [&_.shiki]:min-w-max [&_.shiki]:rounded-none [&_.shiki]:bg-transparent [&_.shiki]:p-0 [&_.shiki]:font-mono [&_.shiki]:text-[11px] [&_.shiki]:leading-5"
@@ -79,6 +86,18 @@ export function HttpLogDetail({ record }: HttpLogDetailProps) {
             {preview}
           </pre>
         )}
+        {record.http?.requestHeaders ? (
+          <JsonDetailBlock title="Request Headers" value={record.http.requestHeaders} />
+        ) : null}
+        {record.http?.responseHeaders ? (
+          <JsonDetailBlock title="Response Headers" value={record.http.responseHeaders} />
+        ) : null}
+        {record.http?.requestBody !== undefined && record.http.requestBody !== null ? (
+          <JsonDetailBlock title="Request Body" value={record.http.requestBody} />
+        ) : null}
+        {record.http?.responseBody !== undefined && record.http.responseBody !== null ? (
+          <JsonDetailBlock title="Response Body" value={record.http.responseBody} />
+        ) : null}
       </CardContent>
     </Card>
   );

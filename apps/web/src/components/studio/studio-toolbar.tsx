@@ -75,14 +75,21 @@ export function StudioToolbar({
   const currentTarget = meta?.project.absolutePath || draftProjectPath;
   const authMode = section === "auth";
   const backgroundMode = section === "background";
+  const httpMode = section === "http";
   const overviewMode = section === "overview";
-  const disableClassificationControls = authMode || overviewMode || backgroundMode;
+  const disableClassificationControls = authMode || overviewMode || backgroundMode || httpMode;
   const disabledControlText = overviewMode
     ? {
         level: "Overview doesn't filter by level",
         type: "Overview doesn't filter by type",
         view: "Overview has no log grouping",
       }
+    : httpMode
+      ? {
+          level: "HTTP view uses request health signals",
+          type: "HTTP view has section-local filters",
+          view: "HTTP view has dedicated tables",
+        }
     : backgroundMode
       ? {
           level: "Background Jobs uses run analysis",

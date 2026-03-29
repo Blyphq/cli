@@ -18,6 +18,7 @@ import {
   getStudioFacets,
   getStudioFiles,
   getStudioGroup,
+  getStudioHttp,
   getStudioLogs,
   getStudioMeta,
   getStudioOverview,
@@ -99,6 +100,20 @@ const studioPaymentsInput = z.object({
   limit: z.number().int().positive().max(500).optional(),
 });
 
+const studioHttpInput = z.object({
+  projectPath: z.string().optional(),
+  fileId: z.string().optional(),
+  from: z.string().optional(),
+  to: z.string().optional(),
+  search: z.string().optional(),
+  offset: z.number().int().min(0).optional(),
+  limit: z.number().int().positive().max(500).optional(),
+  method: z.string().optional(),
+  statusGroup: z.enum(["2xx", "3xx", "4xx", "5xx"]).optional(),
+  route: z.string().optional(),
+  minDurationMs: z.number().nonnegative().optional(),
+});
+
 const studioOverviewInput = z.object({
   projectPath: z.string().optional(),
   fileId: z.string().optional(),
@@ -169,6 +184,9 @@ export const studioRouter = router({
       }),
     )
     .query(({ input }) => getStudioPaymentTrace(input)),
+  http: publicProcedure
+    .input(studioHttpInput.optional())
+    .query(({ input }) => getStudioHttp(input ?? {})),
   backgroundJobRun: publicProcedure
     .input(
       z.object({

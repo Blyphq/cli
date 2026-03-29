@@ -13,6 +13,7 @@ export type StudioAuthOverview = RouterOutputs["studio"]["auth"];
 export type StudioBackgroundJobsOverview = RouterOutputs["studio"]["backgroundJobs"];
 export type StudioBackgroundJobRunDetail = NonNullable<RouterOutputs["studio"]["backgroundJobRun"]>;
 export type StudioDatabaseOverview = RouterOutputs["studio"]["database"];
+export type StudioHttpOverview = RouterOutputs["studio"]["http"];
 export type StudioOverview = RouterOutputs["studio"]["overview"];
 export type StudioPaymentsOverview = RouterOutputs["studio"]["payments"];
 export type StudioPaymentTraceDetail = NonNullable<RouterOutputs["studio"]["paymentTrace"]>;
@@ -25,6 +26,11 @@ export type StudioBackgroundJobTimelineEvent = StudioBackgroundJobRunDetail["tim
 export type StudioDatabaseQueryEvent = StudioDatabaseOverview["queries"][number];
 export type StudioDatabaseTransactionSummary = StudioDatabaseOverview["transactions"][number];
 export type StudioDatabaseMigrationEvent = StudioDatabaseOverview["migrationEvents"][number];
+export type StudioHttpRequestRow = StudioHttpOverview["requests"][number];
+export type StudioHttpEndpointPerformanceRow = StudioHttpOverview["performance"][number];
+export type StudioHttpStatusTimeseriesBucket = StudioHttpOverview["timeseries"][number];
+export type StudioHttpStats = StudioHttpOverview["stats"];
+export type StudioHttpStatusGroup = keyof StudioHttpStats["statusGroups"];
 export type StudioRecord = StudioLogsPage["records"][number];
 export type StudioRecordSourceContext = RouterOutputs["studio"]["recordSource"];
 export type StudioLogEntry = StudioLogsPage["entries"][number];
@@ -96,6 +102,13 @@ export interface StudioErrorUiState {
   sectionTag: string;
   showResolved: boolean;
   showIgnored: boolean;
+}
+
+export interface StudioHttpUiState {
+  method: string;
+  statusGroup: "" | StudioHttpStatusGroup;
+  route: string;
+  minDurationMs: string;
 }
 
 export interface StudioSidebarState {
@@ -355,6 +368,55 @@ export function getDurationClasses(value: number | null | undefined): string {
   }
 
   return "text-foreground";
+}
+
+export function getHttpStatusBadgeVariant(
+  statusGroup: StudioHttpStatusGroup,
+): StudioBadgeVariant {
+  switch (statusGroup) {
+    case "5xx":
+      return "destructive";
+    case "4xx":
+      return "secondary";
+    case "3xx":
+      return "outline";
+    default:
+      return "default";
+  }
+}
+
+export function getHttpStatusClasses(statusGroup: StudioHttpStatusGroup): string {
+  switch (statusGroup) {
+    case "5xx":
+      return "border-destructive/30 bg-destructive/10 text-destructive";
+    case "4xx":
+      return "border-amber-500/30 bg-amber-500/10 text-amber-700";
+    case "3xx":
+      return "border-border bg-muted text-muted-foreground";
+    default:
+      return "border-primary/30 bg-primary/10 text-primary";
+  }
+}
+
+export function getHttpPerformanceRowClasses(
+  highlight: StudioHttpEndpointPerformanceRow["highlight"],
+): string {
+  switch (highlight) {
+    case "error":
+      return "bg-destructive/5";
+    case "slow":
+      return "bg-amber-500/5";
+    default:
+      return "";
+  }
+}
+
+export function formatRequestsPerMinute(value: number): string {
+  if (!Number.isFinite(value)) {
+    return "0/min";
+  }
+
+  return `${value >= 10 ? Math.round(value) : value.toFixed(1)}/min`;
 }
 
 export function getBackgroundJobStatusBadgeVariant(
@@ -619,6 +681,10 @@ export function isBackgroundSection(section: StudioSectionId): boolean {
 
 export function isPaymentsSection(section: StudioSectionId): boolean {
   return section === "payments";
+}
+
+export function isHttpSection(section: StudioSectionId): boolean {
+  return section === "http";
 }
 
 export function isErrorsSection(section: StudioSectionId): boolean {

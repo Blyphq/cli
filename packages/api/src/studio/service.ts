@@ -22,6 +22,7 @@ import {
 import { buildErrorGroupDetail, buildErrorsPage } from "./errors";
 import { getLogFacets } from "./facets";
 import { buildGroupDetails } from "./grouping";
+import { analyzeHttpRecords } from "./http-section";
 import { discoverLogFiles } from "./logs";
 import { buildStudioOverview } from "./overview";
 import { buildPaymentTraceDetail, buildPaymentsOverview } from "./payments";
@@ -45,6 +46,8 @@ import type {
   StudioDatabaseQueryInput,
   StudioDetectedSection,
   StudioErrorGroupDetail,
+  StudioHttpOverview,
+  StudioHttpQueryInput,
   StudioLogDiscovery,
   StudioLogFacets,
   StudioErrorsPage,
@@ -295,6 +298,43 @@ export async function getStudioAuth(input: StudioAuthQueryInput): Promise<Studio
   );
 
   return analyzeAuthRecords(filtered, input);
+}
+
+export async function getStudioHttp(input: StudioHttpQueryInput): Promise<StudioHttpOverview> {
+  const { files, project, config } = await getStudioProjectFiles(input.projectPath);
+  const candidateFiles = input.fileId
+    ? files.files.filter((file) => file.id === input.fileId)
+    : files.files;
+
+  const loaded =
+    files.mode === "database"
+      ? await loadDatabaseRecords({
+          projectPath: project.absolutePath,
+          config,
+          input,
+        })
+      : await loadProjectRecords(
+          project.absolutePath,
+          config,
+          { ...files, files: candidateFiles },
+          input,
+        );
+
+  const filtered = filterRecords(
+    loaded.records,
+    {
+      fileId: input.fileId,
+      from: input.from,
+      to: input.to,
+      search: input.search,
+    },
+    config.resolved.studio.sections,
+  );
+
+  return {
+    ...analyzeHttpRecords(filtered, input),
+    truncated: loaded.truncated,
+  };
 }
 
 export async function getStudioDatabase(
