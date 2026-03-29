@@ -2075,6 +2075,45 @@ describe("studio DB mode", () => {
       result: "rolled_back",
     });
   });
+
+  it("marks transactions as completed when the first terminal event has a null timestamp", async () => {
+    const projectDir = await createProject();
+    const logDir = path.join(projectDir, "logs");
+
+    await mkdir(logDir, { recursive: true });
+    await writeFile(
+      path.join(logDir, "log.ndjson"),
+      [
+        createLogLine({
+          timestamp: "2026-03-13T10:00:00.000Z",
+          level: "info",
+          message: "transaction start",
+          type: "db_transaction_start",
+          transaction: { id: "tx-null-end", event: "start" },
+        }),
+        createLogLine({
+          timestamp: null,
+          level: "info",
+          message: "transaction commit",
+          type: "db_transaction_commit",
+          transaction: { id: "tx-null-end", event: "commit" },
+        }),
+      ].join(""),
+    );
+
+    const database = await getStudioDatabase({
+      projectPath: projectDir,
+      limit: 10,
+    });
+
+    expect(database.transactions).toHaveLength(1);
+    expect(database.transactions[0]).toMatchObject({
+      id: "tx-null-end",
+      timestampEnd: null,
+      durationMs: null,
+      result: "committed",
+    });
+  });
 });
 
 function buildDbConfig({

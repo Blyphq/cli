@@ -253,7 +253,10 @@ function buildTransactionSummaries(
 
     if (item.kind === "transaction-commit" || item.kind === "transaction-rollback") {
       const nextTimestampEnd = maxTimestamp(current.timestampEnd, item.timestamp);
-      if (nextTimestampEnd !== current.timestampEnd) {
+      if (
+        nextTimestampEnd !== current.timestampEnd ||
+        (current.timestampEnd === null && current.terminalKind === null)
+      ) {
         current.timestampEnd = nextTimestampEnd;
         current.terminalKind = item.kind;
       }
