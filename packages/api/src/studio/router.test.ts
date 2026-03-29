@@ -46,11 +46,13 @@ describe("studio router", () => {
     const meta = await caller.studio.meta({ projectPath: projectDir });
     const files = await caller.studio.files({ projectPath: projectDir });
     const logs = await caller.studio.logs({ projectPath: projectDir, limit: 10 });
+    const overview = await caller.studio.overview({ projectPath: projectDir });
     const facets = await caller.studio.facets({ projectPath: projectDir });
 
     expect(meta.project.valid).toBe(true);
     expect(files.files[0]?.name).toBe("log.ndjson");
     expect(logs.records[0]?.message).toBe("hello from caller");
+    expect(overview.stats.totalEvents.value).toBe(1);
     expect(facets.levels).toContain("info");
   });
 
@@ -146,15 +148,11 @@ describe("studio router", () => {
     expect(description.references.length).toBeGreaterThan(0);
   });
 
-  it("serves grouped error summaries and error detail routes", async () => {
+  it("serves error grouping routes through tRPC callers", async () => {
     const projectDir = await createProject();
     const logDir = path.join(projectDir, "logs");
 
     await mkdir(logDir, { recursive: true });
-    await writeFile(
-      path.join(projectDir, "blyp.config.json"),
-      JSON.stringify({ file: { dir: "./logs" } }, null, 2),
-    );
     await writeFile(
       path.join(logDir, "log.ndjson"),
       [
@@ -162,25 +160,23 @@ describe("studio router", () => {
           timestamp: "2026-03-13T12:00:00.000Z",
           level: "error",
           message: "checkout failed",
-          type: "TypeError",
-          caller: "src/routes/checkout.ts:4",
-          error: {
-            name: "TypeError",
-            message: "checkout failed",
-            stack: "TypeError: checkout failed\n    at src/routes/checkout.ts:4:2",
-          },
+          error: { name: "CheckoutError", message: "checkout failed" },
+          stack: "CheckoutError: checkout failed\n    at checkout (/tmp/project/src/routes/checkout.ts:4:1)",
+          groupId: "checkout-1",
+          path: "/checkout",
+          method: "POST",
+          statusCode: 500,
         }),
         JSON.stringify({
           timestamp: "2026-03-13T12:00:01.000Z",
           level: "error",
           message: "checkout failed",
-          type: "TypeError",
-          caller: "src/routes/checkout.ts:4",
-          error: {
-            name: "TypeError",
-            message: "checkout failed",
-            stack: "TypeError: checkout failed\n    at src/routes/checkout.ts:4:2",
-          },
+          error: { name: "CheckoutError", message: "checkout failed" },
+          stack: "CheckoutError: checkout failed\n    at checkout (/tmp/project/src/routes/checkout.ts:4:1)",
+          groupId: "checkout-1",
+          path: "/checkout",
+          method: "POST",
+          statusCode: 500,
         }),
       ].join("\n") + "\n",
     );
@@ -189,26 +185,20 @@ describe("studio router", () => {
     const errors = await caller.studio.errors({
       projectPath: projectDir,
       view: "grouped",
-      sort: "most-frequent",
       limit: 10,
     });
 
-    expect(errors.stats.totalUniqueErrorTypes).toBe(1);
-    expect(errors.stats.totalErrorOccurrences).toBe(2);
-    expect(errors.groups[0]?.occurrenceCount).toBe(2);
+    expect(errors.groups[0]).toMatchObject({
+      errorType: "CheckoutError",
+      occurrenceCount: 2,
+    });
 
     const detail = await caller.studio.errorGroup({
       projectPath: projectDir,
-      groupId: errors.groups[0]?.id ?? "",
+      fingerprint: errors.groups[0]!.fingerprint,
     });
 
     expect(detail?.occurrences).toHaveLength(2);
-    expect(detail?.occurrences.map((item) => item.record.id)).toEqual(
-      expect.arrayContaining([
-        expect.stringMatching(/:1$/),
-        expect.stringMatching(/:2$/),
-      ]),
-    );
   });
 
   it("serves DB-backed Studio routes through tRPC callers", async () => {
@@ -229,11 +219,15 @@ describe("studio router", () => {
         record: {
           timestamp: "2026-03-13T12:00:00.000Z",
           level: "error",
-          message: "hello from db caller",
-          type: "checkout_flow",
+          message: "query executed",
+          type: "prisma_query",
           caller: "src/routes/db.ts:4",
-          groupId: "checkout-1",
-          events: ["error"],
+          query: {
+            operation: "select",
+            model: "Order",
+            durationMs: 120,
+            sql: "SELECT * FROM orders WHERE id = $1",
+          },
         },
       },
     ]);
@@ -264,6 +258,10 @@ describe("studio router", () => {
       grouping: "flat",
       limit: 10,
     });
+    const database = await caller.studio.database({
+      projectPath: projectDir,
+      limit: 10,
+    });
 
     expect(meta.logs.mode).toBe("database");
     expect(meta.logs.database).toMatchObject({
@@ -276,6 +274,13 @@ describe("studio router", () => {
       message: "hello from db caller",
       filePath: "database://blyp_logs",
       lineNumber: 0,
+    });
+    expect(database.totalQueries).toBe(1);
+    expect(database.queries[0]).toMatchObject({
+      operation: "SELECT",
+      modelOrTable: "Order",
+      durationMs: 120,
+      status: "slow",
     });
   });
 });

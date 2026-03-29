@@ -1,549 +1,707 @@
 import path from "node:path";
 
 import { buildGroupDetails } from "./grouping";
-import { filterRecords } from "./query";
-import { parseCallerCandidates, parseStackCandidates } from "./source";
-import { getMatchedSectionTags, matchesErrorSignal } from "./sections";
+import { getMatchedSectionIds, isErrorRecord } from "./sections";
 
 import type {
   StudioCustomSectionDefinition,
-  StudioErrorFrequencyBucket,
+  StudioErrorFingerprintSource,
   StudioErrorGroupDetail,
   StudioErrorGroupSummary,
-  StudioErrorHttpContext,
   StudioErrorOccurrence,
+  StudioErrorSort,
+  StudioErrorStackFrame,
+  StudioErrorStats,
   StudioErrorsPage,
   StudioErrorsQueryInput,
-  StudioErrorsStats,
   StudioNormalizedRecord,
-  StudioStructuredGroupDetail,
+  StudioResolvedSourceLocation,
 } from "./types";
 
 const DEFAULT_LIMIT = 100;
 const MAX_LIMIT = 500;
 const SPARKLINE_BUCKETS = 12;
 
-interface BuildErrorsPageOptions {
+export function buildErrorsPage(input: {
   records: StudioNormalizedRecord[];
-  input: StudioErrorsQueryInput;
-  projectPath: string;
+  query: StudioErrorsQueryInput;
   customSections?: StudioCustomSectionDefinition[];
-  truncated?: boolean;
-}
+  scannedRecords: number;
+  truncated: boolean;
+  projectPath?: string;
+}): StudioErrorsPage {
+  const limit = clampLimit(input.query.limit);
+  const offset = Math.max(0, input.query.offset ?? 0);
+  const view = input.query.view ?? "grouped";
+  const sort = input.query.sort ?? "most-recent";
+  const customSections = input.customSections ?? [];
+  const errorGroupsById = buildGroupDetails(input.records);
+  const relatedTraceGroupIdByRecordId = buildRelatedTraceGroupIdByRecordId(errorGroupsById);
+  const occurrences = input.records
+    .filter((record) => isErrorRecord(record))
+    .map((record) =>
+      toErrorOccurrence(record, {
+        customSections,
+        projectPath: input.projectPath,
+        relatedTraceGroupId: relatedTraceGroupIdByRecordId.get(record.id) ?? null,
+      }),
+    )
+    .filter((occurrence) => matchesErrorFilters(occurrence, input.query))
+    .sort((left, right) => sortOccurrences(left, right, sort));
 
-interface ErrorGroupBucket {
-  fingerprint: string;
-  records: StudioNormalizedRecord[];
-}
+  const groups = buildErrorGroups(occurrences, sort);
+  const pagedEntries =
+    view === "grouped"
+      ? groups.slice(offset, offset + limit)
+      : occurrences.slice(offset, offset + limit);
 
-export function buildErrorsPage({
-  records,
-  input,
-  projectPath,
-  customSections = [],
-  truncated = false,
-}: BuildErrorsPageOptions): StudioErrorsPage {
-  const limit = clampLimit(input.limit);
-  const offset = Math.max(0, input.offset ?? 0);
-  const filteredRecords = filterErrorRecords(records, input, projectPath, customSections);
-  const groups = buildErrorGroupBuckets(filteredRecords, projectPath);
-  const groupSummaries = Array.from(groups.values()).map((group) =>
-    toErrorGroupSummary(group.fingerprint, group.records, projectPath, customSections),
-  );
-  const sortedGroups = sortErrorGroups(groupSummaries, input.sort ?? "most-recent");
-  const rawRecords = filteredRecords
-    .slice()
-    .sort(compareRecordsDescending)
-    .map((record) => toErrorOccurrence(record, projectPath));
+  const timestamps = occurrences
+    .map((occurrence) => occurrence.timestamp)
+    .filter((value): value is string => typeof value === "string" && Number.isFinite(Date.parse(value)))
+    .sort((left, right) => Date.parse(left) - Date.parse(right));
+  const availableTypes = Array.from(new Set(occurrences.map((entry) => entry.type))).sort();
+  const availableSourceFiles = Array.from(
+    new Set(
+      occurrences
+        .map((entry) => entry.fingerprintSource.relativePath ?? entry.sourceLocation?.relativePath ?? null)
+        .filter((value): value is string => Boolean(value)),
+    ),
+  ).sort();
+  const availableSectionTags = Array.from(
+    new Set(occurrences.flatMap((occurrence) => occurrence.sectionTags)),
+  ).sort();
 
   return {
-    groups: input.view === "raw" ? [] : sortedGroups.slice(offset, offset + limit),
-    rawRecords: input.view === "raw" ? rawRecords.slice(offset, offset + limit) : [],
-    stats: buildErrorStats(sortedGroups),
-    totalGroups: sortedGroups.length,
-    totalRawRecords: rawRecords.length,
+    entries: pagedEntries,
+    groups,
+    occurrences,
+    stats: buildErrorStats(groups),
+    totalMatched: occurrences.length,
+    totalEntries: view === "grouped" ? groups.length : occurrences.length,
+    scannedRecords: input.scannedRecords,
+    returnedCount: pagedEntries.length,
     offset,
     limit,
-    truncated,
+    truncated: input.truncated,
+    earliestTimestamp: timestamps[0] ?? null,
+    latestTimestamp: timestamps[timestamps.length - 1] ?? null,
+    availableTypes,
+    availableSourceFiles,
+    availableSectionTags,
   };
 }
 
 export function buildErrorGroupDetail(input: {
-  groupId: string;
   records: StudioNormalizedRecord[];
-  projectPath: string;
+  fingerprint: string;
   customSections?: StudioCustomSectionDefinition[];
+  projectPath?: string;
 }): StudioErrorGroupDetail | null {
-  const errorRecords = input.records.filter((record) => matchesErrorSignal(record));
-  const groups = buildErrorGroupBuckets(errorRecords, input.projectPath);
-  const group = groups.get(input.groupId);
+  const page = buildErrorsPage({
+    records: input.records,
+    query: {
+      view: "grouped",
+      limit: MAX_LIMIT,
+      offset: 0,
+    },
+    customSections: input.customSections,
+    scannedRecords: input.records.length,
+    truncated: false,
+    projectPath: input.projectPath,
+  });
 
+  const group = page.groups.find((candidate) => candidate.fingerprint === input.fingerprint);
   if (!group) {
     return null;
   }
 
-  const summary = toErrorGroupSummary(
-    group.fingerprint,
-    group.records,
-    input.projectPath,
-    input.customSections ?? [],
-  );
-  const representative =
-    group.records.slice().sort(compareRecordsDescending)[0] ?? group.records[0] ?? null;
-  const structuredGroups = buildGroupDetails(input.records);
-
   return {
-    group: summary,
-    occurrences: group.records
-      .slice()
-      .sort(compareRecordsAscending)
-      .map((record) => toErrorOccurrence(record, input.projectPath)),
-    structuredFields: representative ? buildStructuredFields(representative) : [],
-    traceReference: representative
-      ? buildTraceReference(representative, structuredGroups)
-      : null,
+    group,
+    occurrences: page.occurrences
+      .filter((occurrence) => occurrence.fingerprint === input.fingerprint)
+      .sort(compareOccurrencesAscending),
   };
 }
 
-export function extractErrorType(record: StudioNormalizedRecord): string | null {
-  const errorObject = asPlainObject(record.error);
-  const candidates = [
-    errorObject?.name,
-    errorObject?.type,
-    errorObject?.code,
-    getNestedValue(record.raw, "error.name"),
-    getNestedValue(record.raw, "error.type"),
-    getNestedValue(record.raw, "error.code"),
-    record.type,
-  ];
+function buildErrorGroups(
+  occurrences: StudioErrorOccurrence[],
+  sort: StudioErrorSort,
+): StudioErrorGroupSummary[] {
+  const earliest = getTimeBounds(occurrences).earliest;
+  const latest = getTimeBounds(occurrences).latest;
+  const grouped = new Map<string, StudioErrorOccurrence[]>();
 
-  for (const candidate of candidates) {
-    if (typeof candidate === "string" && candidate.trim().length > 0) {
-      return candidate.trim();
-    }
+  for (const occurrence of occurrences) {
+    const bucket = grouped.get(occurrence.fingerprint) ?? [];
+    bucket.push(occurrence);
+    grouped.set(occurrence.fingerprint, bucket);
   }
 
-  return null;
-}
-
-export function extractErrorMessageFirstLine(record: StudioNormalizedRecord): string {
-  const errorObject = asPlainObject(record.error);
-  const rawMessage =
-    (typeof errorObject?.message === "string" && errorObject.message) || record.message || "Unknown error";
-
-  return rawMessage
-    .split("\n")
-    .map((line) => line.trim())
-    .find((line) => line.length > 0)
-    ?.replace(/\s+/g, " ")
-    ?? "Unknown error";
-}
-
-export function extractErrorSourceLocation(
-  record: StudioNormalizedRecord,
-  projectPath: string,
-): {
-  sourceFile: string | null;
-  sourceLine: number | null;
-  sourceColumn: number | null;
-  sourceKey: string;
-} {
-  if (record.sourceLocation) {
-    return {
-      sourceFile: record.sourceLocation.relativePath,
-      sourceLine: record.sourceLocation.line,
-      sourceColumn: record.sourceLocation.column,
-      sourceKey: `${record.sourceLocation.relativePath}:${record.sourceLocation.line}`,
-    };
-  }
-
-  for (const candidate of [...parseStackCandidates(record.stack), ...parseCallerCandidates(record.caller)]) {
-    const relativePath = normalizeCandidatePath(candidate.pathText, projectPath);
-
-    if (!relativePath) {
-      continue;
-    }
+  const summaries = Array.from(grouped.entries()).map(([fingerprint, groupOccurrences]) => {
+    const sortedAscending = groupOccurrences.slice().sort(compareOccurrencesAscending);
+    const sortedDescending = groupOccurrences.slice().sort(compareOccurrencesDescending);
+    const first = sortedAscending[0]!;
+    const last = sortedDescending[0]!;
+    const representative = pickRepresentativeOccurrence(groupOccurrences);
 
     return {
-      sourceFile: relativePath,
-      sourceLine: candidate.line,
-      sourceColumn: candidate.column,
-      sourceKey: `${relativePath}:${candidate.line}`,
-    };
-  }
-
-  return {
-    sourceFile: null,
-    sourceLine: null,
-    sourceColumn: null,
-    sourceKey: "unknown",
-  };
-}
-
-export function extractErrorHttpContext(
-  record: StudioNormalizedRecord,
-): StudioErrorHttpContext | null {
-  if (!record.http) {
-    return null;
-  }
-
-  return {
-    method: record.http.method,
-    route: record.http.path ?? record.http.url,
-    statusCode: record.http.statusCode,
-  };
-}
-
-export function extractErrorTags(
-  record: StudioNormalizedRecord,
-  customSections: StudioCustomSectionDefinition[] = [],
-) {
-  return getMatchedSectionTags(record, customSections);
-}
-
-function filterErrorRecords(
-  records: StudioNormalizedRecord[],
-  input: StudioErrorsQueryInput,
-  projectPath: string,
-  customSections: StudioCustomSectionDefinition[],
-): StudioNormalizedRecord[] {
-  return filterRecords(
-    records.filter((record) => matchesErrorSignal(record)),
-    {
-      fileId: input.fileId,
-      from: input.from,
-      to: input.to,
-      search: input.search,
-      sectionId: input.sectionId,
-    },
-    customSections,
-  ).filter((record) => {
-    const errorType = extractErrorType(record);
-    const source = extractErrorSourceLocation(record, projectPath);
-
-    if (input.type && errorType?.toLowerCase() !== input.type.toLowerCase()) {
-      return false;
-    }
-
-    if (input.type && !errorType) {
-      return false;
-    }
-
-    if (input.sourceFile && source.sourceFile?.toLowerCase() !== input.sourceFile.toLowerCase()) {
-      return false;
-    }
-
-    if (input.sourceFile && !source.sourceFile) {
-      return false;
-    }
-
-    return true;
-  });
-}
-
-function buildErrorGroupBuckets(
-  records: StudioNormalizedRecord[],
-  projectPath: string,
-): Map<string, ErrorGroupBucket> {
-  const groups = new Map<string, ErrorGroupBucket>();
-
-  for (const record of records) {
-    const fingerprint = buildErrorFingerprint(record, projectPath);
-    const existing = groups.get(fingerprint);
-
-    if (existing) {
-      existing.records.push(record);
-      continue;
-    }
-
-    groups.set(fingerprint, {
+      kind: "error-group" as const,
       fingerprint,
-      records: [record],
-    });
-  }
+      errorType: representative.type,
+      message: representative.message,
+      messageFirstLine: representative.messageFirstLine,
+      occurrenceCount: groupOccurrences.length,
+      firstSeenAt: first.timestamp,
+      lastSeenAt: last.timestamp,
+      sourceLocation: representative.sourceLocation,
+      fingerprintSource: representative.fingerprintSource,
+      http: representative.http
+        ? {
+            method: representative.http.method,
+            path: representative.http.path,
+            statusCode: representative.http.statusCode,
+            url: representative.http.url,
+          }
+        : null,
+      sectionTags: Array.from(
+        new Set(groupOccurrences.flatMap((occurrence) => occurrence.sectionTags)),
+      ).sort(),
+      sparklineBuckets: buildSparklineBuckets(groupOccurrences, earliest, latest),
+      representativeOccurrenceId: representative.id,
+      relatedTraceGroupId: representative.relatedTraceGroupId,
+    };
+  });
 
-  return groups;
+  return summaries.sort((left, right) => compareGroupSummaries(left, right, sort));
 }
 
-function buildErrorFingerprint(
-  record: StudioNormalizedRecord,
-  projectPath: string,
-): string {
-  const type = extractErrorType(record) ?? "unknown";
-  const message = extractErrorMessageFirstLine(record);
-  const source = extractErrorSourceLocation(record, projectPath).sourceKey;
-  return `${type}::${message}::${source}`;
-}
-
-function toErrorGroupSummary(
-  fingerprint: string,
-  records: StudioNormalizedRecord[],
-  projectPath: string,
-  customSections: StudioCustomSectionDefinition[],
-): StudioErrorGroupSummary {
-  const sortedDescending = records.slice().sort(compareRecordsDescending);
-  const representative = sortedDescending[0] ?? records[0]!;
-  const source = extractErrorSourceLocation(representative, projectPath);
-  const timestamps = records
-    .map((record) => record.timestamp)
-    .filter((value): value is string => typeof value === "string");
-  const tags = extractErrorTags(representative, customSections);
+function buildErrorStats(groups: StudioErrorGroupSummary[]): StudioErrorStats {
+  const totalOccurrences = groups.reduce((sum, group) => sum + group.occurrenceCount, 0);
+  const uniqueTypes = new Set(groups.map((group) => group.errorType));
+  const mostFrequentError = groups[0]
+    ? groups
+        .slice()
+        .sort((left, right) => compareGroupSummaries(left, right, "most-frequent"))[0] ?? null
+    : null;
 
   return {
-    id: fingerprint,
-    fingerprint,
-    errorType: extractErrorType(representative),
-    message: extractErrorMessageFirstLine(representative),
-    occurrenceCount: records.length,
-    firstSeen: timestamps.length > 0 ? timestamps.slice().sort()[0] ?? null : null,
-    lastSeen: timestamps.length > 0 ? timestamps.slice().sort().at(-1) ?? null : null,
-    sourceFile: source.sourceFile,
-    sourceLine: source.sourceLine,
-    sourceColumn: source.sourceColumn,
-    http: extractErrorHttpContext(representative),
-    tags,
-    statusHint: records.length === 1 ? "new" : "recurring",
-    sparkline: buildSparkline(records),
-    representativeRecordId: representative.id,
-    traceId: getCorrelationValue(representative, ["traceId", "trace.id"]),
-    correlationId: getCorrelationValue(representative, ["correlationId", "requestId", "groupId"]),
+    uniqueErrorTypes: uniqueTypes.size,
+    totalOccurrences,
+    mostFrequentError: mostFrequentError
+      ? {
+          fingerprint: mostFrequentError.fingerprint,
+          type: mostFrequentError.errorType,
+          messageFirstLine: mostFrequentError.messageFirstLine,
+          count: mostFrequentError.occurrenceCount,
+        }
+      : null,
+    newErrorsComparedToPreviousSessions: {
+      available: false,
+      count: null,
+    },
   };
 }
 
 function toErrorOccurrence(
   record: StudioNormalizedRecord,
-  projectPath: string,
+  input: {
+    customSections: StudioCustomSectionDefinition[];
+    projectPath?: string;
+    relatedTraceGroupId: string | null;
+  },
 ): StudioErrorOccurrence {
-  const source = extractErrorSourceLocation(record, projectPath);
+  const stackFrames = parseStackFrames(record.stack, input.projectPath);
+  const fingerprintSource = resolveFingerprintSource(record, stackFrames);
+  const type = resolveErrorType(record);
+  const message = resolveErrorMessage(record);
+  const messageFirstLine = firstLine(message);
 
   return {
-    record,
-    errorType: extractErrorType(record),
-    message: extractErrorMessageFirstLine(record),
-    sourceFile: source.sourceFile,
-    sourceLine: source.sourceLine,
-    sourceColumn: source.sourceColumn,
-    http: extractErrorHttpContext(record),
+    kind: "occurrence",
+    id: record.id,
+    fingerprint: buildFingerprint(type, messageFirstLine, fingerprintSource.key),
+    timestamp: record.timestamp,
+    level: record.level,
+    type,
+    message,
+    messageFirstLine,
+    fileId: record.fileId,
+    fileName: record.fileName,
+    filePath: record.filePath,
+    lineNumber: record.lineNumber,
+    caller: record.caller,
+    stack: record.stack,
+    stackFrames,
+    http: record.http,
+    sourceLocation: record.sourceLocation,
+    fingerprintSource,
+    sectionTags: getMatchedSectionIds(record, input.customSections),
+    relatedTraceGroupId: input.relatedTraceGroupId,
+    structuredFields: buildStructuredFields(record),
+    raw: record.raw,
   };
 }
 
-function buildErrorStats(groups: StudioErrorGroupSummary[]): StudioErrorsStats {
-  const mostFrequent = groups
-    .slice()
-    .sort((left, right) => {
-      if (left.occurrenceCount !== right.occurrenceCount) {
-        return right.occurrenceCount - left.occurrenceCount;
-      }
-
-      return compareNullableTimestamps(right.lastSeen, left.lastSeen);
-    })[0] ?? null;
-
+function buildStructuredFields(record: StudioNormalizedRecord): Record<string, unknown> {
   return {
-    totalUniqueErrorTypes: groups.length,
-    totalErrorOccurrences: groups.reduce((sum, group) => sum + group.occurrenceCount, 0),
-    mostFrequentError: mostFrequent
-      ? {
-          errorType: mostFrequent.errorType,
-          message: mostFrequent.message,
-          count: mostFrequent.occurrenceCount,
-        }
-      : null,
-    newErrorsThisSession: groups.filter((group) => group.occurrenceCount === 1).length,
+    bindings: record.bindings,
+    data: record.data,
+    error: record.error,
+    caller: record.caller,
+    type: record.type,
+    source: record.source,
   };
 }
 
-function buildSparkline(records: StudioNormalizedRecord[]): StudioErrorFrequencyBucket[] {
-  const timestamps = records
-    .map((record) => (record.timestamp ? Date.parse(record.timestamp) : Number.NaN))
-    .filter((value) => Number.isFinite(value));
-
-  if (timestamps.length === 0) {
-    return Array.from({ length: SPARKLINE_BUCKETS }, () => ({
-      bucketStart: null,
-      count: 0,
-    }));
+function matchesErrorFilters(
+  occurrence: StudioErrorOccurrence,
+  input: StudioErrorsQueryInput,
+): boolean {
+  if (input.fileId && occurrence.fileId !== input.fileId) {
+    return false;
   }
 
-  const min = Math.min(...timestamps);
-  const max = Math.max(...timestamps);
-
-  if (min === max) {
-    return Array.from({ length: SPARKLINE_BUCKETS }, (_, index) => ({
-      bucketStart: new Date(min + index).toISOString(),
-      count: index === SPARKLINE_BUCKETS - 1 ? records.length : 0,
-    }));
+  if (input.type && occurrence.type.toLowerCase() !== input.type.toLowerCase()) {
+    return false;
   }
 
-  const size = Math.max(1, Math.ceil((max - min + 1) / SPARKLINE_BUCKETS));
-  const counts = new Array<number>(SPARKLINE_BUCKETS).fill(0);
-
-  for (const timestamp of timestamps) {
-    const bucket = Math.min(
-      SPARKLINE_BUCKETS - 1,
-      Math.floor((timestamp - min) / size),
-    );
-    counts[bucket] = (counts[bucket] ?? 0) + 1;
+  if (input.sourceFile) {
+    const sourceFile =
+      occurrence.fingerprintSource.relativePath ??
+      occurrence.sourceLocation?.relativePath ??
+      "";
+    if (sourceFile !== input.sourceFile) {
+      return false;
+    }
   }
 
-  return counts.map((count, index) => ({
-    bucketStart: new Date(min + index * size).toISOString(),
-    count,
-  }));
-}
+  if (input.sectionId && !matchesDetectedSectionByTag(occurrence, input.sectionId)) {
+    return false;
+  }
 
-function sortErrorGroups(
-  groups: StudioErrorGroupSummary[],
-  sort: NonNullable<StudioErrorsQueryInput["sort"]>,
-): StudioErrorGroupSummary[] {
-  return groups.slice().sort((left, right) => {
-    if (sort === "most-frequent") {
-      if (left.occurrenceCount !== right.occurrenceCount) {
-        return right.occurrenceCount - left.occurrenceCount;
+  if (input.from || input.to) {
+    const occurrenceTime = occurrence.timestamp ? Date.parse(occurrence.timestamp) : Number.NaN;
+    if (input.from) {
+      const fromTime = Date.parse(input.from);
+      if (Number.isFinite(fromTime) && Number.isFinite(occurrenceTime) && occurrenceTime < fromTime) {
+        return false;
       }
-
-      return compareNullableTimestamps(right.lastSeen, left.lastSeen);
     }
-
-    if (sort === "first-seen") {
-      return compareNullableTimestamps(left.firstSeen, right.firstSeen);
+    if (input.to) {
+      const toTime = Date.parse(input.to);
+      if (Number.isFinite(toTime) && Number.isFinite(occurrenceTime) && occurrenceTime > toTime) {
+        return false;
+      }
     }
+  }
 
-    return compareNullableTimestamps(right.lastSeen, left.lastSeen);
-  });
+  if (input.search) {
+    const haystack = [
+      occurrence.type,
+      occurrence.message,
+      occurrence.stack ?? "",
+      occurrence.caller ?? "",
+      occurrence.fingerprintSource.relativePath ?? "",
+      JSON.stringify(occurrence.structuredFields),
+      JSON.stringify(occurrence.raw),
+    ]
+      .join(" ")
+      .toLowerCase();
+    if (!haystack.includes(input.search.toLowerCase())) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
-function buildStructuredFields(record: StudioNormalizedRecord) {
-  const fields = new Map<string, string>();
-  const sources: Array<[string, unknown]> = [
-    ["level", record.level],
-    ["message", record.message],
-    ["type", record.type],
-    ["caller", record.caller],
-    ["http.method", record.http?.method],
-    ["http.route", record.http?.path ?? record.http?.url],
-    ["http.statusCode", record.http?.statusCode],
-    ["bindings", record.bindings],
-    ["data", record.data],
-    ["error", record.error],
-  ];
-
-  for (const [prefix, value] of sources) {
-    flattenField(prefix, value, fields);
+function matchesDetectedSectionByTag(
+  occurrence: StudioErrorOccurrence,
+  sectionId: string,
+): boolean {
+  if (sectionId === "all-logs" || sectionId === "overview") {
+    return true;
   }
 
-  return Array.from(fields.entries()).map(([key, value]) => ({ key, value }));
+  return occurrence.sectionTags.includes(sectionId);
 }
 
-function flattenField(
-  prefix: string,
-  value: unknown,
-  target: Map<string, string>,
-  depth = 0,
-) {
-  if (!prefix || value == null) {
-    return;
+function resolveErrorType(record: StudioNormalizedRecord): string {
+  const errorObject = asPlainObject(record.error);
+  const explicitName = readString(errorObject, ["name", "code"]);
+  if (explicitName) {
+    return explicitName;
   }
 
-  if (depth >= 3) {
-    target.set(prefix, stringifyValue(value));
-    return;
+  if (record.type && /error|exception|panic|declined|failed/i.test(record.type)) {
+    return record.type;
   }
 
-  if (Array.isArray(value)) {
-    target.set(prefix, stringifyValue(value));
-    return;
+  const stackHeader = record.stack?.split("\n")[0] ?? "";
+  const stackNameMatch = stackHeader.match(/^([A-Za-z0-9_$.-]+(?:Error|Exception))/);
+  if (stackNameMatch?.[1]) {
+    return stackNameMatch[1];
   }
 
-  if (typeof value === "object") {
-    const entries = Object.entries(value as Record<string, unknown>);
-
-    if (entries.length === 0) {
-      return;
-    }
-
-    for (const [key, nested] of entries.slice(0, 20)) {
-      flattenField(`${prefix}.${key}`, nested, target, depth + 1);
-    }
-    return;
-  }
-
-  target.set(prefix, stringifyValue(value));
+  return "Error";
 }
 
-function buildTraceReference(
-  representative: StudioNormalizedRecord,
-  structuredGroups: Map<string, StudioStructuredGroupDetail>,
-) {
-  for (const group of structuredGroups.values()) {
-    if (!group.records.some((record) => record.id === representative.id)) {
-      continue;
-    }
+function resolveErrorMessage(record: StudioNormalizedRecord): string {
+  const errorObject = asPlainObject(record.error);
+  const explicitMessage = readString(errorObject, ["message"]);
+  if (explicitMessage) {
+    return explicitMessage.trim();
+  }
 
+  const stackHeader = record.stack?.split("\n")[0] ?? "";
+  const stackMessageMatch = stackHeader.match(/^[A-Za-z0-9_$.-]*(?:Error|Exception)?:?\s*(.+)$/);
+  if (stackMessageMatch?.[1]) {
+    return stackMessageMatch[1].trim();
+  }
+
+  if (record.message.trim().length > 0) {
+    return record.message.trim();
+  }
+
+  return "Unknown error";
+}
+
+function resolveFingerprintSource(
+  record: StudioNormalizedRecord,
+  stackFrames: StudioErrorStackFrame[],
+): StudioErrorFingerprintSource {
+  if (record.sourceLocation) {
+    return fromResolvedSourceLocation("source-location", record.sourceLocation);
+  }
+
+  const stackFrame = stackFrames.find((frame) => frame.inProject && frame.relativePath && frame.line);
+  if (stackFrame) {
     return {
-      kind: "group" as const,
-      id: group.group.id,
-      sectionId: "all-logs" as const,
-      label: group.group.title,
+      key: `${stackFrame.relativePath}:${stackFrame.line}`,
+      kind: "stack-frame",
+      relativePath: stackFrame.relativePath,
+      line: stackFrame.line,
+      column: stackFrame.column,
     };
   }
 
-  return null;
+  const callerLocation = parseCallerLocation(record.caller);
+  if (callerLocation) {
+    return {
+      key: `${callerLocation.relativePath}:${callerLocation.line}`,
+      kind: "caller",
+      relativePath: callerLocation.relativePath,
+      line: callerLocation.line,
+      column: callerLocation.column,
+    };
+  }
+
+  return {
+    key: "unknown",
+    kind: "unknown",
+    relativePath: null,
+    line: null,
+    column: null,
+  };
 }
 
-function getCorrelationValue(record: StudioNormalizedRecord, keys: string[]): string | null {
+function fromResolvedSourceLocation(
+  kind: StudioErrorFingerprintSource["kind"],
+  location: StudioResolvedSourceLocation,
+): StudioErrorFingerprintSource {
+  return {
+    key: `${location.relativePath}:${location.line}`,
+    kind,
+    relativePath: location.relativePath,
+    line: location.line,
+    column: location.column,
+  };
+}
+
+function parseStackFrames(
+  stack: string | null,
+  projectPath: string | undefined,
+): StudioErrorStackFrame[] {
+  if (!stack) {
+    return [];
+  }
+
+  return stack
+    .split("\n")
+    .slice(1)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => parseStackFrame(line, projectPath));
+}
+
+function parseStackFrame(
+  line: string,
+  projectPath: string | undefined,
+): StudioErrorStackFrame {
+  const match =
+    line.match(/\((.+):(\d+):(\d+)\)$/) ??
+    line.match(/at (.+):(\d+):(\d+)$/);
+
+  if (!match) {
+    return {
+      raw: line,
+      relativePath: null,
+      absolutePath: null,
+      line: null,
+      column: null,
+      inProject: false,
+    };
+  }
+
+  const absolutePath = match[1] ?? null;
+  const lineNumber = Number(match[2]);
+  const columnNumber = Number(match[3]);
+  const inProject =
+    Boolean(projectPath && absolutePath && path.isAbsolute(absolutePath) && absolutePath.startsWith(projectPath));
+  const relativePath =
+    inProject && projectPath && absolutePath ? path.relative(projectPath, absolutePath) : null;
+
+  return {
+    raw: line,
+    relativePath,
+    absolutePath,
+    line: Number.isFinite(lineNumber) ? lineNumber : null,
+    column: Number.isFinite(columnNumber) ? columnNumber : null,
+    inProject,
+  };
+}
+
+function parseCallerLocation(
+  caller: string | null,
+): { relativePath: string; line: number; column: number | null } | null {
+  if (!caller) {
+    return null;
+  }
+
+  const match = caller.match(/(.+):(\d+)(?::(\d+))?$/);
+  if (!match?.[1] || !match[2]) {
+    return null;
+  }
+
+  const lineNumber = Number(match[2]);
+  const columnNumber = match[3] ? Number(match[3]) : null;
+  return {
+    relativePath: match[1],
+    line: Number.isFinite(lineNumber) ? lineNumber : 0,
+    column: columnNumber && Number.isFinite(columnNumber) ? columnNumber : null,
+  };
+}
+
+function buildFingerprint(type: string, messageFirstLine: string, sourceKey: string): string {
+  const normalized = [
+    normalizeFingerprintPart(type),
+    normalizeFingerprintPart(messageFirstLine),
+    sourceKey,
+  ].join("|");
+
+  return Buffer.from(normalized).toString("base64url");
+}
+
+function normalizeFingerprintPart(value: string): string {
+  return value
+    .trim()
+    .replace(/\s+/g, " ")
+    .replace(/\b[0-9a-f]{8,}\b/gi, "<hex>")
+    .replace(/\b[0-9a-f]{8}-[0-9a-f-]{27}\b/gi, "<uuid>")
+    .replace(/\b\d{6,}\b/g, "<num>")
+    .toLowerCase();
+}
+
+function firstLine(value: string): string {
+  return value.split("\n")[0]?.trim() || "Unknown error";
+}
+
+function pickRepresentativeOccurrence(
+  occurrences: StudioErrorOccurrence[],
+): StudioErrorOccurrence {
+  return occurrences
+    .slice()
+    .sort((left, right) => {
+      const leftScore = (left.stack ? 2 : 0) + (left.sourceLocation ? 1 : 0);
+      const rightScore = (right.stack ? 2 : 0) + (right.sourceLocation ? 1 : 0);
+      if (leftScore !== rightScore) {
+        return rightScore - leftScore;
+      }
+      return compareOccurrencesDescending(left, right);
+    })[0]!;
+}
+
+function buildSparklineBuckets(
+  occurrences: StudioErrorOccurrence[],
+  earliest: number | null,
+  latest: number | null,
+): number[] {
+  const buckets = new Array<number>(SPARKLINE_BUCKETS).fill(0);
+  const validTimes = occurrences
+    .map((occurrence) => (occurrence.timestamp ? Date.parse(occurrence.timestamp) : Number.NaN))
+    .filter((value) => Number.isFinite(value));
+
+  if (!validTimes.length) {
+    buckets[0] = occurrences.length;
+    return buckets;
+  }
+
+  const start = earliest ?? Math.min(...validTimes);
+  const end = latest ?? Math.max(...validTimes);
+  if (start === end) {
+    buckets[0] = validTimes.length;
+    return buckets;
+  }
+
+  const span = Math.max(1, end - start);
+  for (const time of validTimes) {
+    const rawIndex = Math.floor(((time - start) / span) * SPARKLINE_BUCKETS);
+    const index = Math.max(0, Math.min(SPARKLINE_BUCKETS - 1, rawIndex));
+    buckets[index] += 1;
+  }
+
+  return buckets;
+}
+
+function getTimeBounds(occurrences: StudioErrorOccurrence[]): {
+  earliest: number | null;
+  latest: number | null;
+} {
+  const valid = occurrences
+    .map((occurrence) => (occurrence.timestamp ? Date.parse(occurrence.timestamp) : Number.NaN))
+    .filter((value) => Number.isFinite(value));
+
+  if (!valid.length) {
+    return { earliest: null, latest: null };
+  }
+
+  return {
+    earliest: Math.min(...valid),
+    latest: Math.max(...valid),
+  };
+}
+
+function buildRelatedTraceGroupIdByRecordId(
+  groups: Map<string, { records: StudioNormalizedRecord[] }>,
+): Map<string, string> {
+  const related = new Map<string, string>();
+  for (const [groupId, group] of groups.entries()) {
+    for (const record of group.records) {
+      if (!related.has(record.id)) {
+        related.set(record.id, groupId);
+      }
+    }
+  }
+  return related;
+}
+
+function compareGroupSummaries(
+  left: StudioErrorGroupSummary,
+  right: StudioErrorGroupSummary,
+  sort: StudioErrorSort,
+): number {
+  if (sort === "most-frequent" && left.occurrenceCount !== right.occurrenceCount) {
+    return right.occurrenceCount - left.occurrenceCount;
+  }
+
+  if (sort === "first-seen") {
+    const byFirstSeen = compareTimestampsAscending(left.firstSeenAt, right.firstSeenAt);
+    if (byFirstSeen !== 0) {
+      return byFirstSeen;
+    }
+  } else {
+    const byLastSeen = compareTimestampsDescending(left.lastSeenAt, right.lastSeenAt);
+    if (byLastSeen !== 0) {
+      return byLastSeen;
+    }
+  }
+
+  if (left.occurrenceCount !== right.occurrenceCount) {
+    return right.occurrenceCount - left.occurrenceCount;
+  }
+
+  return left.messageFirstLine.localeCompare(right.messageFirstLine);
+}
+
+function compareOccurrencesDescending(
+  left: StudioErrorOccurrence,
+  right: StudioErrorOccurrence,
+): number {
+  const byTimestamp = compareTimestampsDescending(left.timestamp, right.timestamp);
+  if (byTimestamp !== 0) {
+    return byTimestamp;
+  }
+  return right.id.localeCompare(left.id);
+}
+
+function compareOccurrencesAscending(
+  left: StudioErrorOccurrence,
+  right: StudioErrorOccurrence,
+): number {
+  const byTimestamp = compareTimestampsAscending(left.timestamp, right.timestamp);
+  if (byTimestamp !== 0) {
+    return byTimestamp;
+  }
+  return left.id.localeCompare(right.id);
+}
+
+function sortOccurrences(
+  left: StudioErrorOccurrence,
+  right: StudioErrorOccurrence,
+  sort: StudioErrorSort,
+): number {
+  if (sort === "first-seen") {
+    return compareOccurrencesAscending(left, right);
+  }
+
+  return compareOccurrencesDescending(left, right);
+}
+
+function compareTimestampsDescending(left: string | null, right: string | null): number {
+  const leftTime = left ? Date.parse(left) : Number.NaN;
+  const rightTime = right ? Date.parse(right) : Number.NaN;
+
+  if (Number.isFinite(leftTime) && Number.isFinite(rightTime) && leftTime !== rightTime) {
+    return rightTime - leftTime;
+  }
+  if (Number.isFinite(leftTime)) {
+    return -1;
+  }
+  if (Number.isFinite(rightTime)) {
+    return 1;
+  }
+  return 0;
+}
+
+function compareTimestampsAscending(left: string | null, right: string | null): number {
+  const leftTime = left ? Date.parse(left) : Number.NaN;
+  const rightTime = right ? Date.parse(right) : Number.NaN;
+
+  if (Number.isFinite(leftTime) && Number.isFinite(rightTime) && leftTime !== rightTime) {
+    return leftTime - rightTime;
+  }
+  if (Number.isFinite(leftTime)) {
+    return -1;
+  }
+  if (Number.isFinite(rightTime)) {
+    return 1;
+  }
+  return 0;
+}
+
+function readString(value: Record<string, unknown> | null, keys: string[]): string | null {
+  if (!value) {
+    return null;
+  }
+
   for (const key of keys) {
-    const value = getNestedValue(record.raw, key) ?? getNestedValue(record.data, key) ?? getNestedValue(record.bindings, key);
-    if (typeof value === "string" && value.trim().length > 0) {
-      return value.trim();
+    const nested = value[key];
+    if (typeof nested === "string" && nested.trim().length > 0) {
+      return nested.trim();
     }
   }
 
   return null;
-}
-
-function normalizeCandidatePath(pathText: string, projectPath: string): string | null {
-  const normalized = path.normalize(pathText);
-  const absolute = path.isAbsolute(normalized)
-    ? normalized
-    : path.resolve(projectPath, normalized);
-  const relative = path.relative(projectPath, absolute);
-
-  if (!relative || relative.startsWith("..")) {
-    return path.isAbsolute(normalized) ? null : normalized;
-  }
-
-  return relative;
-}
-
-function compareRecordsDescending(left: StudioNormalizedRecord, right: StudioNormalizedRecord): number {
-  return compareNullableTimestamps(right.timestamp, left.timestamp) || right.id.localeCompare(left.id);
-}
-
-function compareRecordsAscending(left: StudioNormalizedRecord, right: StudioNormalizedRecord): number {
-  return compareNullableTimestamps(left.timestamp, right.timestamp) || left.id.localeCompare(right.id);
-}
-
-function compareNullableTimestamps(left: string | null, right: string | null): number {
-  const leftTime = left ? Date.parse(left) : Number.NaN;
-  const rightTime = right ? Date.parse(right) : Number.NaN;
-
-  if (!Number.isNaN(leftTime) && !Number.isNaN(rightTime) && leftTime !== rightTime) {
-    return leftTime - rightTime;
-  }
-
-  if (!Number.isNaN(leftTime) && Number.isNaN(rightTime)) {
-    return -1;
-  }
-
-  if (Number.isNaN(leftTime) && !Number.isNaN(rightTime)) {
-    return 1;
-  }
-
-  return 0;
-}
-
-function clampLimit(limit: number | undefined): number {
-  return Math.min(Math.max(limit ?? DEFAULT_LIMIT, 1), MAX_LIMIT);
 }
 
 function asPlainObject(value: unknown): Record<string, unknown> | null {
@@ -552,31 +710,6 @@ function asPlainObject(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
-function getNestedValue(value: unknown, dottedKey: string): unknown {
-  if (!asPlainObject(value)) {
-    return undefined;
-  }
-
-  let current: unknown = value;
-  for (const part of dottedKey.split(".")) {
-    const currentObject = asPlainObject(current);
-    if (!currentObject || !(part in currentObject)) {
-      return undefined;
-    }
-    current = currentObject[part];
-  }
-
-  return current;
-}
-
-function stringifyValue(value: unknown): string {
-  if (typeof value === "string") {
-    return value;
-  }
-
-  try {
-    return JSON.stringify(value);
-  } catch {
-    return String(value);
-  }
+function clampLimit(limit: number | undefined): number {
+  return Math.min(Math.max(limit ?? DEFAULT_LIMIT, 1), MAX_LIMIT);
 }

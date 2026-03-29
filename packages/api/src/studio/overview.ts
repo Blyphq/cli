@@ -1,5 +1,5 @@
 import { buildGroupDetails } from "./grouping";
-import { buildErrorGroupDetail, buildErrorsPage } from "./errors";
+import { buildErrorsPage } from "./errors";
 import { matchesDetectedSection, matchesErrorSignal } from "./sections";
 
 import type {
@@ -356,28 +356,30 @@ function buildRecentErrors(
 ): StudioOverviewRecentErrorItem[] {
   const errorPage = buildErrorsPage({
     records,
-    input: { sort: "most-recent", view: "grouped", limit: RECENT_ERRORS_LIMIT, offset: 0 },
+    query: { sort: "most-recent", view: "grouped", limit: RECENT_ERRORS_LIMIT, offset: 0 },
     projectPath,
     customSections,
+    scannedRecords: records.length,
     truncated: false,
   });
 
   return errorPage.groups.slice(0, RECENT_ERRORS_LIMIT).map((group) => {
-    const detail = buildErrorGroupDetail({
-      groupId: group.id,
-      records,
-      projectPath,
-      customSections,
-    });
-
     return {
-      groupId: group.id,
-      recordId: group.representativeRecordId,
+      groupId: group.fingerprint,
+      recordId: group.representativeOccurrenceId,
       message: group.message,
-      timestamp: group.lastSeen,
-      sourceFile: group.sourceFile,
-      sourceLine: group.sourceLine,
-      traceReference: detail?.traceReference ?? null,
+      timestamp: group.lastSeenAt,
+      sourceFile: group.fingerprintSource.relativePath,
+      sourceLine: group.fingerprintSource.line,
+      traceReference: group.relatedTraceGroupId
+        ? {
+            sectionId: "all-logs",
+            selection: {
+              kind: "group",
+              id: group.relatedTraceGroupId,
+            },
+          }
+        : null,
     };
   });
 }

@@ -10,6 +10,7 @@ import {
   addStudioCustomSection,
   getStudioAuth,
   getStudioConfig,
+  getStudioDatabase,
   getStudioErrorGroup,
   getStudioErrors,
   getStudioFacets,
@@ -37,6 +38,21 @@ const studioLogsInput = z.object({
   sectionId: z.string().optional(),
 });
 
+const studioErrorsInput = z.object({
+  projectPath: z.string().optional(),
+  limit: z.number().int().positive().max(500).optional(),
+  offset: z.number().int().min(0).optional(),
+  view: z.enum(["grouped", "raw"]).optional(),
+  sort: z.enum(["most-recent", "most-frequent", "first-seen"]).optional(),
+  type: z.string().optional(),
+  sourceFile: z.string().optional(),
+  search: z.string().optional(),
+  fileId: z.string().optional(),
+  from: z.string().optional(),
+  to: z.string().optional(),
+  sectionId: z.string().optional(),
+});
+
 const studioAuthInput = z.object({
   projectPath: z.string().optional(),
   fileId: z.string().optional(),
@@ -49,17 +65,12 @@ const studioAuthInput = z.object({
   sectionId: z.string().optional(),
 });
 
-const studioErrorsInput = z.object({
+const studioDatabaseInput = z.object({
   projectPath: z.string().optional(),
   fileId: z.string().optional(),
   from: z.string().optional(),
   to: z.string().optional(),
   search: z.string().optional(),
-  type: z.string().optional(),
-  sourceFile: z.string().optional(),
-  sectionId: z.string().optional(),
-  sort: z.enum(["most-recent", "most-frequent", "first-seen"]).optional(),
-  view: z.enum(["grouped", "raw"]).optional(),
   offset: z.number().int().min(0).optional(),
   limit: z.number().int().positive().max(500).optional(),
 });
@@ -96,9 +107,6 @@ export const studioRouter = router({
   meta: publicProcedure
     .input(z.object({ projectPath: z.string().optional() }).optional())
     .query(({ input }) => getStudioMeta(input?.projectPath)),
-  overview: publicProcedure
-    .input(studioOverviewInput.optional())
-    .query(({ input }) => getStudioOverview(input ?? {})),
   config: publicProcedure
     .input(z.object({ projectPath: z.string().optional() }).optional())
     .query(({ input }) => getStudioConfig(input?.projectPath)),
@@ -108,12 +116,18 @@ export const studioRouter = router({
   logs: publicProcedure
     .input(studioLogsInput.optional())
     .query(({ input }) => getStudioLogs(input ?? {})),
-  auth: publicProcedure
-    .input(studioAuthInput.optional())
-    .query(({ input }) => getStudioAuth(input ?? {})),
   errors: publicProcedure
     .input(studioErrorsInput.optional())
     .query(({ input }) => getStudioErrors(input ?? {})),
+  overview: publicProcedure
+    .input(studioOverviewInput.optional())
+    .query(({ input }) => getStudioOverview(input ?? {})),
+  auth: publicProcedure
+    .input(studioAuthInput.optional())
+    .query(({ input }) => getStudioAuth(input ?? {})),
+  database: publicProcedure
+    .input(studioDatabaseInput.optional())
+    .query(({ input }) => getStudioDatabase(input ?? {})),
   fileLogs: publicProcedure
     .input(
       z.object({
@@ -171,7 +185,7 @@ export const studioRouter = router({
     .input(
       z.object({
         projectPath: z.string().optional(),
-        groupId: z.string(),
+        fingerprint: z.string(),
       }),
     )
     .query(({ input }) => getStudioErrorGroup(input)),

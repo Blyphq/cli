@@ -10,29 +10,33 @@ export type StudioFile = StudioFiles["files"][number];
 export type StudioLogsPage = RouterOutputs["studio"]["logs"];
 export type StudioErrorsPage = RouterOutputs["studio"]["errors"];
 export type StudioAuthOverview = RouterOutputs["studio"]["auth"];
+export type StudioDatabaseOverview = RouterOutputs["studio"]["database"];
 export type StudioOverview = RouterOutputs["studio"]["overview"];
-export type StudioOverviewFeedItem = StudioOverview["liveFeed"][number];
-export type StudioOverviewTarget = StudioOverviewFeedItem["target"];
-export type StudioOverviewSectionCard = StudioOverview["sections"][number];
-export type StudioOverviewRecentErrorItem = StudioOverview["recentErrors"][number];
 export type StudioAuthEvent = StudioAuthOverview["timeline"][number];
 export type StudioAuthSuspiciousPattern = StudioAuthOverview["suspiciousPatterns"][number];
 export type StudioAuthUserSummary = StudioAuthOverview["users"][number];
+export type StudioDatabaseQueryEvent = StudioDatabaseOverview["queries"][number];
+export type StudioDatabaseTransactionSummary = StudioDatabaseOverview["transactions"][number];
+export type StudioDatabaseMigrationEvent = StudioDatabaseOverview["migrationEvents"][number];
 export type StudioRecord = StudioLogsPage["records"][number];
 export type StudioRecordSourceContext = RouterOutputs["studio"]["recordSource"];
 export type StudioLogEntry = StudioLogsPage["entries"][number];
 export type StudioGroupDetail = NonNullable<RouterOutputs["studio"]["group"]>;
 export type StudioErrorGroupDetail = NonNullable<RouterOutputs["studio"]["errorGroup"]>;
 export type StudioErrorGroup = StudioErrorsPage["groups"][number];
-export type StudioErrorOccurrence = StudioErrorsPage["rawRecords"][number];
+export type StudioErrorOccurrence = StudioErrorsPage["occurrences"][number];
 export type StudioErrorStats = StudioErrorsPage["stats"];
+export type StudioOverviewStatus = StudioOverview["stats"]["totalEvents"]["status"];
+export type StudioOverviewTrend = StudioOverview["stats"]["errorRate"]["trend"];
+export type StudioOverviewTarget = StudioOverview["liveFeed"][number]["target"];
+export type StudioOverviewRecentErrorItem = StudioOverview["recentErrors"][number];
 export type StudioFacets = RouterOutputs["studio"]["facets"];
 export type StudioAssistantStatus = RouterOutputs["studio"]["assistantStatus"];
 export type StudioAssistantMessage = RouterOutputs["studio"]["assistantReply"];
 export type StudioAssistantReference = StudioAssistantMessage["references"][number];
 export type StudioGroupingMode = "grouped" | "flat";
-export type StudioErrorSort = "most-recent" | "most-frequent" | "first-seen";
 export type StudioErrorViewMode = "grouped" | "raw";
+export type StudioErrorSort = "most-recent" | "most-frequent" | "first-seen";
 export type StudioDetectedSection = StudioMeta["sections"][number];
 export type StudioSectionId = StudioDetectedSection["id"] | "overview" | "all-logs";
 export type StudioChatStatus = "submitted" | "streaming" | "ready" | "error";
@@ -42,8 +46,6 @@ export type StudioBadgeVariant =
   | "muted"
   | "outline"
   | "destructive";
-export type StudioOverviewStatus = StudioOverview["stats"]["totalEvents"]["status"];
-export type StudioOverviewTrend = StudioOverview["stats"]["errorRate"]["trend"];
 
 export interface StudioAssistantMessageMetadata {
   references?: StudioAssistantReference[];
@@ -55,6 +57,8 @@ export type StudioChatMessage = UIMessage<StudioAssistantMessageMetadata>;
 export type StudioSelection =
   | { kind: "record"; id: string }
   | { kind: "group"; id: string }
+  | { kind: "error-group"; id: string }
+  | { kind: "error-occurrence"; id: string }
   | null;
 
 export interface StudioFilters {
@@ -69,6 +73,16 @@ export interface StudioFilters {
 export interface StudioAuthUiState {
   selectedUserId: string | null;
   selectedPatternId: string | null;
+}
+
+export interface StudioErrorUiState {
+  view: StudioErrorViewMode;
+  sort: StudioErrorSort;
+  type: string;
+  sourceFile: string;
+  sectionTag: string;
+  showResolved: boolean;
+  showIgnored: boolean;
 }
 
 export interface StudioSidebarState {
@@ -118,43 +132,6 @@ export function formatCompactDateTime(value: string | null | undefined): string 
   }).format(parsed);
 }
 
-export function formatRelativeTime(value: string | null | undefined, now = Date.now()): string {
-  if (!value) {
-    return "Unknown";
-  }
-
-  const parsed = new Date(value);
-  const timestamp = parsed.getTime();
-  if (Number.isNaN(timestamp)) {
-    return value;
-  }
-
-  const diffMs = now - timestamp;
-  const tense = diffMs >= 0 ? "ago" : "from now";
-  const absoluteMs = Math.abs(diffMs);
-  const seconds = Math.round(absoluteMs / 1000);
-
-  if (seconds < 5) {
-    return "just now";
-  }
-  if (seconds < 60) {
-    return `${seconds}s ${tense}`;
-  }
-
-  const minutes = Math.round(seconds / 60);
-  if (minutes < 60) {
-    return `${minutes}m ${tense}`;
-  }
-
-  const hours = Math.round(minutes / 60);
-  if (hours < 24) {
-    return `${hours}h ${tense}`;
-  }
-
-  const days = Math.round(hours / 24);
-  return `${days}d ${tense}`;
-}
-
 export function formatRotation(maxSizeBytes: number, maxArchives: number): string {
   return `${formatBytes(maxSizeBytes)} max, ${maxArchives} archives`;
 }
@@ -171,6 +148,45 @@ export function formatDateTime(value: string | null | undefined): string {
   }
 
   return parsed.toLocaleString();
+}
+
+export function formatRelativeTime(
+  value: string | null | undefined,
+  now = Date.now(),
+): string {
+  if (!value) {
+    return "Unknown";
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return value;
+  }
+
+  const diffMs = parsed.getTime() - now;
+  const formatter = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
+  const divisions: Array<[Intl.RelativeTimeFormatUnit, number]> = [
+    ["day", 1000 * 60 * 60 * 24],
+    ["hour", 1000 * 60 * 60],
+    ["minute", 1000 * 60],
+    ["second", 1000],
+  ];
+
+  for (const [unit, size] of divisions) {
+    if (Math.abs(diffMs) >= size || unit === "second") {
+      return formatter.format(Math.round(diffMs / size), unit);
+    }
+  }
+
+  return value;
+}
+
+export function formatDurationMs(value: number | null | undefined): string {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return "n/a";
+  }
+
+  return value >= 1000 ? `${(value / 1000).toFixed(2)}s` : `${Math.round(value)}ms`;
 }
 
 export function formatCalendarDate(value: Date | null | undefined): string {
@@ -238,66 +254,6 @@ export function getLevelClasses(level: string): string {
   }
 }
 
-export function getOverviewStatusClasses(status: StudioOverviewStatus): string {
-  switch (status) {
-    case "critical":
-      return "border-destructive/30 bg-destructive/10 text-destructive";
-    case "warning":
-      return "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300";
-    case "healthy":
-      return "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300";
-  }
-}
-
-export function formatOverviewMetricValue(
-  label: string,
-  value: number | null,
-): string {
-  if (value === null) {
-    return "n/a";
-  }
-
-  switch (label) {
-    case "Error rate":
-      return `${value.toFixed(1)}%`;
-    case "Avg response time":
-      return `${Math.round(value)}ms`;
-    case "Uptime":
-      return formatDuration(value);
-    default:
-      return Intl.NumberFormat().format(Math.round(value));
-  }
-}
-
-export function formatDuration(durationMs: number): string {
-  const totalSeconds = Math.max(0, Math.floor(durationMs / 1000));
-  const days = Math.floor(totalSeconds / 86_400);
-  const hours = Math.floor((totalSeconds % 86_400) / 3_600);
-  const minutes = Math.floor((totalSeconds % 3_600) / 60);
-  const seconds = totalSeconds % 60;
-
-  if (days > 0) {
-    return `${days}d ${hours}h`;
-  }
-  if (hours > 0) {
-    return `${hours}h ${minutes}m`;
-  }
-  if (minutes > 0) {
-    return `${minutes}m ${seconds}s`;
-  }
-  return `${seconds}s`;
-}
-
-export function formatOverviewTrend(
-  trend: StudioOverviewTrend,
-  deltaPercent: number | null,
-): string {
-  if (trend === "flat" || deltaPercent === null) {
-    return "No change";
-  }
-  return `${Math.abs(deltaPercent).toFixed(1)}% ${trend === "up" ? "up" : "down"}`;
-}
-
 export function getStatusClasses(
   status: "found" | "not-found" | "error" | "valid" | "invalid",
 ): string {
@@ -347,6 +303,22 @@ export function getSourceBadgeVariant(
     default:
       return "muted";
   }
+}
+
+export function getDurationClasses(value: number | null | undefined): string {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return "text-muted-foreground";
+  }
+
+  if (value > 500) {
+    return "text-destructive";
+  }
+
+  if (value > 100) {
+    return "text-amber-600";
+  }
+
+  return "text-foreground";
 }
 
 export function getAssistantStatusLabel(status: StudioAssistantStatus): string {
@@ -552,8 +524,127 @@ export function isAuthSection(section: StudioSectionId): boolean {
   return section === "auth";
 }
 
+export function isDatabaseSection(section: StudioSectionId): boolean {
+  return section === "database";
+}
+
 export function isErrorsSection(section: StudioSectionId): boolean {
   return section === "errors";
+}
+
+export function formatDuration(value: number): string {
+  if (!Number.isFinite(value) || value < 0) {
+    return "0s";
+  }
+
+  const totalSeconds = Math.floor(value / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  if (hours > 0) {
+    return `${hours}h ${minutes}m`;
+  }
+
+  if (minutes > 0) {
+    return `${minutes}m ${seconds}s`;
+  }
+
+  return `${seconds}s`;
+}
+
+export function formatOverviewMetricValue(
+  label: string,
+  value: number | null,
+): string {
+  if (label === "Error rate") {
+    return typeof value === "number" ? `${value.toFixed(1)}%` : "0.0%";
+  }
+
+  if (label === "Avg response time") {
+    return typeof value === "number" ? formatDurationMs(value) : "n/a";
+  }
+
+  if (label === "Uptime") {
+    return typeof value === "number" ? formatDuration(value) : "0s";
+  }
+
+  return typeof value === "number" ? new Intl.NumberFormat().format(value) : "n/a";
+}
+
+export function formatOverviewTrend(
+  trend: StudioOverviewTrend,
+  deltaPercent: number | null,
+): string {
+  if (trend === "flat" || deltaPercent === null || !Number.isFinite(deltaPercent)) {
+    return "No change";
+  }
+
+  return `${Math.abs(deltaPercent).toFixed(1)}% ${trend}`;
+}
+
+export function getOverviewStatusClasses(status: StudioOverviewStatus): string {
+  switch (status) {
+    case "critical":
+      return "border-destructive/40 bg-destructive/8 text-destructive";
+    case "warning":
+      return "border-amber-500/30 bg-amber-500/8 text-amber-200 dark:text-amber-300";
+    case "healthy":
+    default:
+      return "border-primary/30 bg-primary/8 text-primary";
+  }
+}
+
+export function formatRelativeToSessionStart(
+  value: string | null | undefined,
+  sessionStart: string | null | undefined,
+): string {
+  if (!value || !sessionStart) {
+    return formatDateTime(value);
+  }
+
+  const valueTime = Date.parse(value);
+  const sessionTime = Date.parse(sessionStart);
+  if (!Number.isFinite(valueTime) || !Number.isFinite(sessionTime)) {
+    return formatDateTime(value);
+  }
+
+  const diffMs = Math.max(0, valueTime - sessionTime);
+  const totalSeconds = Math.floor(diffMs / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  if (hours > 0) {
+    return `+${hours}h ${minutes}m`;
+  }
+  if (minutes > 0) {
+    return `+${minutes}m ${seconds}s`;
+  }
+
+  return `+${seconds}s`;
+}
+
+export function getErrorGroupStatusLabel(
+  group: Pick<StudioErrorGroup, "occurrenceCount" | "lastSeenAt">,
+  sessionState: {
+    resolvedAt?: string | null;
+    ignored?: boolean;
+  },
+): "Ignored" | "Resolved" | "Recurring" | "New" {
+  if (sessionState.ignored) {
+    return "Ignored";
+  }
+
+  if (sessionState.resolvedAt) {
+    const resolvedTime = Date.parse(sessionState.resolvedAt);
+    const lastSeenTime = group.lastSeenAt ? Date.parse(group.lastSeenAt) : Number.NaN;
+    if (Number.isFinite(resolvedTime) && (!Number.isFinite(lastSeenTime) || resolvedTime >= lastSeenTime)) {
+      return "Resolved";
+    }
+  }
+
+  return group.occurrenceCount > 1 ? "Recurring" : "New";
 }
 
 function readStructuredEvents(value: Record<string, unknown>): unknown[] {

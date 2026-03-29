@@ -1,185 +1,224 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import type { StudioErrorGroupDetail } from "@/lib/studio";
-import { formatCompactDateTime, stringifyJson } from "@/lib/studio";
+import type {
+  StudioErrorGroupDetail,
+  StudioErrorOccurrence,
+  StudioRecord,
+  StudioRecordSourceContext,
+} from "@/lib/studio";
+import {
+  formatDateTime,
+  getErrorGroupStatusLabel,
+  getLevelClasses,
+} from "@/lib/studio";
 
 import { EmptyState } from "./empty-state";
 import { JsonDetailBlock } from "./json-detail-block";
+import { LogDetailPanel } from "./log-detail-panel";
 import { MetaList } from "./meta-list";
 import { PanelHeader } from "./panel-header";
 
 interface ErrorDetailPanelProps {
-  detail: StudioErrorGroupDetail | null | undefined;
+  group: StudioErrorGroupDetail | null | undefined;
+  occurrence: StudioErrorOccurrence | null;
+  record: StudioRecord | null;
+  recordSource?: StudioRecordSourceContext | null;
+  recordSourceLoading?: boolean;
   loading?: boolean;
-  onAskAi(): void;
+  resolvedAt?: string | null;
+  ignored?: boolean;
+  onAskAi?(): void;
+  onMarkResolved?(): void;
+  onIgnore?(): void;
   onViewTrace?(): void;
-  statusLabel?: "New" | "Recurring" | "Resolved";
 }
 
 export function ErrorDetailPanel({
-  detail,
+  group,
+  occurrence,
+  record,
+  recordSource,
+  recordSourceLoading = false,
   loading = false,
+  resolvedAt,
+  ignored,
   onAskAi,
+  onMarkResolved,
+  onIgnore,
   onViewTrace,
-  statusLabel,
 }: ErrorDetailPanelProps) {
-  if (loading && !detail) {
+  if (occurrence) {
+    if (!record) {
+      return (
+        <EmptyState
+          title="Loading occurrence"
+          description="Resolving the selected error occurrence and source context."
+        />
+      );
+    }
+
+    return (
+      <LogDetailPanel
+        record={record}
+        source={recordSource}
+        sourceLoading={recordSourceLoading}
+      />
+    );
+  }
+
+  if (loading && !group) {
     return (
       <EmptyState
         title="Loading error"
-        description="Resolving the selected error group."
+        description="Resolving the selected error group and its occurrences."
       />
     );
   }
 
-  if (!detail) {
+  if (!group) {
     return (
       <EmptyState
         title="Select an error group"
-        description="Choose an error card to inspect stack traces, occurrences, and fields."
+        description="Choose a grouped error to inspect stack traces, recurrence, and fields."
       />
     );
   }
 
-  const representative = detail.occurrences.at(-1) ?? detail.occurrences[0] ?? null;
-  const stack =
-    representative?.record.stack ??
-    (typeof representative?.record.error === "object" &&
-    representative?.record.error &&
-    "stack" in representative.record.error
-      ? String((representative.record.error as { stack?: unknown }).stack ?? "")
-      : "");
+  const representative = group.occurrences.find(
+    (item) => item.id === group.group.representativeOccurrenceId,
+  ) ?? group.occurrences[0];
+  const status = getErrorGroupStatusLabel(group.group, { resolvedAt, ignored });
 
   return (
-    <div className="min-w-0 space-y-4">
+    <div className="space-y-4">
       <Card>
         <PanelHeader
           title={
-            <div className="min-w-0 space-y-2">
-              <div className="break-words text-balance">
-                {detail.group.errorType ?? "Error"}: {detail.group.message}
-              </div>
-              <div className="flex flex-wrap gap-2">
+            <div className="flex min-w-0 flex-col gap-2">
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                <span className="break-words">{group.group.errorType}</span>
                 <Badge variant="secondary">
-                  {detail.group.occurrenceCount} occurrence{detail.group.occurrenceCount === 1 ? "" : "s"}
+                  {group.group.occurrenceCount} time{group.group.occurrenceCount === 1 ? "" : "s"}
                 </Badge>
-                <Badge variant={statusLabel === "Resolved" ? "outline" : "default"}>
-                  {statusLabel ?? (detail.group.statusHint === "new" ? "New" : "Recurring")}
+                <Badge variant={status === "Recurring" ? "destructive" : "outline"}>
+                  {status}
                 </Badge>
-                {detail.group.tags.map((tag) => (
-                  <Badge key={`${detail.group.id}:${tag.id}`} variant="outline">
-                    {tag.label}
-                  </Badge>
-                ))}
+              </div>
+              <div className="break-words text-sm text-muted-foreground">
+                {group.group.messageFirstLine}
               </div>
             </div>
           }
-          description={`First ${formatCompactDateTime(detail.group.firstSeen)} • Last ${formatCompactDateTime(detail.group.lastSeen)}`}
+          description={
+            <>
+              First seen {formatDateTime(group.group.firstSeenAt)}
+              <br />
+              Last seen {formatDateTime(group.group.lastSeenAt)}
+            </>
+          }
           action={
             <div className="flex flex-wrap gap-2">
-              {detail.traceReference && onViewTrace ? (
+              {onViewTrace && group.group.relatedTraceGroupId ? (
                 <Button variant="outline" size="xs" onClick={onViewTrace}>
                   View full trace
                 </Button>
               ) : null}
-              <Button variant="secondary" size="xs" onClick={onAskAi}>
-                Ask AI to fix this
-              </Button>
+              {onAskAi ? (
+                <Button variant="secondary" size="xs" onClick={onAskAi}>
+                  Recommend fixes
+                </Button>
+              ) : null}
             </div>
           }
         />
         <CardContent className="space-y-4">
           <MetaList
             items={[
+              { label: "Fingerprint", value: group.group.fingerprint },
               {
                 label: "Source",
-                value: detail.group.sourceFile
-                  ? `${detail.group.sourceFile}:${detail.group.sourceLine ?? "?"}`
-                  : "Unknown",
+                value:
+                  group.group.fingerprintSource.relativePath
+                    ? `${group.group.fingerprintSource.relativePath}${group.group.fingerprintSource.line ? `:${group.group.fingerprintSource.line}` : ""}`
+                    : "Unknown source",
               },
               {
                 label: "HTTP",
-                value:
-                  detail.group.http?.method && detail.group.http.route
-                    ? `${detail.group.http.method} ${detail.group.http.route} ${detail.group.http.statusCode ?? ""}`.trim()
-                    : "n/a",
+                value: group.group.http
+                  ? [
+                      group.group.http.method,
+                      group.group.http.path ?? group.group.http.url,
+                      group.group.http.statusCode,
+                    ]
+                      .filter(Boolean)
+                      .join(" ")
+                  : "n/a",
               },
               {
-                label: "Fingerprint",
-                value: detail.group.fingerprint,
+                label: "Tags",
+                value: group.group.sectionTags.length > 0 ? group.group.sectionTags.join(", ") : "n/a",
               },
             ]}
           />
+          <div className="flex flex-wrap gap-2">
+            {onMarkResolved ? (
+              <Button variant="outline" size="sm" onClick={onMarkResolved}>
+                Mark resolved
+              </Button>
+            ) : null}
+            {onIgnore ? (
+              <Button variant="outline" size="sm" onClick={onIgnore}>
+                Ignore for this session
+              </Button>
+            ) : null}
+          </div>
         </CardContent>
       </Card>
-      {stack ? (
-        <Card size="sm">
-          <PanelHeader title="Stack trace" />
-          <CardContent>
-            <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-words rounded border border-border/60 bg-muted/20 p-3 font-mono text-[11px] leading-5">
-              {stack}
-            </pre>
-          </CardContent>
-        </Card>
+      {representative?.stack ? (
+        <JsonDetailBlock title="Stack Trace" value={representative.stack} />
+      ) : null}
+      {representative ? (
+        <JsonDetailBlock
+          title="Structured Fields"
+          value={representative.structuredFields}
+        />
       ) : null}
       <Card size="sm">
         <PanelHeader
           title="Occurrences"
-          description="Chronological list of each occurrence in this session."
+          description="Chronological error occurrences in this session."
         />
         <CardContent className="space-y-3">
-          {detail.occurrences.map((occurrence) => (
-            <div key={occurrence.record.id} className="border border-border/60 bg-background/40 p-3">
-              <div className="flex flex-wrap items-center gap-2 text-sm font-medium">
-                <span>{occurrence.message}</span>
+          {group.occurrences.map((item) => (
+            <div
+              key={item.id}
+              className="space-y-2 rounded border border-border/60 bg-background/50 p-3"
+            >
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge className={getLevelClasses(item.level)}>{item.level}</Badge>
                 <span className="text-xs text-muted-foreground">
-                  {formatCompactDateTime(occurrence.record.timestamp)}
+                  {formatDateTime(item.timestamp)}
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  {item.fingerprintSource.relativePath ?? item.fileName}
+                  {item.fingerprintSource.line ? `:${item.fingerprintSource.line}` : ""}
                 </span>
               </div>
-              <div className="mt-2 flex flex-wrap gap-3 text-[11px] text-muted-foreground">
-                {occurrence.sourceFile ? (
-                  <span>
-                    {occurrence.sourceFile}:{occurrence.sourceLine ?? "?"}
-                  </span>
-                ) : null}
-                {occurrence.http?.method && occurrence.http.route ? (
-                  <span>
-                    {occurrence.http.method} {occurrence.http.route} {occurrence.http.statusCode ?? ""}
-                  </span>
-                ) : null}
-              </div>
+              <div className="break-words text-sm">{item.messageFirstLine}</div>
+              {item.http ? (
+                <div className="text-xs text-muted-foreground">
+                  {[item.http.method, item.http.path ?? item.http.url, item.http.statusCode]
+                    .filter(Boolean)
+                    .join(" ")}
+                </div>
+              ) : null}
+              <JsonDetailBlock title="Fields" value={item.structuredFields} />
+              <JsonDetailBlock title="Raw Payload" value={item.raw} />
             </div>
           ))}
         </CardContent>
       </Card>
-      <Card size="sm">
-        <PanelHeader title="Structured fields" />
-        <CardContent className="space-y-2">
-          {detail.structuredFields.length === 0 ? (
-            <div className="text-sm text-muted-foreground">No structured fields captured.</div>
-          ) : (
-            detail.structuredFields.map((field) => (
-              <div
-                key={field.key}
-                className="grid gap-1 border-b border-border/40 py-2 md:grid-cols-[12rem_minmax(0,1fr)]"
-              >
-                <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
-                  {field.key}
-                </div>
-                <div className="break-words font-mono text-xs">{field.value}</div>
-              </div>
-            ))
-          )}
-        </CardContent>
-      </Card>
-      {representative ? (
-        <JsonDetailBlock
-          title="Representative raw record"
-          value={representative.record.raw}
-          description={stringifyJson(representative.record.error ?? representative.record.data ?? null).length > 0 ? "Raw payload for the representative occurrence." : undefined}
-        />
-      ) : null}
     </div>
   );
 }

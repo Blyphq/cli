@@ -1,11 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
+import { ErrorsView } from "@/components/studio/errors-view";
 import { AuthView } from "@/components/studio/auth-view";
 import { AssistantSheet } from "@/components/studio/assistant-sheet";
+import { DatabaseView } from "@/components/studio/database-view";
 import { EmptyState } from "@/components/studio/empty-state";
 import { ErrorDetailPanel } from "@/components/studio/error-detail-panel";
 import { ErrorState } from "@/components/studio/error-state";
-import { ErrorsView } from "@/components/studio/errors-view";
 import { GroupDetailPanel } from "@/components/studio/group-detail-panel";
 import { LogDetailPanel } from "@/components/studio/log-detail-panel";
 import { LogFilesPanel } from "@/components/studio/log-files-panel";
@@ -17,16 +18,20 @@ import { StudioShell } from "@/components/studio/studio-shell";
 import { StudioToolbar } from "@/components/studio/studio-toolbar";
 import { useAssistantChat } from "@/hooks/use-assistant-chat";
 import {
+  useErrorSessionState,
   DEFAULT_FILTERS,
   useStudioFiltersAndSelection,
+  useSyncErrorSelectionFromEntries,
   useSyncSelectionFromEntries,
 } from "@/hooks";
 import { useStudioData } from "@/hooks";
 import {
   isAuthSection,
+  isDatabaseSection,
   isErrorsSection,
   isOverviewSection,
 } from "@/lib/studio";
+import { formatDurationMs } from "@/lib/studio";
 
 export interface StudioPageProps {
   navigate: (opts: { search: { project?: string } }) => void;
@@ -35,15 +40,13 @@ export interface StudioPageProps {
 
 export function StudioPage({ navigate, search }: StudioPageProps) {
   const projectPath = search.project ?? "";
-  const [overviewConnectedAt, setOverviewConnectedAt] = useState(() => new Date().toISOString());
-  const [errorView, setErrorView] = useState<"grouped" | "raw">("grouped");
-  const [errorSort, setErrorSort] = useState<"most-recent" | "most-frequent" | "first-seen">("most-recent");
-  const [errorType, setErrorType] = useState("");
-  const [errorSourceFile, setErrorSourceFile] = useState("");
-  const [errorTag, setErrorTag] = useState("");
-  const [selectedErrorGroupId, setSelectedErrorGroupId] = useState<string | null>(null);
-  const [resolvedGroupIds, setResolvedGroupIds] = useState<Set<string>>(new Set());
-  const [ignoredGroupIds, setIgnoredGroupIds] = useState<Set<string>>(new Set());
+  const [overviewConnectedAt, setOverviewConnectedAt] = useState(() =>
+    new Date().toISOString(),
+  );
+  const [pendingDatabaseAiPrompt, setPendingDatabaseAiPrompt] = useState<{
+    recordId: string;
+    prompt: string;
+  } | null>(null);
 
   const {
     filters,
@@ -59,9 +62,12 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
     visitedAtBySection,
     authUi,
     setAuthUi,
+    errorUi,
+    setErrorUi,
     draftProjectPath,
     setDraftProjectPath,
   } = useStudioFiltersAndSelection(projectPath);
+  const errorSessionState = useErrorSessionState(projectPath);
 
   const studioData = useStudioData({
     projectPath,
@@ -69,14 +75,9 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
     offset,
     grouping,
     section,
+    errorUi,
     authUserId: authUi.selectedUserId,
     selection,
-    errorView,
-    errorSort,
-    errorType,
-    errorSourceFile,
-    errorTag,
-    errorGroupId: selectedErrorGroupId,
   });
 
   const {
@@ -98,18 +99,20 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
   } = studioData;
 
   const shouldSyncSelection =
-    !isOverviewSection(section) && !isAuthSection(section) && !isErrorsSection(section);
+    !isOverviewSection(section) &&
+    !isAuthSection(section) &&
+    !isDatabaseSection(section) &&
+    !isErrorsSection(section);
   useSyncSelectionFromEntries(entries, selection, setSelection, shouldSyncSelection);
+  useSyncErrorSelectionFromEntries(
+    studioData.errorsQuery.data?.entries ?? [],
+    selection,
+    setSelection,
+    errorUi.view === "grouped",
+    isErrorsSection(section),
+  );
 
   useEffect(() => {
-    setResolvedGroupIds(new Set());
-    setIgnoredGroupIds(new Set());
-    setSelectedErrorGroupId(null);
-    setErrorView("grouped");
-    setErrorSort("most-recent");
-    setErrorType("");
-    setErrorSourceFile("");
-    setErrorTag("");
     setOverviewConnectedAt(new Date().toISOString());
   }, [projectPath]);
 
@@ -126,11 +129,11 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
     projectPath,
     section,
     grouping,
-    errorView,
-    errorSort,
-    errorType,
-    errorSourceFile,
-    errorTag,
+    errorUi.view,
+    errorUi.sort,
+    errorUi.type,
+    errorUi.sourceFile,
+    errorUi.sectionTag,
     setOffset,
   ]);
 
@@ -158,6 +161,37 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
     assistantStatusData: studioData.assistantStatusQuery.data,
   });
 
+  useEffect(() => {
+    if (!pendingDatabaseAiPrompt) {
+      return;
+    }
+
+    if (selection?.kind !== "record" || selection.id !== pendingDatabaseAiPrompt.recordId) {
+      return;
+    }
+
+    const prompt = pendingDatabaseAiPrompt.prompt;
+    setPendingDatabaseAiPrompt(null);
+
+    if (!assistant.activeChatId || assistant.assistantScopeMode === "standalone") {
+      assistant.createSelectionChatAndSubmit(prompt);
+      return;
+    }
+
+    assistant.openAssistant();
+    void assistant.submitAssistantPrompt(prompt, "chat", {
+      scopeMode: "selection",
+    });
+  }, [
+    assistant.activeChatId,
+    assistant.assistantScopeMode,
+    assistant.createSelectionChatAndSubmit,
+    assistant.openAssistant,
+    assistant.submitAssistantPrompt,
+    pendingDatabaseAiPrompt,
+    selection,
+  ]);
+
   const canEdit = Boolean(projectPath && assistant.activeChatId);
 
   const handleReferenceSelect = (
@@ -167,59 +201,13 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
   };
 
   const selectedRecord =
-    selection?.kind === "record" ? studioData.selectedRecord : null;
+    selection?.kind === "record" || selection?.kind === "error-occurrence"
+      ? studioData.selectedRecord
+      : null;
   const selectedGroup =
     selection?.kind === "group" ? studioData.selectedGroup : null;
-  const visibleErrorGroups = useMemo(
-    () =>
-      (studioData.errorsQuery.data?.groups ?? []).filter(
-        (group) => !ignoredGroupIds.has(group.id) && !resolvedGroupIds.has(group.id),
-      ),
-    [ignoredGroupIds, resolvedGroupIds, studioData.errorsQuery.data?.groups],
-  );
-  const resolvedErrorGroups = useMemo(
-    () =>
-      (studioData.errorsQuery.data?.groups ?? []).filter((group) => resolvedGroupIds.has(group.id)),
-    [resolvedGroupIds, studioData.errorsQuery.data?.groups],
-  );
   const selectedErrorGroup =
-    (visibleErrorGroups.find((group) => group.id === selectedErrorGroupId) ??
-      resolvedErrorGroups.find((group) => group.id === selectedErrorGroupId) ??
-      null);
-
-  useEffect(() => {
-    if (section !== "errors" || errorView !== "grouped") {
-      return;
-    }
-
-    if (!selectedErrorGroupId || !selectedErrorGroup) {
-      const first = visibleErrorGroups[0] ?? resolvedErrorGroups[0] ?? null;
-      setSelectedErrorGroupId(first?.id ?? null);
-    }
-  }, [
-    errorView,
-    resolvedErrorGroups,
-    section,
-    selectedErrorGroup,
-    selectedErrorGroupId,
-    visibleErrorGroups,
-  ]);
-
-  useEffect(() => {
-    if (section !== "errors" || errorView !== "raw") {
-      return;
-    }
-
-    const rawRecords = studioData.errorsQuery.data?.rawRecords ?? [];
-    if (!rawRecords.length) {
-      setSelection(null);
-      return;
-    }
-
-    if (selection?.kind !== "record" || !rawRecords.some((item) => item.record.id === selection.id)) {
-      setSelection({ kind: "record", id: rawRecords[0]!.record.id });
-    }
-  }, [errorView, section, selection, setSelection, studioData.errorsQuery.data?.rawRecords]);
+    selection?.kind === "error-group" ? studioData.selectedErrorGroup : null;
 
   const describePrompt =
     "Describe the selected log or structured group like an observability copilot. Explain what happened, likely cause, related signals, and what to inspect next.";
@@ -228,44 +216,57 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
       ? "All Logs"
       : metaQuery.data?.sections.find((item) => item.id === section)?.label ?? "Section";
 
-  const handleResolveErrorGroup = (groupId: string) => {
-    setResolvedGroupIds((current) => new Set(current).add(groupId));
-  };
-
-  const handleIgnoreErrorGroup = (groupId: string) => {
-    setIgnoredGroupIds((current) => new Set(current).add(groupId));
-    if (selectedErrorGroupId === groupId) {
-      setSelectedErrorGroupId(null);
-    }
-  };
-
-  const handleAskAiToFixError = () => {
-    const detail = studioData.errorGroupQuery.data;
-    if (!detail) {
+  const handleAskAiToFix = () => {
+    if (!selectedErrorGroup) {
       return;
     }
 
-    if (detail.traceReference?.kind === "group") {
-      setSection(detail.traceReference.sectionId);
-      setSelection({ kind: "group", id: detail.traceReference.id });
-    } else {
-      setSelection({ kind: "record", id: detail.group.representativeRecordId });
+    const representative =
+      selectedErrorGroup.occurrences.find(
+        (item) => item.id === selectedErrorGroup.group.representativeOccurrenceId,
+      ) ?? selectedErrorGroup.occurrences[0];
+    if (!representative) {
+      return;
     }
 
-    const sourceText = detail.group.sourceFile
-      ? ` Source: ${detail.group.sourceFile}:${detail.group.sourceLine ?? "?"}.`
-      : "";
-    assistant.createSelectionChatAndSubmit(
-      `Diagnose this Studio error group and propose a concrete fix. Explain the likely root cause, the code path implicated by the stack trace, and the smallest defensible code change to resolve it.${sourceText} Error type: ${detail.group.errorType ?? "Unknown"}. Message: ${detail.group.message}. Occurrences this session: ${detail.group.occurrenceCount}. The selected Studio context includes the stack trace and source snippet.`,
-    );
+    const prompt = [
+      "Help me fix this recurring error in my local Studio session.",
+      `Fingerprint: ${selectedErrorGroup.group.fingerprint}`,
+      `Type: ${selectedErrorGroup.group.errorType}`,
+      `Message: ${selectedErrorGroup.group.messageFirstLine}`,
+      `Count: ${selectedErrorGroup.group.occurrenceCount}`,
+      `First seen: ${selectedErrorGroup.group.firstSeenAt ?? "unknown"}`,
+      `Last seen: ${selectedErrorGroup.group.lastSeenAt ?? "unknown"}`,
+      representative.fingerprintSource.relativePath
+        ? `Source: ${representative.fingerprintSource.relativePath}${representative.fingerprintSource.line ? `:${representative.fingerprintSource.line}` : ""}`
+        : null,
+      representative.http
+        ? `HTTP: ${[representative.http.method, representative.http.path ?? representative.http.url, representative.http.statusCode]
+            .filter(Boolean)
+            .join(" ")}`
+        : null,
+      `Structured fields: ${JSON.stringify(representative.structuredFields, null, 2)}`,
+      representative.stack ? `Stack trace:\n${representative.stack}` : null,
+      representative.messageFirstLine === selectedErrorGroup.group.messageFirstLine &&
+      selectedErrorGroup.group.occurrenceCount === 1
+        ? "This appears new in the current session."
+        : "This is recurring in the current session.",
+    ]
+      .filter(Boolean)
+      .join("\n\n");
+
+    assistant.createSelectionChatAndSubmit(prompt);
   };
 
   const handleOpenOverviewTarget = (
-    target: NonNullable<NonNullable<typeof studioData.overviewQuery.data>["liveFeed"][number]["target"]> | null,
+    target: NonNullable<
+      NonNullable<typeof studioData.overviewQuery.data>["liveFeed"][number]["target"]
+    > | null,
   ) => {
     if (!target) {
       return;
     }
+
     setSection(target.sectionId);
     setSelection(target.selection);
   };
@@ -274,29 +275,35 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
     item: NonNullable<typeof studioData.overviewQuery.data>["recentErrors"][number],
   ) => {
     if (item.traceReference) {
+      setGrouping("grouped");
       setSection(item.traceReference.sectionId);
-      setSelection(
-        item.traceReference.kind === "group"
-          ? { kind: "group", id: item.traceReference.id }
-          : { kind: "record", id: item.traceReference.id },
-      );
+      setSelection(item.traceReference.selection);
       return;
     }
 
     setSection("errors");
-    setSelectedErrorGroupId(item.groupId);
+    setSelection({ kind: "error-group", id: item.groupId });
   };
 
   const handleAskAiForOverviewError = (
     item: NonNullable<typeof studioData.overviewQuery.data>["recentErrors"][number],
   ) => {
-    setSelection({ kind: "record", id: item.recordId });
-    const sourceText = item.sourceFile
-      ? ` Source: ${item.sourceFile}:${item.sourceLine ?? "?"}.`
-      : "";
-    assistant.createSelectionChatAndSubmit(
-      `Diagnose this Studio error and propose a concrete fix.${sourceText} Message: ${item.message}. The selected Studio context includes the relevant event and surrounding log context.`,
-    );
+    setSection("errors");
+    setSelection({ kind: "error-occurrence", id: item.recordId });
+
+    const prompt = [
+      "Help me investigate this recent Studio error.",
+      `Message: ${item.message}`,
+      item.sourceFile
+        ? `Source: ${item.sourceFile}${item.sourceLine ? `:${item.sourceLine}` : ""}`
+        : null,
+      item.timestamp ? `Last seen: ${item.timestamp}` : null,
+      "Explain the likely cause, what to inspect next, and suggest a concrete fix if the signal is sufficient.",
+    ]
+      .filter(Boolean)
+      .join("\n\n");
+
+    assistant.createSelectionChatAndSubmit(prompt);
   };
 
   return (
@@ -366,12 +373,15 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
               title="Studio backend failed"
               description={
                 metaQuery.error?.message ??
-                studioData.overviewQuery.error?.message ??
                 configQuery.error?.message ??
                 filesQuery.error?.message ??
                 logsQuery.error?.message ??
+                studioData.errorsQuery.error?.message ??
+                studioData.overviewQuery.error?.message ??
                 studioData.authQuery.error?.message ??
+                studioData.databaseQuery.error?.message ??
                 groupQuery.error?.message ??
+                studioData.errorGroupQuery.error?.message ??
                 recordQuery.error?.message ??
                 "Unknown Studio error"
               }
@@ -394,6 +404,20 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
               onSelectFeedTarget={handleOpenOverviewTarget}
               onViewTrace={handleViewOverviewTrace}
               onAskAiForError={handleAskAiForOverviewError}
+            />
+          ) : isErrorsSection(section) ? (
+            <ErrorsView
+              data={studioData.errorsQuery.data}
+              loading={studioData.errorsQuery.isLoading}
+              selection={selection}
+              ui={errorUi}
+              resolvedAtByFingerprint={errorSessionState.state.resolvedAtByFingerprint}
+              ignoredByFingerprint={errorSessionState.state.ignoredByFingerprint}
+              resolvedCollapsed={errorSessionState.state.resolvedCollapsed}
+              onUiChange={setErrorUi}
+              onSelect={setSelection}
+              onToggleResolvedCollapsed={errorSessionState.setResolvedCollapsed}
+              onUnignore={errorSessionState.unignore}
             />
           ) : section === "auth" ? (
             <AuthView
@@ -431,31 +455,20 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
                 }
               }}
             />
-          ) : section === "errors" ? (
-            <ErrorsView
-              page={studioData.errorsQuery.data}
-              loading={studioData.errorsQuery.isLoading}
-              offset={studioData.errorsQuery.data?.offset ?? offset}
-              limit={studioData.errorsQuery.data?.limit ?? 100}
-              viewMode={errorView}
-              sort={errorSort}
-              errorType={errorType}
-              sourceFile={errorSourceFile}
-              tag={errorTag}
-              selectedGroupId={selectedErrorGroupId}
-              selection={selection}
-              resolvedGroupIds={resolvedGroupIds}
-              ignoredGroupIds={ignoredGroupIds}
-              onViewModeChange={setErrorView}
-              onSortChange={setErrorSort}
-              onErrorTypeChange={setErrorType}
-              onSourceFileChange={setErrorSourceFile}
-              onTagChange={setErrorTag}
-              onSelectGroup={setSelectedErrorGroupId}
-              onSelectRawRecord={setSelection}
-              onResolveGroup={handleResolveErrorGroup}
-              onIgnoreGroup={handleIgnoreErrorGroup}
-              onPageChange={setOffset}
+          ) : section === "database" ? (
+            <DatabaseView
+              database={studioData.databaseQuery.data}
+              loading={studioData.databaseQuery.isLoading}
+              selectedRecordId={selection?.kind === "record" ? selection.id : null}
+              onSelectRecord={(recordId) => setSelection({ kind: "record", id: recordId })}
+              onAskAi={(query) => {
+                const prompt = buildSlowQueryPrompt(query);
+                setPendingDatabaseAiPrompt({
+                  recordId: query.recordId,
+                  prompt,
+                });
+                setSelection({ kind: "record", id: query.recordId });
+              }}
             />
           ) : (
             <LogList
@@ -476,38 +489,8 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
           )
         }
         detail={
-          isOverviewSection(section) ? null : section === "errors" && errorView === "grouped" ? (
-            <ErrorDetailPanel
-              detail={studioData.errorGroupQuery.data ?? null}
-              loading={studioData.errorGroupQuery.isLoading}
-              statusLabel={
-                selectedErrorGroup
-                  ? resolvedGroupIds.has(selectedErrorGroup.id)
-                    ? "Resolved"
-                    : selectedErrorGroup.statusHint === "new"
-                      ? "New"
-                      : "Recurring"
-                  : undefined
-              }
-              onAskAi={handleAskAiToFixError}
-              onViewTrace={
-                studioData.errorGroupQuery.data?.traceReference
-                  ? () => {
-                      const traceReference = studioData.errorGroupQuery.data?.traceReference;
-                      if (!traceReference) {
-                        return;
-                      }
-                      setSection(traceReference.sectionId);
-                      setSelection(
-                        traceReference.kind === "group"
-                          ? { kind: "group", id: traceReference.id }
-                          : { kind: "record", id: traceReference.id },
-                      );
-                    }
-                  : undefined
-              }
-            />
-          ) : selection?.kind === "group" ? (
+          isOverviewSection(section) ? null :
+          selection?.kind === "group" ? (
             <GroupDetailPanel
               group={selectedGroup}
               loading={groupQuery.isLoading}
@@ -520,17 +503,52 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
                 setSelection({ kind: "record", id: recordId });
               }}
             />
-          ) : (
-            <LogDetailPanel
-              record={selectedRecord}
-              source={recordSourceQuery.data ?? null}
-              sourceLoading={recordSourceQuery.isLoading}
-              onDescribeWithAi={() => {
-                assistant.handleDescribeSelection(
-                  "Describe the selected log like an observability copilot. Explain what happened, likely cause, related signals, and what to inspect next.",
-                );
+          ) : selection?.kind === "error-group" ? (
+            <ErrorDetailPanel
+              group={selectedErrorGroup}
+              occurrence={null}
+              record={null}
+              loading={studioData.errorGroupQuery.isLoading}
+              resolvedAt={
+                errorSessionState.state.resolvedAtByFingerprint[selection.id] ?? null
+              }
+              ignored={Boolean(errorSessionState.state.ignoredByFingerprint[selection.id])}
+              onAskAi={handleAskAiToFix}
+              onMarkResolved={() => errorSessionState.markResolved(selection.id)}
+              onIgnore={() => errorSessionState.ignore(selection.id)}
+              onViewTrace={() => {
+                const traceGroupId = selectedErrorGroup?.group.relatedTraceGroupId;
+                if (!traceGroupId) {
+                  return;
+                }
+                setGrouping("grouped");
+                setSection("all-logs");
+                setSelection({ kind: "group", id: traceGroupId });
               }}
             />
+          ) : (
+            selection?.kind === "error-occurrence" ? (
+              <ErrorDetailPanel
+                group={null}
+                occurrence={
+                  studioData.errorsQuery.data?.occurrences.find((item) => item.id === selection.id) ?? null
+                }
+                record={selectedRecord}
+                recordSource={recordSourceQuery.data ?? null}
+                recordSourceLoading={recordSourceQuery.isLoading}
+              />
+            ) : (
+              <LogDetailPanel
+                record={selectedRecord}
+                source={recordSourceQuery.data ?? null}
+                sourceLoading={recordSourceQuery.isLoading}
+                onDescribeWithAi={() => {
+                  assistant.handleDescribeSelection(
+                    "Describe the selected log like an observability copilot. Explain what happened, likely cause, related signals, and what to inspect next.",
+                  );
+                }}
+              />
+            )
           )
         }
       />
@@ -559,7 +577,13 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
               assistant.updateChatModel(projectPath, assistant.activeChatId!, value);
             }
           }}
-          onDescribeSelection={() => assistant.handleDescribeSelection(describePrompt)}
+          onDescribeSelection={() => {
+            if (selection?.kind === "error-group") {
+              handleAskAiToFix();
+              return;
+            }
+            assistant.handleDescribeSelection(describePrompt);
+          }}
           onOpenChange={(next) => (next ? assistant.openAssistant() : assistant.closeAssistant())}
           onQuickAction={(prompt) => {
             void assistant.submitAssistantPrompt(prompt, "chat", {
@@ -578,4 +602,41 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
       )}
     </>
   );
+}
+
+function buildSlowQueryPrompt(
+  query: {
+    operation: string;
+    modelOrTable: string | null;
+    durationMs: number | null;
+    requestId: string | null;
+    traceId: string | null;
+    queryText: string | null;
+    params: unknown;
+  },
+): string {
+  const context = [
+    `Slow database query detected above the 100ms threshold.`,
+    `Operation: ${query.operation}`,
+    `Model or table: ${query.modelOrTable ?? "Unknown"}`,
+    `Duration: ${formatDurationMs(query.durationMs)}`,
+    query.requestId ? `Request ID: ${query.requestId}` : null,
+    query.traceId ? `Trace ID: ${query.traceId}` : null,
+    query.queryText ? `Query: ${query.queryText}` : null,
+    query.params !== undefined && query.params !== null
+      ? `Redacted params: ${safeStringify(query.params)}`
+      : null,
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  return `${context}\n\nSuggest likely causes, indexing or query-shape improvements, and what to inspect next. Keep recommendations grounded in the query details above.`;
+}
+
+function safeStringify(value: unknown): string {
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
 }

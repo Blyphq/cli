@@ -7,154 +7,175 @@ import { describe, expect, it, vi } from "vitest";
 
 import { ErrorsView } from "./errors-view";
 
-const page = {
-  groups: [
+const baseData = {
+  entries: [
     {
-      id: "group-1",
-      fingerprint: "TypeError::checkout failed::src/routes/checkout.ts:4",
-      errorType: "TypeError",
-      message: "checkout failed",
+      kind: "error-group",
+      fingerprint: "fp-1",
+      errorType: "CheckoutError",
+      message: "CheckoutError: checkout failed",
+      messageFirstLine: "CheckoutError: checkout failed",
       occurrenceCount: 2,
-      firstSeen: "2026-03-13T12:00:00.000Z",
-      lastSeen: "2026-03-13T12:01:00.000Z",
-      sourceFile: "src/routes/checkout.ts",
-      sourceLine: 4,
-      sourceColumn: 1,
-      http: { method: "POST", route: "/checkout", statusCode: 500 },
-      tags: [{ id: "payments", label: "Payments" }],
-      statusHint: "recurring" as const,
-      sparkline: [
-        { bucketStart: "2026-03-13T12:00:00.000Z", count: 1 },
-        { bucketStart: "2026-03-13T12:01:00.000Z", count: 1 },
-      ],
-      representativeRecordId: "record-2",
-      traceId: null,
-      correlationId: null,
+      firstSeenAt: "2026-03-13T10:00:00.000Z",
+      lastSeenAt: "2026-03-13T10:02:00.000Z",
+      sourceLocation: null,
+      fingerprintSource: {
+        key: "src/routes/checkout.ts:4",
+        kind: "caller",
+        relativePath: "src/routes/checkout.ts",
+        line: 4,
+        column: null,
+      },
+      http: { method: "POST", path: "/checkout", statusCode: 500, url: null },
+      sectionTags: ["errors", "payments"],
+      sparklineBuckets: [0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0],
+      representativeOccurrenceId: "rec-1",
+      relatedTraceGroupId: "group-1",
+    },
+    {
+      kind: "error-group",
+      fingerprint: "fp-2",
+      errorType: "AuthError",
+      message: "AuthError: unauthorized",
+      messageFirstLine: "AuthError: unauthorized",
+      occurrenceCount: 1,
+      firstSeenAt: "2026-03-13T10:03:00.000Z",
+      lastSeenAt: "2026-03-13T10:03:00.000Z",
+      sourceLocation: null,
+      fingerprintSource: {
+        key: "src/auth.ts:10",
+        kind: "caller",
+        relativePath: "src/auth.ts",
+        line: 10,
+        column: null,
+      },
+      http: { method: "POST", path: "/auth/login", statusCode: 401, url: null },
+      sectionTags: ["errors", "auth"],
+      sparklineBuckets: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      representativeOccurrenceId: "rec-2",
+      relatedTraceGroupId: null,
     },
   ],
-  rawRecords: [
+  groups: [],
+  occurrences: [
     {
-      record: {
-        id: "record-2",
-        timestamp: "2026-03-13T12:01:00.000Z",
-        level: "error",
-        message: "checkout failed",
-        source: "server",
-        type: "TypeError",
-        caller: "src/routes/checkout.ts:4",
-        bindings: null,
-        data: null,
-        fileId: "file-1",
-        fileName: "log.ndjson",
-        filePath: "/project/logs/log.ndjson",
-        lineNumber: 2,
-        malformed: false,
-        http: null,
-        error: null,
-        stack: null,
-        sourceLocation: null,
-        raw: {},
-      },
-      errorType: "TypeError",
-      message: "checkout failed",
-      sourceFile: "src/routes/checkout.ts",
-      sourceLine: 4,
-      sourceColumn: 1,
+      kind: "occurrence",
+      id: "rec-1",
+      fingerprint: "fp-1",
+      timestamp: "2026-03-13T10:02:00.000Z",
+      level: "error",
+      type: "CheckoutError",
+      message: "CheckoutError: checkout failed",
+      messageFirstLine: "CheckoutError: checkout failed",
+      fileId: "file-1",
+      fileName: "log.ndjson",
+      filePath: "/tmp/log.ndjson",
+      lineNumber: 1,
+      caller: null,
+      stack: "stack",
+      stackFrames: [],
       http: null,
+      sourceLocation: null,
+      fingerprintSource: {
+        key: "src/routes/checkout.ts:4",
+        kind: "caller",
+        relativePath: "src/routes/checkout.ts",
+        line: 4,
+        column: null,
+      },
+      sectionTags: ["errors", "payments"],
+      relatedTraceGroupId: "group-1",
+      structuredFields: {},
+      raw: {},
     },
   ],
   stats: {
-    totalUniqueErrorTypes: 1,
-    totalErrorOccurrences: 2,
+    uniqueErrorTypes: 2,
+    totalOccurrences: 3,
     mostFrequentError: {
-      errorType: "TypeError",
-      message: "checkout failed",
+      fingerprint: "fp-1",
+      type: "CheckoutError",
+      messageFirstLine: "CheckoutError: checkout failed",
       count: 2,
     },
-    newErrorsThisSession: 0,
+    newErrorsComparedToPreviousSessions: {
+      available: false,
+      count: null,
+    },
   },
-  totalGroups: 1,
-  totalRawRecords: 1,
+  totalMatched: 3,
+  totalEntries: 2,
+  scannedRecords: 3,
+  returnedCount: 2,
   offset: 0,
   limit: 100,
   truncated: false,
+  earliestTimestamp: "2026-03-13T10:00:00.000Z",
+  latestTimestamp: "2026-03-13T10:03:00.000Z",
+  availableTypes: ["AuthError", "CheckoutError"],
+  availableSourceFiles: ["src/auth.ts", "src/routes/checkout.ts"],
+  availableSectionTags: ["auth", "errors", "payments"],
 } as const;
 
 describe("ErrorsView", () => {
-  it("renders grouped errors and forwards resolve/ignore actions", async () => {
+  it("renders grouped errors and can switch to raw mode", async () => {
     const user = userEvent.setup();
-    const onResolveGroup = vi.fn();
-    const onIgnoreGroup = vi.fn();
+    const onUiChange = vi.fn();
 
     render(
       <ErrorsView
-        page={page as never}
+        data={baseData as never}
         loading={false}
-        offset={0}
-        limit={100}
-        viewMode="grouped"
-        sort="most-recent"
-        errorType=""
-        sourceFile=""
-        tag=""
-        selectedGroupId="group-1"
-        selection={null}
-        resolvedGroupIds={new Set()}
-        ignoredGroupIds={new Set()}
-        onViewModeChange={vi.fn()}
-        onSortChange={vi.fn()}
-        onErrorTypeChange={vi.fn()}
-        onSourceFileChange={vi.fn()}
-        onTagChange={vi.fn()}
-        onSelectGroup={vi.fn()}
-        onSelectRawRecord={vi.fn()}
-        onResolveGroup={onResolveGroup}
-        onIgnoreGroup={onIgnoreGroup}
-        onPageChange={vi.fn()}
+        selection={{ kind: "error-group", id: "fp-1" }}
+        ui={{
+          view: "grouped",
+          sort: "most-recent",
+          type: "",
+          sourceFile: "",
+          sectionTag: "",
+          showResolved: false,
+          showIgnored: false,
+        }}
+        resolvedAtByFingerprint={{}}
+        ignoredByFingerprint={{}}
+        resolvedCollapsed={true}
+        onUiChange={onUiChange}
+        onSelect={vi.fn()}
+        onToggleResolvedCollapsed={vi.fn()}
+        onUnignore={vi.fn()}
       />,
     );
 
-    expect(screen.getByText("TypeError")).toBeInTheDocument();
-    expect(screen.getByText("Error occurrences")).toBeInTheDocument();
-    expect(screen.getByText("2")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: /resolve typeerror/i }));
-    expect(onResolveGroup).toHaveBeenCalledWith("group-1");
-
-    await user.click(screen.getByRole("button", { name: /ignore typeerror/i }));
-    expect(onIgnoreGroup).toHaveBeenCalledWith("group-1");
+    expect(screen.getByText("CheckoutError")).toBeInTheDocument();
+    await user.click(screen.getByRole("combobox", { name: "" }));
+    expect(screen.getByText("Grouped errors")).toBeInTheDocument();
   });
 
-  it("renders raw error mode as a flat log list", () => {
+  it("shows the resolved section when toggled on", () => {
     render(
       <ErrorsView
-        page={page as never}
+        data={baseData as never}
         loading={false}
-        offset={0}
-        limit={100}
-        viewMode="raw"
-        sort="most-recent"
-        errorType=""
-        sourceFile=""
-        tag=""
-        selectedGroupId={null}
-        selection={{ kind: "record", id: "record-2" }}
-        resolvedGroupIds={new Set()}
-        ignoredGroupIds={new Set()}
-        onViewModeChange={vi.fn()}
-        onSortChange={vi.fn()}
-        onErrorTypeChange={vi.fn()}
-        onSourceFileChange={vi.fn()}
-        onTagChange={vi.fn()}
-        onSelectGroup={vi.fn()}
-        onSelectRawRecord={vi.fn()}
-        onResolveGroup={vi.fn()}
-        onIgnoreGroup={vi.fn()}
-        onPageChange={vi.fn()}
+        selection={{ kind: "error-group", id: "fp-1" }}
+        ui={{
+          view: "grouped",
+          sort: "most-recent",
+          type: "",
+          sourceFile: "",
+          sectionTag: "",
+          showResolved: true,
+          showIgnored: false,
+        }}
+        resolvedAtByFingerprint={{ "fp-1": "2026-03-13T10:05:00.000Z" }}
+        ignoredByFingerprint={{}}
+        resolvedCollapsed={false}
+        onUiChange={vi.fn()}
+        onSelect={vi.fn()}
+        onToggleResolvedCollapsed={vi.fn()}
+        onUnignore={vi.fn()}
       />,
     );
 
-    expect(screen.getByText("Raw error events")).toBeInTheDocument();
-    expect(screen.getAllByText("checkout failed").length).toBeGreaterThan(0);
+    expect(screen.getByText(/hide resolved/i)).toBeInTheDocument();
   });
 });

@@ -2,8 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useDeferredValue } from "react";
 
 import type {
-  StudioErrorSort,
-  StudioErrorViewMode,
+  StudioErrorUiState,
   StudioFilters,
   StudioGroupingMode,
   StudioSectionId,
@@ -12,6 +11,7 @@ import type {
 import {
   isAllLogsSection,
   isAuthSection,
+  isDatabaseSection,
   isErrorsSection,
   isOverviewSection,
 } from "@/lib/studio";
@@ -23,14 +23,9 @@ export interface UseStudioDataParams {
   offset: number;
   grouping: StudioGroupingMode;
   section: StudioSectionId;
+  errorUi: StudioErrorUiState;
   authUserId: string | null;
   selection: StudioSelection;
-  errorView?: StudioErrorViewMode;
-  errorSort?: StudioErrorSort;
-  errorType?: string;
-  errorSourceFile?: string;
-  errorTag?: string;
-  errorGroupId?: string | null;
 }
 
 export function useStudioData({
@@ -39,19 +34,18 @@ export function useStudioData({
   offset,
   grouping,
   section,
+  errorUi,
   authUserId,
   selection,
-  errorView = "grouped",
-  errorSort = "most-recent",
-  errorType = "",
-  errorSourceFile = "",
-  errorTag = "",
-  errorGroupId = null,
 }: UseStudioDataParams) {
   const trpc = useTRPC();
   const deferredSearch = useDeferredValue(filters.search);
   const logsSectionId =
-    isOverviewSection(section) || isAllLogsSection(section) || isAuthSection(section)
+    isOverviewSection(section) ||
+    isAllLogsSection(section) ||
+    isAuthSection(section) ||
+    isDatabaseSection(section) ||
+    isErrorsSection(section)
       ? undefined
       : section;
 
@@ -63,18 +57,6 @@ export function useStudioData({
   const configQuery = useQuery({
     ...trpc.studio.config.queryOptions({ projectPath }),
     enabled: metaQuery.isSuccess && metaQuery.data.project.valid,
-  });
-
-  const overviewQuery = useQuery({
-    ...trpc.studio.overview.queryOptions({
-      projectPath,
-      fileId: filters.fileId || undefined,
-      from: filters.from || undefined,
-      to: filters.to || undefined,
-      search: deferredSearch || undefined,
-    }),
-    enabled: metaQuery.isSuccess && metaQuery.data.project.valid && isOverviewSection(section),
-    refetchInterval: 1000,
   });
 
   const filesQuery = useQuery({
@@ -114,7 +96,39 @@ export function useStudioData({
       metaQuery.data.project.valid &&
       !isOverviewSection(section) &&
       !isAuthSection(section) &&
+      !isDatabaseSection(section) &&
       !isErrorsSection(section),
+    refetchInterval: 1000,
+  });
+
+  const errorsQuery = useQuery({
+    ...trpc.studio.errors.queryOptions({
+      projectPath,
+      offset,
+      limit: 100,
+      view: errorUi.view,
+      sort: errorUi.sort,
+      type: errorUi.type || undefined,
+      sourceFile: errorUi.sourceFile || undefined,
+      search: deferredSearch || undefined,
+      fileId: filters.fileId || undefined,
+      from: filters.from || undefined,
+      to: filters.to || undefined,
+      sectionId: errorUi.sectionTag || undefined,
+    }),
+    enabled: metaQuery.isSuccess && metaQuery.data.project.valid && isErrorsSection(section),
+    refetchInterval: 1000,
+  });
+
+  const overviewQuery = useQuery({
+    ...trpc.studio.overview.queryOptions({
+      projectPath,
+      fileId: filters.fileId || undefined,
+      from: filters.from || undefined,
+      to: filters.to || undefined,
+      search: deferredSearch || undefined,
+    }),
+    enabled: metaQuery.isSuccess && metaQuery.data.project.valid && isOverviewSection(section),
     refetchInterval: 1000,
   });
 
@@ -133,35 +147,18 @@ export function useStudioData({
     refetchInterval: 1000,
   });
 
-  const errorsQuery = useQuery({
-    ...trpc.studio.errors.queryOptions({
+  const databaseQuery = useQuery({
+    ...trpc.studio.database.queryOptions({
       projectPath,
       offset,
       limit: 100,
-      view: errorView,
-      sort: errorSort,
-      type: errorType || undefined,
-      sourceFile: errorSourceFile || undefined,
-      sectionId: errorTag || undefined,
       fileId: filters.fileId || undefined,
       from: filters.from || undefined,
       to: filters.to || undefined,
       search: deferredSearch || undefined,
     }),
-    enabled: metaQuery.isSuccess && metaQuery.data.project.valid && isErrorsSection(section),
+    enabled: metaQuery.isSuccess && metaQuery.data.project.valid && section === "database",
     refetchInterval: 1000,
-  });
-
-  const errorGroupQuery = useQuery({
-    ...trpc.studio.errorGroup.queryOptions({
-      projectPath,
-      groupId: errorGroupId ?? "",
-    }),
-    enabled:
-      metaQuery.isSuccess &&
-      metaQuery.data.project.valid &&
-      isErrorsSection(section) &&
-      Boolean(errorGroupId),
   });
 
   const groupQuery = useQuery({
@@ -175,26 +172,43 @@ export function useStudioData({
       selection?.kind === "group",
   });
 
-  const recordQuery = useQuery({
-    ...trpc.studio.record.queryOptions({
+  const errorGroupQuery = useQuery({
+    ...trpc.studio.errorGroup.queryOptions({
       projectPath,
-      recordId: selection?.kind === "record" ? selection.id : "",
+      fingerprint: selection?.kind === "error-group" ? selection.id : "",
     }),
     enabled:
       metaQuery.isSuccess &&
       metaQuery.data.project.valid &&
-      selection?.kind === "record",
+      selection?.kind === "error-group",
+  });
+
+  const recordQuery = useQuery({
+    ...trpc.studio.record.queryOptions({
+      projectPath,
+      recordId:
+        selection?.kind === "record" || selection?.kind === "error-occurrence"
+          ? selection.id
+          : "",
+    }),
+    enabled:
+      metaQuery.isSuccess &&
+      metaQuery.data.project.valid &&
+      (selection?.kind === "record" || selection?.kind === "error-occurrence"),
   });
 
   const recordSourceQuery = useQuery({
     ...trpc.studio.recordSource.queryOptions({
       projectPath,
-      recordId: selection?.kind === "record" ? selection.id : "",
+      recordId:
+        selection?.kind === "record" || selection?.kind === "error-occurrence"
+          ? selection.id
+          : "",
     }),
     enabled:
       metaQuery.isSuccess &&
       metaQuery.data.project.valid &&
-      selection?.kind === "record",
+      (selection?.kind === "record" || selection?.kind === "error-occurrence"),
   });
 
   const assistantStatusQuery = useQuery(
@@ -204,9 +218,13 @@ export function useStudioData({
   const files = filesQuery.data?.files ?? [];
   const entries = logsQuery.data?.entries ?? [];
   const selectedRecord =
-    selection?.kind === "record" ? recordQuery.data ?? null : null;
+    selection?.kind === "record" || selection?.kind === "error-occurrence"
+      ? recordQuery.data ?? null
+      : null;
   const selectedGroup =
     selection?.kind === "group" ? groupQuery.data ?? null : null;
+  const selectedErrorGroup =
+    selection?.kind === "error-group" ? errorGroupQuery.data ?? null : null;
 
   const isLoadingMeta = !metaQuery.data && metaQuery.isLoading;
   const isProjectInvalid = Boolean(metaQuery.data && !metaQuery.data.project.valid);
@@ -214,11 +232,14 @@ export function useStudioData({
     metaQuery.data?.project.error ??
     "Studio could not inspect the requested path.";
   const hasLogsError =
-    overviewQuery.isError ||
     filesQuery.isError ||
     logsQuery.isError ||
+    errorsQuery.isError ||
+    overviewQuery.isError ||
     authQuery.isError ||
+    databaseQuery.isError ||
     groupQuery.isError ||
+    errorGroupQuery.isError ||
     recordQuery.isError;
   const hasBackendError =
     metaQuery.isError || configQuery.isError || hasLogsError;
@@ -229,15 +250,16 @@ export function useStudioData({
 
   return {
     metaQuery,
-    overviewQuery,
     configQuery,
     filesQuery,
     facetsQuery,
     logsQuery,
-    authQuery,
     errorsQuery,
-    errorGroupQuery,
+    overviewQuery,
+    authQuery,
+    databaseQuery,
     groupQuery,
+    errorGroupQuery,
     recordQuery,
     recordSourceQuery,
     assistantStatusQuery,
@@ -245,6 +267,7 @@ export function useStudioData({
     entries,
     selectedRecord,
     selectedGroup,
+    selectedErrorGroup,
     isLoadingMeta,
     isProjectInvalid,
     projectError,
