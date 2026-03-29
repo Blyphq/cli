@@ -252,8 +252,11 @@ function buildTransactionSummaries(
     }
 
     if (item.kind === "transaction-commit" || item.kind === "transaction-rollback") {
-      current.timestampEnd = maxTimestamp(current.timestampEnd, item.timestamp);
-      current.terminalKind = item.kind;
+      const nextTimestampEnd = maxTimestamp(current.timestampEnd, item.timestamp);
+      if (nextTimestampEnd !== current.timestampEnd) {
+        current.timestampEnd = nextTimestampEnd;
+        current.terminalKind = item.kind;
+      }
     }
 
     if (item.query) {

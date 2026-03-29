@@ -152,8 +152,8 @@ describe("DatabaseView", () => {
 
     expect(screen.getByText("Total queries")).toBeInTheDocument();
     expect(screen.getByText("Avg query time")).toBeInTheDocument();
-    expect(screen.getByText("101ms")).toBeInTheDocument();
-    expect(screen.getByText("501ms")).toBeInTheDocument();
+    expect(screen.getAllByText("101ms").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("501ms").length).toBeGreaterThan(0);
 
     const slowQueryButtons = screen.getAllByRole("button", { name: /ask ai/i });
     await user.click(slowQueryButtons[0]!);

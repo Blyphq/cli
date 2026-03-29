@@ -2029,6 +2029,52 @@ describe("studio DB mode", () => {
       result: "committed",
     });
   });
+
+  it("derives transaction result from the winning terminal timestamp", async () => {
+    const projectDir = await createProject();
+    const logDir = path.join(projectDir, "logs");
+
+    await mkdir(logDir, { recursive: true });
+    await writeFile(
+      path.join(logDir, "log.ndjson"),
+      [
+        createLogLine({
+          timestamp: "2026-03-13T10:00:00.000Z",
+          level: "info",
+          message: "transaction start",
+          type: "db_transaction_start",
+          transaction: { id: "tx-conflict", event: "start" },
+        }),
+        createLogLine({
+          timestamp: "2026-03-13T10:00:00.200Z",
+          level: "info",
+          message: "transaction rollback",
+          type: "db_transaction_rollback",
+          transaction: { id: "tx-conflict", event: "rollback" },
+        }),
+        createLogLine({
+          timestamp: "2026-03-13T10:00:00.100Z",
+          level: "info",
+          message: "transaction commit",
+          type: "db_transaction_commit",
+          transaction: { id: "tx-conflict", event: "commit" },
+        }),
+      ].join(""),
+    );
+
+    const database = await getStudioDatabase({
+      projectPath: projectDir,
+      limit: 10,
+    });
+
+    expect(database.transactions).toHaveLength(1);
+    expect(database.transactions[0]).toMatchObject({
+      id: "tx-conflict",
+      timestampEnd: "2026-03-13T10:00:00.200Z",
+      durationMs: 200,
+      result: "rolled_back",
+    });
+  });
 });
 
 function buildDbConfig({

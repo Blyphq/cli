@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 import { ErrorsView } from "@/components/studio/errors-view";
 import { AuthView } from "@/components/studio/auth-view";
@@ -40,6 +40,10 @@ export interface StudioPageProps {
 
 export function StudioPage({ navigate, search }: StudioPageProps) {
   const projectPath = search.project ?? "";
+  const [pendingDatabaseAiPrompt, setPendingDatabaseAiPrompt] = useState<{
+    recordId: string;
+    prompt: string;
+  } | null>(null);
 
   const {
     filters,
@@ -146,6 +150,37 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
     fallbackModel,
     assistantStatusData: studioData.assistantStatusQuery.data,
   });
+
+  useEffect(() => {
+    if (!pendingDatabaseAiPrompt) {
+      return;
+    }
+
+    if (selection?.kind !== "record" || selection.id !== pendingDatabaseAiPrompt.recordId) {
+      return;
+    }
+
+    const prompt = pendingDatabaseAiPrompt.prompt;
+    setPendingDatabaseAiPrompt(null);
+
+    if (!assistant.activeChatId || assistant.assistantScopeMode === "standalone") {
+      assistant.createSelectionChatAndSubmit(prompt);
+      return;
+    }
+
+    assistant.openAssistant();
+    void assistant.submitAssistantPrompt(prompt, "chat", {
+      scopeMode: "selection",
+    });
+  }, [
+    assistant.activeChatId,
+    assistant.assistantScopeMode,
+    assistant.createSelectionChatAndSubmit,
+    assistant.openAssistant,
+    assistant.submitAssistantPrompt,
+    pendingDatabaseAiPrompt,
+    selection,
+  ]);
 
   const canEdit = Boolean(projectPath && assistant.activeChatId);
 
@@ -364,16 +399,12 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
               selectedRecordId={selection?.kind === "record" ? selection.id : null}
               onSelectRecord={(recordId) => setSelection({ kind: "record", id: recordId })}
               onAskAi={(query) => {
-                setSelection({ kind: "record", id: query.recordId });
                 const prompt = buildSlowQueryPrompt(query);
-                if (!assistant.activeChatId || assistant.assistantScopeMode === "standalone") {
-                  assistant.createSelectionChatAndSubmit(prompt);
-                  return;
-                }
-                assistant.openAssistant();
-                void assistant.submitAssistantPrompt(prompt, "chat", {
-                  scopeMode: "selection",
+                setPendingDatabaseAiPrompt({
+                  recordId: query.recordId,
+                  prompt,
                 });
+                setSelection({ kind: "record", id: query.recordId });
               }}
             />
           ) : (
