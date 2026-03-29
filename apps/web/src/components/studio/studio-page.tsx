@@ -2,6 +2,7 @@ import { useEffect } from "react";
 
 import { AuthView } from "@/components/studio/auth-view";
 import { AssistantSheet } from "@/components/studio/assistant-sheet";
+import { DatabaseView } from "@/components/studio/database-view";
 import { EmptyState } from "@/components/studio/empty-state";
 import { ErrorState } from "@/components/studio/error-state";
 import { GroupDetailPanel } from "@/components/studio/group-detail-panel";
@@ -21,10 +22,11 @@ import {
 } from "@/hooks";
 import { useStudioData } from "@/hooks";
 import {
-  isAllLogsSection,
   isAuthSection,
+  isDatabaseSection,
   isOverviewSection,
 } from "@/lib/studio";
+import { formatDurationMs } from "@/lib/studio";
 
 export interface StudioPageProps {
   navigate: (opts: { search: { project?: string } }) => void;
@@ -81,7 +83,7 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
   } = studioData;
 
   const shouldSyncSelection =
-    !isOverviewSection(section) && !isAuthSection(section);
+    !isOverviewSection(section) && !isAuthSection(section) && !isDatabaseSection(section);
   useSyncSelectionFromEntries(entries, selection, setSelection, shouldSyncSelection);
 
   useEffect(() => {
@@ -215,6 +217,7 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
                 filesQuery.error?.message ??
                 logsQuery.error?.message ??
                 studioData.authQuery.error?.message ??
+                studioData.databaseQuery.error?.message ??
                 groupQuery.error?.message ??
                 recordQuery.error?.message ??
                 "Unknown Studio error"
@@ -269,6 +272,25 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
                 if (firstRecordId) {
                   setSelection({ kind: "record", id: firstRecordId });
                 }
+              }}
+            />
+          ) : section === "database" ? (
+            <DatabaseView
+              database={studioData.databaseQuery.data}
+              loading={studioData.databaseQuery.isLoading}
+              selectedRecordId={selection?.kind === "record" ? selection.id : null}
+              onSelectRecord={(recordId) => setSelection({ kind: "record", id: recordId })}
+              onAskAi={(query) => {
+                setSelection({ kind: "record", id: query.recordId });
+                const prompt = buildSlowQueryPrompt(query);
+                if (!assistant.activeChatId || assistant.assistantScopeMode === "standalone") {
+                  assistant.createSelectionChatAndSubmit(prompt);
+                  return;
+                }
+                assistant.openAssistant();
+                void assistant.submitAssistantPrompt(prompt, "chat", {
+                  scopeMode: "selection",
+                });
               }}
             />
           ) : (
@@ -361,4 +383,41 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
       )}
     </>
   );
+}
+
+function buildSlowQueryPrompt(
+  query: {
+    operation: string;
+    modelOrTable: string | null;
+    durationMs: number | null;
+    requestId: string | null;
+    traceId: string | null;
+    queryText: string | null;
+    params: unknown;
+  },
+): string {
+  const context = [
+    `Slow database query detected above the 100ms threshold.`,
+    `Operation: ${query.operation}`,
+    `Model or table: ${query.modelOrTable ?? "Unknown"}`,
+    `Duration: ${formatDurationMs(query.durationMs)}`,
+    query.requestId ? `Request ID: ${query.requestId}` : null,
+    query.traceId ? `Trace ID: ${query.traceId}` : null,
+    query.queryText ? `Query: ${query.queryText}` : null,
+    query.params !== undefined && query.params !== null
+      ? `Redacted params: ${safeStringify(query.params)}`
+      : null,
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  return `${context}\n\nSuggest likely causes, indexing or query-shape improvements, and what to inspect next. Keep recommendations grounded in the query details above.`;
+}
+
+function safeStringify(value: unknown): string {
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
 }

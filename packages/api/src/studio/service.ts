@@ -8,6 +8,7 @@ import {
 } from "./assistant";
 import { generateAssistantText, getAssistantStatus } from "./assistant-provider";
 import { analyzeAuthRecords } from "./auth";
+import { analyzeDatabaseRecords } from "./database-section";
 import {
   discoverStudioConfig,
   resolveStudioAiCredentials,
@@ -33,6 +34,8 @@ import type {
   StudioAuthOverview,
   StudioAuthQueryInput,
   StudioConfigDiscovery,
+  StudioDatabaseOverview,
+  StudioDatabaseQueryInput,
   StudioDetectedSection,
   StudioLogDiscovery,
   StudioLogFacets,
@@ -202,6 +205,47 @@ export async function getStudioAuth(input: StudioAuthQueryInput): Promise<Studio
   );
 
   return analyzeAuthRecords(filtered, input);
+}
+
+export async function getStudioDatabase(
+  input: StudioDatabaseQueryInput,
+): Promise<StudioDatabaseOverview> {
+  const { files, project, config } = await getStudioProjectFiles(input.projectPath);
+  if (!project.valid) {
+    return {
+      stats: {
+        totalQueries: 0,
+        slowQueries: 0,
+        failedQueries: 0,
+        avgQueryTimeMs: null,
+        activeTransactions: 0,
+      },
+      queries: [],
+      totalQueries: 0,
+      slowQueries: [],
+      transactions: [],
+      migrationEvents: [],
+    };
+  }
+
+  const loaded = await loadProjectRecords(project.absolutePath, config, files, {
+    from: input.from,
+    to: input.to,
+    search: input.search,
+  });
+  const filtered = filterRecords(
+    loaded.records,
+    {
+      fileId: input.fileId,
+      from: input.from,
+      to: input.to,
+      search: input.search,
+      sectionId: "database",
+    },
+    config.resolved.studio.sections,
+  );
+
+  return analyzeDatabaseRecords(filtered, input);
 }
 
 export async function addStudioCustomSection(input: {

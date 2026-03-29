@@ -7,7 +7,12 @@ import type {
   StudioSectionId,
   StudioSelection,
 } from "@/lib/studio";
-import { isAllLogsSection, isAuthSection, isOverviewSection } from "@/lib/studio";
+import {
+  isAllLogsSection,
+  isAuthSection,
+  isDatabaseSection,
+  isOverviewSection,
+} from "@/lib/studio";
 import { useTRPC } from "@/utils/trpc";
 
 export interface UseStudioDataParams {
@@ -32,7 +37,10 @@ export function useStudioData({
   const trpc = useTRPC();
   const deferredSearch = useDeferredValue(filters.search);
   const logsSectionId =
-    isOverviewSection(section) || isAllLogsSection(section) || isAuthSection(section)
+    isOverviewSection(section) ||
+    isAllLogsSection(section) ||
+    isAuthSection(section) ||
+    isDatabaseSection(section)
       ? undefined
       : section;
 
@@ -82,7 +90,8 @@ export function useStudioData({
       metaQuery.isSuccess &&
       metaQuery.data.project.valid &&
       !isOverviewSection(section) &&
-      !isAuthSection(section),
+      !isAuthSection(section) &&
+      !isDatabaseSection(section),
     refetchInterval: 1000,
   });
 
@@ -98,6 +107,20 @@ export function useStudioData({
       userId: authUserId || undefined,
     }),
     enabled: metaQuery.isSuccess && metaQuery.data.project.valid && section === "auth",
+    refetchInterval: 1000,
+  });
+
+  const databaseQuery = useQuery({
+    ...trpc.studio.database.queryOptions({
+      projectPath,
+      offset,
+      limit: 100,
+      fileId: filters.fileId || undefined,
+      from: filters.from || undefined,
+      to: filters.to || undefined,
+      search: deferredSearch || undefined,
+    }),
+    enabled: metaQuery.isSuccess && metaQuery.data.project.valid && section === "database",
     refetchInterval: 1000,
   });
 
@@ -154,6 +177,7 @@ export function useStudioData({
     filesQuery.isError ||
     logsQuery.isError ||
     authQuery.isError ||
+    databaseQuery.isError ||
     groupQuery.isError ||
     recordQuery.isError;
   const hasBackendError =
@@ -170,6 +194,7 @@ export function useStudioData({
     facetsQuery,
     logsQuery,
     authQuery,
+    databaseQuery,
     groupQuery,
     recordQuery,
     recordSourceQuery,

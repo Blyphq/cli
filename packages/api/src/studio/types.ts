@@ -315,6 +315,84 @@ export interface StudioLogsPage {
   truncated: boolean;
 }
 
+export type StudioDatabaseQueryStatus = "success" | "error" | "slow";
+export type StudioDatabaseEventKind =
+  | "query"
+  | "transaction-start"
+  | "transaction-commit"
+  | "transaction-rollback"
+  | "migration"
+  | "connection"
+  | "unknown";
+
+export interface StudioDatabaseStats {
+  totalQueries: number;
+  slowQueries: number;
+  failedQueries: number;
+  avgQueryTimeMs: number | null;
+  activeTransactions: number;
+}
+
+export interface StudioDatabaseQueryEvent {
+  id: string;
+  recordId: string;
+  timestamp: string | null;
+  operation: string;
+  modelOrTable: string | null;
+  durationMs: number | null;
+  status: StudioDatabaseQueryStatus;
+  transactionId: string | null;
+  requestId: string | null;
+  traceId: string | null;
+  queryText: string | null;
+  params: unknown;
+  errorMessage: string | null;
+  durationBreakdown: Record<string, number> | null;
+  adapter: "prisma" | "drizzle" | null;
+}
+
+export interface StudioDatabaseTransactionSummary {
+  id: string;
+  startRecordId: string;
+  timestampStart: string | null;
+  timestampEnd: string | null;
+  durationMs: number | null;
+  result: "committed" | "rolled_back" | "open";
+  requestId: string | null;
+  traceId: string | null;
+  queries: StudioDatabaseQueryEvent[];
+}
+
+export interface StudioDatabaseMigrationEvent {
+  id: string;
+  recordId: string;
+  timestamp: string | null;
+  name: string | null;
+  version: string | null;
+  durationMs: number | null;
+  success: boolean;
+  errorMessage: string | null;
+}
+
+export interface StudioDatabaseOverview {
+  stats: StudioDatabaseStats;
+  queries: StudioDatabaseQueryEvent[];
+  totalQueries: number;
+  slowQueries: StudioDatabaseQueryEvent[];
+  transactions: StudioDatabaseTransactionSummary[];
+  migrationEvents: StudioDatabaseMigrationEvent[];
+}
+
+export interface StudioDatabaseQueryInput {
+  projectPath?: string;
+  fileId?: string;
+  from?: string;
+  to?: string;
+  search?: string;
+  offset?: number;
+  limit?: number;
+}
+
 export interface StudioAuthQueryInput {
   projectPath?: string;
   fileId?: string;
