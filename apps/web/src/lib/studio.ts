@@ -11,6 +11,7 @@ export type StudioLogsPage = RouterOutputs["studio"]["logs"];
 export type StudioErrorsPage = RouterOutputs["studio"]["errors"];
 export type StudioAuthOverview = RouterOutputs["studio"]["auth"];
 export type StudioDatabaseOverview = RouterOutputs["studio"]["database"];
+export type StudioOverview = RouterOutputs["studio"]["overview"];
 export type StudioAuthEvent = StudioAuthOverview["timeline"][number];
 export type StudioAuthSuspiciousPattern = StudioAuthOverview["suspiciousPatterns"][number];
 export type StudioAuthUserSummary = StudioAuthOverview["users"][number];
@@ -25,6 +26,10 @@ export type StudioErrorGroupDetail = NonNullable<RouterOutputs["studio"]["errorG
 export type StudioErrorGroup = StudioErrorsPage["groups"][number];
 export type StudioErrorOccurrence = StudioErrorsPage["occurrences"][number];
 export type StudioErrorStats = StudioErrorsPage["stats"];
+export type StudioOverviewStatus = StudioOverview["stats"]["totalEvents"]["status"];
+export type StudioOverviewTrend = StudioOverview["stats"]["errorRate"]["trend"];
+export type StudioOverviewTarget = StudioOverview["liveFeed"][number]["target"];
+export type StudioOverviewRecentErrorItem = StudioOverview["recentErrors"][number];
 export type StudioFacets = RouterOutputs["studio"]["facets"];
 export type StudioAssistantStatus = RouterOutputs["studio"]["assistantStatus"];
 export type StudioAssistantMessage = RouterOutputs["studio"]["assistantReply"];
@@ -145,7 +150,10 @@ export function formatDateTime(value: string | null | undefined): string {
   return parsed.toLocaleString();
 }
 
-export function formatRelativeTime(value: string | null | undefined): string {
+export function formatRelativeTime(
+  value: string | null | undefined,
+  now = Date.now(),
+): string {
   if (!value) {
     return "Unknown";
   }
@@ -155,7 +163,7 @@ export function formatRelativeTime(value: string | null | undefined): string {
     return value;
   }
 
-  const diffMs = parsed.getTime() - Date.now();
+  const diffMs = parsed.getTime() - now;
   const formatter = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
   const divisions: Array<[Intl.RelativeTimeFormatUnit, number]> = [
     ["day", 1000 * 60 * 60 * 24],
@@ -518,8 +526,73 @@ export function isAuthSection(section: StudioSectionId): boolean {
 
 export function isDatabaseSection(section: StudioSectionId): boolean {
   return section === "database";
+}
+
 export function isErrorsSection(section: StudioSectionId): boolean {
   return section === "errors";
+}
+
+export function formatDuration(value: number): string {
+  if (!Number.isFinite(value) || value < 0) {
+    return "0s";
+  }
+
+  const totalSeconds = Math.floor(value / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  if (hours > 0) {
+    return `${hours}h ${minutes}m`;
+  }
+
+  if (minutes > 0) {
+    return `${minutes}m ${seconds}s`;
+  }
+
+  return `${seconds}s`;
+}
+
+export function formatOverviewMetricValue(
+  label: string,
+  value: number | null,
+): string {
+  if (label === "Error rate") {
+    return typeof value === "number" ? `${value.toFixed(1)}%` : "0.0%";
+  }
+
+  if (label === "Avg response time") {
+    return typeof value === "number" ? formatDurationMs(value) : "n/a";
+  }
+
+  if (label === "Uptime") {
+    return typeof value === "number" ? formatDuration(value) : "0s";
+  }
+
+  return typeof value === "number" ? new Intl.NumberFormat().format(value) : "n/a";
+}
+
+export function formatOverviewTrend(
+  trend: StudioOverviewTrend,
+  deltaPercent: number | null,
+): string {
+  if (trend === "flat" || deltaPercent === null || !Number.isFinite(deltaPercent)) {
+    return "No change";
+  }
+
+  return `${Math.abs(deltaPercent).toFixed(1)}% ${trend}`;
+}
+
+export function getOverviewStatusClasses(status: StudioOverviewStatus): string {
+  switch (status) {
+    case "critical":
+      return "border-destructive/40 bg-destructive/8 text-destructive";
+    case "warning":
+      return "border-amber-500/30 bg-amber-500/8 text-amber-200 dark:text-amber-300";
+    case "healthy":
+    default:
+      return "border-primary/30 bg-primary/8 text-primary";
+  }
 }
 
 export function formatRelativeToSessionStart(

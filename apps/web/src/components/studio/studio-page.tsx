@@ -40,6 +40,9 @@ export interface StudioPageProps {
 
 export function StudioPage({ navigate, search }: StudioPageProps) {
   const projectPath = search.project ?? "";
+  const [overviewConnectedAt, setOverviewConnectedAt] = useState(() =>
+    new Date().toISOString(),
+  );
   const [pendingDatabaseAiPrompt, setPendingDatabaseAiPrompt] = useState<{
     recordId: string;
     prompt: string;
@@ -96,7 +99,10 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
   } = studioData;
 
   const shouldSyncSelection =
-    !isOverviewSection(section) && !isAuthSection(section) && !isDatabaseSection(section)  && !isErrorsSection(section);
+    !isOverviewSection(section) &&
+    !isAuthSection(section) &&
+    !isDatabaseSection(section) &&
+    !isErrorsSection(section);
   useSyncSelectionFromEntries(entries, selection, setSelection, shouldSyncSelection);
   useSyncErrorSelectionFromEntries(
     studioData.errorsQuery.data?.entries ?? [],
@@ -105,6 +111,10 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
     errorUi.view === "grouped",
     isErrorsSection(section),
   );
+
+  useEffect(() => {
+    setOverviewConnectedAt(new Date().toISOString());
+  }, [projectPath]);
 
   useEffect(() => {
     setOffset(0);
@@ -248,6 +258,54 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
     assistant.createSelectionChatAndSubmit(prompt);
   };
 
+  const handleOpenOverviewTarget = (
+    target: NonNullable<
+      NonNullable<typeof studioData.overviewQuery.data>["liveFeed"][number]["target"]
+    > | null,
+  ) => {
+    if (!target) {
+      return;
+    }
+
+    setSection(target.sectionId);
+    setSelection(target.selection);
+  };
+
+  const handleViewOverviewTrace = (
+    item: NonNullable<typeof studioData.overviewQuery.data>["recentErrors"][number],
+  ) => {
+    if (item.traceReference) {
+      setGrouping("grouped");
+      setSection(item.traceReference.sectionId);
+      setSelection(item.traceReference.selection);
+      return;
+    }
+
+    setSection("errors");
+    setSelection({ kind: "error-group", id: item.groupId });
+  };
+
+  const handleAskAiForOverviewError = (
+    item: NonNullable<typeof studioData.overviewQuery.data>["recentErrors"][number],
+  ) => {
+    setSection("errors");
+    setSelection({ kind: "error-occurrence", id: item.recordId });
+
+    const prompt = [
+      "Help me investigate this recent Studio error.",
+      `Message: ${item.message}`,
+      item.sourceFile
+        ? `Source: ${item.sourceFile}${item.sourceLine ? `:${item.sourceLine}` : ""}`
+        : null,
+      item.timestamp ? `Last seen: ${item.timestamp}` : null,
+      "Explain the likely cause, what to inspect next, and suggest a concrete fix if the signal is sufficient.",
+    ]
+      .filter(Boolean)
+      .join("\n\n");
+
+    assistant.createSelectionChatAndSubmit(prompt);
+  };
+
   return (
     <>
       <StudioShell
@@ -319,6 +377,7 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
                 filesQuery.error?.message ??
                 logsQuery.error?.message ??
                 studioData.errorsQuery.error?.message ??
+                studioData.overviewQuery.error?.message ??
                 studioData.authQuery.error?.message ??
                 studioData.databaseQuery.error?.message ??
                 groupQuery.error?.message ??
@@ -339,8 +398,12 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
             />
           ) : isOverviewSection(section) ? (
             <OverviewView
-              sections={metaQuery.data?.sections ?? []}
+              overview={studioData.overviewQuery.data}
+              connectedAt={overviewConnectedAt}
               onSelect={setSection}
+              onSelectFeedTarget={handleOpenOverviewTarget}
+              onViewTrace={handleViewOverviewTrace}
+              onAskAiForError={handleAskAiForOverviewError}
             />
           ) : isErrorsSection(section) ? (
             <ErrorsView
@@ -426,6 +489,7 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
           )
         }
         detail={
+          isOverviewSection(section) ? null :
           selection?.kind === "group" ? (
             <GroupDetailPanel
               group={selectedGroup}

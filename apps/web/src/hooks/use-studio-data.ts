@@ -44,7 +44,7 @@ export function useStudioData({
     isOverviewSection(section) ||
     isAllLogsSection(section) ||
     isAuthSection(section) ||
-    isDatabaseSection(section) || 
+    isDatabaseSection(section) ||
     isErrorsSection(section)
       ? undefined
       : section;
@@ -117,6 +117,18 @@ export function useStudioData({
       sectionId: errorUi.sectionTag || undefined,
     }),
     enabled: metaQuery.isSuccess && metaQuery.data.project.valid && isErrorsSection(section),
+    refetchInterval: 1000,
+  });
+
+  const overviewQuery = useQuery({
+    ...trpc.studio.overview.queryOptions({
+      projectPath,
+      fileId: filters.fileId || undefined,
+      from: filters.from || undefined,
+      to: filters.to || undefined,
+      search: deferredSearch || undefined,
+    }),
+    enabled: metaQuery.isSuccess && metaQuery.data.project.valid && isOverviewSection(section),
     refetchInterval: 1000,
   });
 
@@ -223,6 +235,7 @@ export function useStudioData({
     filesQuery.isError ||
     logsQuery.isError ||
     errorsQuery.isError ||
+    overviewQuery.isError ||
     authQuery.isError ||
     databaseQuery.isError ||
     groupQuery.isError ||
@@ -242,6 +255,7 @@ export function useStudioData({
     facetsQuery,
     logsQuery,
     errorsQuery,
+    overviewQuery,
     authQuery,
     databaseQuery,
     groupQuery,

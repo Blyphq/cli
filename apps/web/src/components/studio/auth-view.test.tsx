@@ -6,7 +6,6 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { AuthView } from "./auth-view";
-import { OverviewView } from "./overview-view";
 import { SectionNavPanel } from "./section-nav-panel";
 import { StudioToolbar } from "./studio-toolbar";
 
@@ -72,6 +71,7 @@ describe("SectionNavPanel", () => {
     const onSelect = vi.fn();
     const { rerender } = render(
       <SectionNavPanel
+        projectPath="/project"
         meta={{
           project: {} as never,
           config: {} as never,
@@ -89,6 +89,7 @@ describe("SectionNavPanel", () => {
 
     rerender(
       <SectionNavPanel
+        projectPath="/project"
         meta={{
           project: {} as never,
           config: {} as never,
@@ -265,31 +266,5 @@ describe("StudioToolbar", () => {
     expect(screen.getByDisplayValue("Overview doesn't filter by level")).toBeDisabled();
     expect(screen.getByDisplayValue("Overview doesn't filter by type")).toBeDisabled();
     expect(screen.getByDisplayValue("Overview has no log grouping")).toBeDisabled();
-  });
-});
-
-describe("OverviewView", () => {
-  it("formats latest signal timestamps for display", () => {
-    render(
-      <OverviewView
-        sections={[
-          {
-            id: "auth",
-            label: "Auth",
-            count: 2,
-            icon: "🔐",
-            kind: "builtin",
-            highlighted: false,
-            unreadErrorCount: 0,
-            lastMatchedAt: "2026-03-13T10:00:00.000Z",
-            lastErrorAt: null,
-          },
-        ]}
-        onSelect={vi.fn()}
-      />,
-    );
-
-    expect(screen.queryByText("Latest signal: 2026-03-13T10:00:00.000Z")).not.toBeInTheDocument();
-    expect(screen.getByText(/Latest signal:/)).toBeInTheDocument();
   });
 });

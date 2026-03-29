@@ -46,11 +46,13 @@ describe("studio router", () => {
     const meta = await caller.studio.meta({ projectPath: projectDir });
     const files = await caller.studio.files({ projectPath: projectDir });
     const logs = await caller.studio.logs({ projectPath: projectDir, limit: 10 });
+    const overview = await caller.studio.overview({ projectPath: projectDir });
     const facets = await caller.studio.facets({ projectPath: projectDir });
 
     expect(meta.project.valid).toBe(true);
     expect(files.files[0]?.name).toBe("log.ndjson");
     expect(logs.records[0]?.message).toBe("hello from caller");
+    expect(overview.stats.totalEvents.value).toBe(1);
     expect(facets.levels).toContain("info");
   });
 
