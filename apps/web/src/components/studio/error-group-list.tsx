@@ -87,7 +87,7 @@ export function ErrorGroupList({
                   group={group}
                   selected={selectedGroupId === group.id}
                   onSelect={onSelect}
-                  onResolve={() => {}}
+                  onResolve={onResolve}
                   onIgnore={onIgnore}
                 />
               ))}

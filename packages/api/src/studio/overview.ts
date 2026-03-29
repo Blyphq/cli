@@ -528,10 +528,10 @@ function compareRecordsAscending(left: StudioNormalizedRecord, right: StudioNorm
     return left.id.localeCompare(right.id);
   }
   if (!Number.isFinite(leftTime)) {
-    return 1;
+    return -1;
   }
   if (!Number.isFinite(rightTime)) {
-    return -1;
+    return 1;
   }
   if (leftTime === rightTime) {
     return left.id.localeCompare(right.id);

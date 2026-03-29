@@ -113,6 +113,10 @@ function handleCardKeyDown(
   groupId: string,
   onSelect: (groupId: string) => void,
 ) {
+  if (event.target !== event.currentTarget) {
+    return;
+  }
+
   if (event.key === "Enter" || event.key === " ") {
     event.preventDefault();
     onSelect(groupId);

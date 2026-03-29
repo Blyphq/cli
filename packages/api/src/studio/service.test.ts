@@ -247,6 +247,35 @@ describe("studio log discovery and queries", () => {
     expect(overview.recentErrors).toEqual([]);
   });
 
+  it("treats invalid timestamps as oldest records in overview ordering", async () => {
+    const projectDir = await createProject();
+    const logDir = path.join(projectDir, "logs");
+
+    await mkdir(logDir, { recursive: true });
+    await writeFile(
+      path.join(logDir, "log.ndjson"),
+      [
+        JSON.stringify({
+          timestamp: "not-a-date",
+          level: "info",
+          message: "invalid timestamp event",
+          traceId: "trace-invalid",
+        }),
+        JSON.stringify({
+          timestamp: "2026-03-13T12:00:00.000Z",
+          level: "info",
+          message: "newest valid event",
+          traceId: "trace-valid",
+        }),
+      ].join("\n") + "\n",
+    );
+
+    const overview = await getStudioOverview({ projectPath: projectDir });
+
+    expect(overview.liveFeed[0]?.message).toBe("newest valid event");
+    expect(overview.liveFeed[1]?.message).toBe("invalid timestamp event");
+  });
+
   it("reads ndjson and gz, keeps malformed lines, and filters server-side", async () => {
     const projectDir = await createProject();
     const logDir = path.join(projectDir, "logs");
