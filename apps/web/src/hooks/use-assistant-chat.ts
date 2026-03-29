@@ -97,6 +97,10 @@ export function useAssistantChat({
             assistantScopeMode === "selection" && selection?.kind === "group"
               ? selection.id
               : undefined,
+          selectedBackgroundRunId:
+            assistantScopeMode === "selection" && selection?.kind === "background-run"
+              ? selection.id
+              : undefined,
           model: selectedModel || undefined,
         },
       }),
@@ -149,6 +153,8 @@ export function useAssistantChat({
         ? "selected log"
         : selection?.kind === "group"
           ? "selected structured group"
+          : selection?.kind === "background-run"
+            ? "selected background run"
           : "no selection";
 
   useEffect(() => {
@@ -290,7 +296,12 @@ export function useAssistantChat({
   ]);
 
   const handleReferenceSelect = (reference: StudioAssistantReference) => ({
-    kind: reference.kind === "group" ? "group" as const : "record" as const,
+    kind:
+      reference.kind === "group"
+        ? "group" as const
+        : reference.kind === "background-run"
+          ? "background-run" as const
+          : "record" as const,
     id: reference.id,
   });
 

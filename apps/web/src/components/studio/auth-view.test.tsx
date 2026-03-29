@@ -119,6 +119,41 @@ describe("SectionNavPanel", () => {
     expect(onSelect).toHaveBeenCalledWith("auth");
   });
 
+  it("shows Background Jobs when meta exposes the section", async () => {
+    const user = userEvent.setup();
+    const onSelect = vi.fn();
+
+    render(
+      <SectionNavPanel
+        projectPath="/project"
+        meta={{
+          project: {} as never,
+          config: {} as never,
+          sections: [
+            {
+              id: "background",
+              label: "Background Jobs",
+              count: 3,
+              icon: "⚙",
+              kind: "builtin",
+              highlighted: false,
+              unreadErrorCount: 1,
+              lastMatchedAt: "2026-03-13T10:00:00.000Z",
+              lastErrorAt: "2026-03-13T10:00:00.000Z",
+            },
+          ],
+          logs: {} as never,
+        }}
+        section="overview"
+        visitedAtBySection={{}}
+        onSelect={onSelect}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /background jobs/i }));
+    expect(onSelect).toHaveBeenCalledWith("background");
+  });
+
   it("resets the add-section form when the dialog closes", async () => {
     const user = userEvent.setup();
     render(
@@ -266,5 +301,36 @@ describe("StudioToolbar", () => {
     expect(screen.getByDisplayValue("Overview doesn't filter by level")).toBeDisabled();
     expect(screen.getByDisplayValue("Overview doesn't filter by type")).toBeDisabled();
     expect(screen.getByDisplayValue("Overview has no log grouping")).toBeDisabled();
+  });
+
+  it("shows background-job-specific disabled helper text", () => {
+    render(
+      <StudioToolbar
+        draftProjectPath=""
+        facets={undefined}
+        files={[]}
+        filters={{
+          level: "",
+          type: "",
+          search: "",
+          fileId: "",
+          from: "",
+          to: "",
+        }}
+        grouping="grouped"
+        meta={undefined}
+        section="background"
+        onDraftProjectPathChange={vi.fn()}
+        onFilterChange={vi.fn()}
+        onGroupingChange={vi.fn()}
+        onInspect={vi.fn()}
+        onStartStandaloneChat={vi.fn()}
+        onResetFilters={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByDisplayValue("Background Jobs uses run analysis")).toBeDisabled();
+    expect(screen.getByDisplayValue("Background Jobs doesn't filter by type")).toBeDisabled();
+    expect(screen.getByDisplayValue("Background Jobs has no log grouping")).toBeDisabled();
   });
 });

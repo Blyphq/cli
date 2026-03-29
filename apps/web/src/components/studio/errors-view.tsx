@@ -284,7 +284,10 @@ function ControlSelect(props: {
       <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
         {props.label}
       </div>
-      <Select value={props.value} onValueChange={props.onValueChange}>
+      <Select
+        value={props.value}
+        onValueChange={(value) => props.onValueChange(value ?? props.value)}
+      >
         <SelectTrigger>
           <SelectValue>{selectedLabel}</SelectValue>
         </SelectTrigger>

@@ -9,21 +9,23 @@ export function ErrorsStatsBar({ stats }: ErrorsStatsBarProps) {
   const items = [
     {
       label: "Unique error types",
-      value: String(stats.totalUniqueErrorTypes),
+      value: String(stats.uniqueErrorTypes),
     },
     {
       label: "Error occurrences",
-      value: String(stats.totalErrorOccurrences),
+      value: String(stats.totalOccurrences),
     },
     {
       label: "Most frequent",
       value: stats.mostFrequentError
-        ? `${stats.mostFrequentError.errorType ?? stats.mostFrequentError.message} (${stats.mostFrequentError.count})`
+        ? `${stats.mostFrequentError.type} (${stats.mostFrequentError.count})`
         : "None",
     },
     {
-      label: "New this session",
-      value: String(stats.newErrorsThisSession),
+      label: "Cross-session new",
+      value: stats.newErrorsComparedToPreviousSessions.available
+        ? String(stats.newErrorsComparedToPreviousSessions.count ?? 0)
+        : "Unavailable",
     },
   ];
 

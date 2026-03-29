@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 
+import { BackgroundJobDetailPanel } from "@/components/studio/background-job-detail-panel";
+import { BackgroundJobsView } from "@/components/studio/background-jobs-view";
 import { ErrorsView } from "@/components/studio/errors-view";
 import { AuthView } from "@/components/studio/auth-view";
 import { AssistantSheet } from "@/components/studio/assistant-sheet";
@@ -27,6 +29,7 @@ import {
 import { useStudioData } from "@/hooks";
 import {
   isAuthSection,
+  isBackgroundSection,
   isDatabaseSection,
   isErrorsSection,
   isOverviewSection,
@@ -43,6 +46,7 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
   const [overviewConnectedAt, setOverviewConnectedAt] = useState(() =>
     new Date().toISOString(),
   );
+  const [expandedBackgroundRunId, setExpandedBackgroundRunId] = useState<string | null>(null);
   const [pendingDatabaseAiPrompt, setPendingDatabaseAiPrompt] = useState<{
     recordId: string;
     prompt: string;
@@ -102,6 +106,7 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
     !isOverviewSection(section) &&
     !isAuthSection(section) &&
     !isDatabaseSection(section) &&
+    !isBackgroundSection(section) &&
     !isErrorsSection(section);
   useSyncSelectionFromEntries(entries, selection, setSelection, shouldSyncSelection);
   useSyncErrorSelectionFromEntries(
@@ -118,6 +123,10 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
 
   useEffect(() => {
     setOffset(0);
+    setExpandedBackgroundRunId(null);
+    if (section === "overview") {
+      setOverviewConnectedAt(new Date().toISOString());
+    }
   }, [
     filters.level,
     filters.type,
@@ -206,6 +215,8 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
       : null;
   const selectedGroup =
     selection?.kind === "group" ? studioData.selectedGroup : null;
+  const selectedBackgroundRun =
+    selection?.kind === "background-run" ? studioData.selectedBackgroundRun : null;
   const selectedErrorGroup =
     selection?.kind === "error-group" ? studioData.selectedErrorGroup : null;
 
@@ -256,6 +267,19 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
       .join("\n\n");
 
     assistant.createSelectionChatAndSubmit(prompt);
+  };
+
+  const handleAskAiOnBackgroundRun = () => {
+    const detail = studioData.backgroundJobRunQuery.data;
+    if (!detail) {
+      return;
+    }
+
+    setSection("background");
+    setSelection({ kind: "background-run", id: detail.run.id });
+    assistant.createSelectionChatAndSubmit(
+      `Diagnose this failed background job run. Use the full run timeline, identify the failing step, explain the likely root cause, and propose the smallest defensible fix. Job: ${detail.run.jobName}. Status: ${detail.run.status}. Failure: ${detail.run.failure?.message ?? "Unknown failure"}.`,
+    );
   };
 
   const handleOpenOverviewTarget = (
@@ -379,6 +403,8 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
                 studioData.errorsQuery.error?.message ??
                 studioData.overviewQuery.error?.message ??
                 studioData.authQuery.error?.message ??
+                studioData.backgroundJobsQuery.error?.message ??
+                studioData.backgroundJobRunQuery.error?.message ??
                 studioData.databaseQuery.error?.message ??
                 groupQuery.error?.message ??
                 studioData.errorGroupQuery.error?.message ??
@@ -470,6 +496,38 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
                 setSelection({ kind: "record", id: query.recordId });
               }}
             />
+          ) : isBackgroundSection(section) ? (
+            <BackgroundJobsView
+              page={studioData.backgroundJobsQuery.data}
+              loading={studioData.backgroundJobsQuery.isLoading}
+              selectedRunId={selection?.kind === "background-run" ? selection.id : null}
+              expandedRunId={expandedBackgroundRunId}
+              expandedRunDetail={
+                expandedBackgroundRunId &&
+                selection?.kind === "background-run" &&
+                expandedBackgroundRunId === selection.id
+                  ? studioData.backgroundJobRunQuery.data
+                  : null
+              }
+              expandedRunLoading={
+                Boolean(expandedBackgroundRunId) &&
+                selection?.kind === "background-run" &&
+                expandedBackgroundRunId === selection.id &&
+                studioData.backgroundJobRunQuery.isLoading
+              }
+              onSelectRun={(runId) => {
+                setExpandedBackgroundRunId(null);
+                setSelection({ kind: "background-run", id: runId });
+              }}
+              onToggleExpand={(runId) => {
+                const nextExpandedRunId =
+                  expandedBackgroundRunId === runId ? null : runId;
+                setExpandedBackgroundRunId(nextExpandedRunId);
+                if (nextExpandedRunId) {
+                  setSelection({ kind: "background-run", id: nextExpandedRunId });
+                }
+              }}
+            />
           ) : (
             <LogList
               entries={entries}
@@ -527,11 +585,19 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
               }}
             />
           ) : (
-            selection?.kind === "error-occurrence" ? (
+            selection?.kind === "background-run" ? (
+              <BackgroundJobDetailPanel
+                detail={selectedBackgroundRun}
+                loading={studioData.backgroundJobRunQuery.isLoading}
+                onAskAi={handleAskAiOnBackgroundRun}
+              />
+            ) : selection?.kind === "error-occurrence" ? (
               <ErrorDetailPanel
                 group={null}
                 occurrence={
-                  studioData.errorsQuery.data?.occurrences.find((item) => item.id === selection.id) ?? null
+                  studioData.errorsQuery.data?.occurrences.find(
+                    (item) => item.id === selection.id,
+                  ) ?? null
                 }
                 record={selectedRecord}
                 recordSource={recordSourceQuery.data ?? null}
@@ -612,7 +678,7 @@ function buildSlowQueryPrompt(
     requestId: string | null;
     traceId: string | null;
     queryText: string | null;
-    params: unknown;
+    params?: unknown;
   },
 ): string {
   const context = [

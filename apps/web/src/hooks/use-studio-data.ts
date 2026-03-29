@@ -11,6 +11,7 @@ import type {
 import {
   isAllLogsSection,
   isAuthSection,
+  isBackgroundSection,
   isDatabaseSection,
   isErrorsSection,
   isOverviewSection,
@@ -45,6 +46,7 @@ export function useStudioData({
     isAllLogsSection(section) ||
     isAuthSection(section) ||
     isDatabaseSection(section) ||
+    isBackgroundSection(section) ||
     isErrorsSection(section)
       ? undefined
       : section;
@@ -96,6 +98,7 @@ export function useStudioData({
       metaQuery.data.project.valid &&
       !isOverviewSection(section) &&
       !isAuthSection(section) &&
+      !isBackgroundSection(section) &&
       !isDatabaseSection(section) &&
       !isErrorsSection(section),
     refetchInterval: 1000,
@@ -147,6 +150,20 @@ export function useStudioData({
     refetchInterval: 1000,
   });
 
+  const backgroundJobsQuery = useQuery({
+    ...trpc.studio.backgroundJobs.queryOptions({
+      projectPath,
+      offset,
+      limit: 100,
+      fileId: filters.fileId || undefined,
+      from: filters.from || undefined,
+      to: filters.to || undefined,
+      search: deferredSearch || undefined,
+    }),
+    enabled: metaQuery.isSuccess && metaQuery.data.project.valid && section === "background",
+    refetchInterval: 1000,
+  });
+
   const databaseQuery = useQuery({
     ...trpc.studio.database.queryOptions({
       projectPath,
@@ -181,6 +198,21 @@ export function useStudioData({
       metaQuery.isSuccess &&
       metaQuery.data.project.valid &&
       selection?.kind === "error-group",
+  });
+
+  const backgroundJobRunQuery = useQuery({
+    ...trpc.studio.backgroundJobRun.queryOptions({
+      projectPath,
+      runId: selection?.kind === "background-run" ? selection.id : "",
+      fileId: filters.fileId || undefined,
+      from: filters.from || undefined,
+      to: filters.to || undefined,
+      search: deferredSearch || undefined,
+    }),
+    enabled:
+      metaQuery.isSuccess &&
+      metaQuery.data.project.valid &&
+      selection?.kind === "background-run",
   });
 
   const recordQuery = useQuery({
@@ -223,6 +255,8 @@ export function useStudioData({
       : null;
   const selectedGroup =
     selection?.kind === "group" ? groupQuery.data ?? null : null;
+  const selectedBackgroundRun =
+    selection?.kind === "background-run" ? backgroundJobRunQuery.data ?? null : null;
   const selectedErrorGroup =
     selection?.kind === "error-group" ? errorGroupQuery.data ?? null : null;
 
@@ -237,6 +271,8 @@ export function useStudioData({
     errorsQuery.isError ||
     overviewQuery.isError ||
     authQuery.isError ||
+    backgroundJobsQuery.isError ||
+    backgroundJobRunQuery.isError ||
     databaseQuery.isError ||
     groupQuery.isError ||
     errorGroupQuery.isError ||
@@ -257,6 +293,8 @@ export function useStudioData({
     errorsQuery,
     overviewQuery,
     authQuery,
+    backgroundJobsQuery,
+    backgroundJobRunQuery,
     databaseQuery,
     groupQuery,
     errorGroupQuery,
@@ -267,6 +305,7 @@ export function useStudioData({
     entries,
     selectedRecord,
     selectedGroup,
+    selectedBackgroundRun,
     selectedErrorGroup,
     isLoadingMeta,
     isProjectInvalid,

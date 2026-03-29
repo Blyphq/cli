@@ -292,6 +292,18 @@ export interface StudioStructuredGroupDetail {
 
 export type StudioLogListEntry = StudioNormalizedRecordListItem | StudioStructuredGroupSummary;
 
+export type StudioBackgroundJobStatus =
+  | "COMPLETED"
+  | "FAILED"
+  | "IN_PROGRESS"
+  | "TIMEOUT";
+
+export type StudioBackgroundJobTrend =
+  | "slower"
+  | "stable"
+  | "faster"
+  | "insufficient_data";
+
 export interface StudioErrorFingerprintSource {
   key: string;
   kind: "source-location" | "stack-frame" | "caller" | "unknown";
@@ -403,6 +415,16 @@ export interface StudioErrorsQueryInput {
   sectionId?: string;
 }
 
+export interface StudioBackgroundJobsQueryInput {
+  projectPath?: string;
+  fileId?: string;
+  from?: string;
+  to?: string;
+  search?: string;
+  offset?: number;
+  limit?: number;
+}
+
 export interface StudioLogsPage {
   records: StudioNormalizedRecord[];
   entries: StudioLogListEntry[];
@@ -493,6 +515,75 @@ export interface StudioDatabaseQueryInput {
   limit?: number;
 }
 
+export interface StudioBackgroundJobOutputField {
+  key: string;
+  value: string;
+}
+
+export interface StudioBackgroundJobFailure {
+  message: string;
+  reasonKey: string;
+  step: string | null;
+  stack: string | null;
+}
+
+export interface StudioBackgroundJobTimelineEvent {
+  id: string;
+  recordId: string;
+  timestamp: string | null;
+  level: string;
+  message: string;
+  status: StudioBackgroundJobStatus | null;
+  step: string | null;
+  structuredFields: StudioBackgroundJobOutputField[];
+}
+
+export interface StudioBackgroundJobRunSummary {
+  id: string;
+  jobName: string;
+  runId: string | null;
+  status: StudioBackgroundJobStatus;
+  startedAt: string | null;
+  finishedAt: string | null;
+  durationMs: number | null;
+  outputFields: StudioBackgroundJobOutputField[];
+  failure: StudioBackgroundJobFailure | null;
+  recordCount: number;
+}
+
+export interface StudioBackgroundJobRunDetail {
+  run: StudioBackgroundJobRunSummary;
+  timeline: StudioBackgroundJobTimelineEvent[];
+}
+
+export interface StudioBackgroundJobPerformanceRow {
+  jobName: string;
+  totalRuns: number;
+  successRate: number;
+  avgDurationMs: number | null;
+  p95DurationMs: number | null;
+  lastRunTimestamp: string | null;
+  trend: StudioBackgroundJobTrend;
+}
+
+export interface StudioBackgroundJobsStats {
+  jobsDetected: number;
+  totalRuns: number;
+  successRate: number;
+  failedRuns: number;
+  mostCommonFailureReason: string | null;
+  avgDurationMs: number | null;
+}
+
+export interface StudioBackgroundJobsOverview {
+  stats: StudioBackgroundJobsStats;
+  runs: StudioBackgroundJobRunSummary[];
+  performance: StudioBackgroundJobPerformanceRow[];
+  totalRuns: number;
+  offset: number;
+  limit: number;
+  truncated: boolean;
+}
 export interface StudioErrorsPage {
   entries: Array<StudioErrorGroupSummary | StudioErrorOccurrence>;
   groups: StudioErrorGroupSummary[];
@@ -685,7 +776,7 @@ export interface StudioAssistantHistoryItem {
 }
 
 export interface StudioAssistantReference {
-  kind: "record" | "group";
+  kind: "record" | "group" | "background-run";
   id: string;
   label: string;
   fileName: string | null;
@@ -723,6 +814,7 @@ export interface StudioAssistantReplyInput {
   >;
   selectedRecordId?: string;
   selectedGroupId?: string;
+  selectedBackgroundRunId?: string;
 }
 
 export interface StudioMeta {

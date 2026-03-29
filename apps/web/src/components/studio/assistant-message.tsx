@@ -101,7 +101,12 @@ export function AssistantMessage({
                       title={reference.reason}
                     >
                       <ChainOfThoughtSearchResult>
-                        {reference.kind === "group" ? "Group" : "Log"}: {reference.label}
+                        {reference.kind === "group"
+                          ? "Group"
+                          : reference.kind === "background-run"
+                            ? "Run"
+                            : "Log"}
+                        : {reference.label}
                       </ChainOfThoughtSearchResult>
                     </Button>
                   ))}

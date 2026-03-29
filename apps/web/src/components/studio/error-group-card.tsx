@@ -12,7 +12,7 @@ interface ErrorGroupCardProps {
   group: StudioErrorGroup;
   selected: boolean;
   onSelect(groupId: string): void;
-  onResolve(groupId: string): void;
+  onResolve?(groupId: string): void;
   onIgnore(groupId: string): void;
 }
 
@@ -23,12 +23,20 @@ export function ErrorGroupCard({
   onResolve,
   onIgnore,
 }: ErrorGroupCardProps) {
+  const source =
+    group.fingerprintSource.relativePath
+      ? `${group.fingerprintSource.relativePath}${group.fingerprintSource.line ? `:${group.fingerprintSource.line}` : ""}`
+      : group.sourceLocation
+        ? `${group.sourceLocation.relativePath}:${group.sourceLocation.line}`
+        : null;
+  const statusLabel = group.occurrenceCount > 1 ? "Recurring" : "New";
+
   return (
     <div
       role="button"
       tabIndex={0}
-      onClick={() => onSelect(group.id)}
-      onKeyDown={(event) => handleCardKeyDown(event, group.id, onSelect)}
+      onClick={() => onSelect(group.fingerprint)}
+      onKeyDown={(event) => handleCardKeyDown(event, group.fingerprint, onSelect)}
       className={cn(
         "w-full space-y-3 border border-border/60 bg-background/50 p-4 text-left transition-colors hover:bg-muted/30",
         selected && "border-primary/50 bg-primary/5",
@@ -40,12 +48,12 @@ export function ErrorGroupCard({
             <div className="truncate text-sm font-medium">
               {group.errorType ?? "Error"}
             </div>
-            <Badge variant={group.statusHint === "new" ? "default" : "secondary"}>
-              {group.statusHint === "new" ? "New" : "Recurring"}
+            <Badge variant={group.occurrenceCount === 1 ? "default" : "secondary"}>
+              {statusLabel}
             </Badge>
           </div>
           <div className="line-clamp-2 break-words text-sm text-muted-foreground">
-            {group.message}
+            {group.messageFirstLine}
           </div>
         </div>
         <div className="text-right text-xs text-muted-foreground">
@@ -55,42 +63,40 @@ export function ErrorGroupCard({
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0 flex-1 space-y-2">
           <div className="flex min-w-0 flex-wrap gap-2 text-[11px] text-muted-foreground">
-            <span>First {formatCompactDateTime(group.firstSeen)}</span>
-            <span>Last {formatCompactDateTime(group.lastSeen)}</span>
-            {group.sourceFile ? (
+            <span>First {formatCompactDateTime(group.firstSeenAt)}</span>
+            <span>Last {formatCompactDateTime(group.lastSeenAt)}</span>
+            {source ? <span>{source}</span> : null}
+            {group.http?.method && (group.http.path || group.http.url) ? (
               <span>
-                {group.sourceFile}:{group.sourceLine ?? "?"}
-              </span>
-            ) : null}
-            {group.http?.method && group.http?.route ? (
-              <span>
-                {group.http.method} {group.http.route} {group.http.statusCode ?? ""}
+                {group.http.method} {group.http.path ?? group.http.url} {group.http.statusCode ?? ""}
               </span>
             ) : null}
           </div>
           <div className="flex flex-wrap gap-2">
-            {group.tags.map((tag) => (
-              <Badge key={`${group.id}:${tag.id}`} variant="outline">
-                {tag.label}
+            {group.sectionTags.map((tag) => (
+              <Badge key={`${group.fingerprint}:${tag}`} variant="outline">
+                {tag}
               </Badge>
             ))}
           </div>
         </div>
-        <Sparkline points={group.sparkline} className="h-6 w-24 shrink-0 text-primary" />
+        <Sparkline points={group.sparklineBuckets} className="h-6 w-24 shrink-0 text-primary" />
       </div>
       <div className="flex flex-wrap justify-end gap-2">
-        <Button
-          type="button"
-          aria-label={`Resolve ${group.errorType ?? group.message}`}
-          variant="outline"
-          size="xs"
-          onClick={(event) => {
-            event.stopPropagation();
-            onResolve(group.id);
-          }}
-        >
-          Resolved
-        </Button>
+        {onResolve ? (
+          <Button
+            type="button"
+            aria-label={`Resolve ${group.errorType ?? group.message}`}
+            variant="outline"
+            size="xs"
+            onClick={(event) => {
+              event.stopPropagation();
+              onResolve(group.fingerprint);
+            }}
+          >
+            Resolved
+          </Button>
+        ) : null}
         <Button
           type="button"
           aria-label={`Ignore ${group.errorType ?? group.message}`}
@@ -98,7 +104,7 @@ export function ErrorGroupCard({
           size="xs"
           onClick={(event) => {
             event.stopPropagation();
-            onIgnore(group.id);
+            onIgnore(group.fingerprint);
           }}
         >
           Ignore

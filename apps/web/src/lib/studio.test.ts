@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  formatDuration,
   getAssistantStatusLabel,
   shouldShowProjectContextAdvisory,
   type StudioAssistantStatus,
@@ -57,5 +58,11 @@ describe("studio assistant status helpers", () => {
         reason: "missing_api_key",
       }),
     ).toBe(false);
+  });
+});
+
+describe("formatDuration", () => {
+  it("normalizes rounded minute-second output", () => {
+    expect(formatDuration(119_600)).toBe("2m 0s");
   });
 });

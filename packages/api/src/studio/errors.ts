@@ -123,6 +123,10 @@ export function buildErrorGroupDetail(input: {
   };
 }
 
+export function extractErrorMessageFirstLine(record: StudioNormalizedRecord): string {
+  return firstLine(resolveErrorMessage(record));
+}
+
 function buildErrorGroups(
   occurrences: StudioErrorOccurrence[],
   sort: StudioErrorSort,
@@ -557,7 +561,7 @@ function buildSparklineBuckets(
   for (const time of validTimes) {
     const rawIndex = Math.floor(((time - start) / span) * SPARKLINE_BUCKETS);
     const index = Math.max(0, Math.min(SPARKLINE_BUCKETS - 1, rawIndex));
-    buckets[index] += 1;
+    buckets[index] = (buckets[index] ?? 0) + 1;
   }
 
   return buckets;

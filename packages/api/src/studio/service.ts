@@ -8,6 +8,7 @@ import {
 } from "./assistant";
 import { generateAssistantText, getAssistantStatus } from "./assistant-provider";
 import { analyzeAuthRecords } from "./auth";
+import { buildBackgroundJobRunDetail, buildBackgroundJobsOverview } from "./background-jobs";
 import { analyzeDatabaseRecords } from "./database-section";
 import {
   discoverStudioConfig,
@@ -35,6 +36,9 @@ import type {
   StudioAssistantStatus,
   StudioAuthOverview,
   StudioAuthQueryInput,
+  StudioBackgroundJobRunDetail,
+  StudioBackgroundJobsOverview,
+  StudioBackgroundJobsQueryInput,
   StudioConfigDiscovery,
   StudioDatabaseOverview,
   StudioDatabaseQueryInput,
@@ -330,6 +334,91 @@ export async function getStudioDatabase(
   return analyzeDatabaseRecords(filtered, input);
 }
 
+export async function getStudioBackgroundJobs(
+  input: StudioBackgroundJobsQueryInput,
+): Promise<StudioBackgroundJobsOverview> {
+  const { files, project, config } = await getStudioProjectFiles(input.projectPath);
+  if (!project.valid) {
+    return {
+      stats: {
+        jobsDetected: 0,
+        totalRuns: 0,
+        successRate: 0,
+        failedRuns: 0,
+        mostCommonFailureReason: null,
+        avgDurationMs: null,
+      },
+      runs: [],
+      performance: [],
+      totalRuns: 0,
+      offset: input.offset ?? 0,
+      limit: input.limit ?? 100,
+      truncated: false,
+    };
+  }
+
+  const loaded = await loadProjectRecords(project.absolutePath, config, files, {
+    from: input.from,
+    to: input.to,
+    search: input.search,
+  });
+  const filtered = filterRecords(
+    loaded.records,
+    {
+      fileId: input.fileId,
+      from: input.from,
+      to: input.to,
+      search: input.search,
+      sectionId: "background",
+    },
+    config.resolved.studio.sections,
+  );
+
+  return buildBackgroundJobsOverview({
+    records: filtered,
+    query: input,
+    customSections: config.resolved.studio.sections,
+    truncated: loaded.truncated,
+  });
+}
+
+export async function getStudioBackgroundJobRun(input: {
+  projectPath?: string;
+  runId: string;
+  fileId?: string;
+  from?: string;
+  to?: string;
+  search?: string;
+}): Promise<StudioBackgroundJobRunDetail | null> {
+  const { files, project, config } = await getStudioProjectFiles(input.projectPath);
+  if (!project.valid) {
+    return null;
+  }
+
+  const loaded = await loadProjectRecords(project.absolutePath, config, files, {
+    from: input.from,
+    to: input.to,
+    search: input.search,
+  });
+  const filtered = filterRecords(
+    loaded.records,
+    {
+      fileId: input.fileId,
+      from: input.from,
+      to: input.to,
+      search: input.search,
+      sectionId: "background",
+    },
+    config.resolved.studio.sections,
+  );
+
+  return buildBackgroundJobRunDetail({
+    runId: input.runId,
+    records: filtered,
+    customSections: config.resolved.studio.sections,
+  });
+}
+
 export async function addStudioCustomSection(input: {
   projectPath?: string;
   name: string;
@@ -516,6 +605,7 @@ export async function streamStudioAssistant(input: {
   filters: StudioAssistantReplyInput["filters"];
   selectedRecordId?: string;
   selectedGroupId?: string;
+  selectedBackgroundRunId?: string;
   messages: import("ai").UIMessage[];
   mode?: "chat" | "describe-selection";
   model?: string;
@@ -542,6 +632,7 @@ export async function streamStudioAssistant(input: {
     filters: input.filters,
     selectedRecordId: input.selectedRecordId,
     selectedGroupId: input.selectedGroupId,
+    selectedBackgroundRunId: input.selectedBackgroundRunId,
     messages: input.messages,
     mode: input.mode,
     preloadedRecords,

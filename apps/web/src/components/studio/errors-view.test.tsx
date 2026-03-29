@@ -147,7 +147,7 @@ describe("ErrorsView", () => {
     );
 
     expect(screen.getByText("CheckoutError")).toBeInTheDocument();
-    await user.click(screen.getByRole("combobox", { name: "" }));
+    await user.click(screen.getAllByRole("combobox")[0]!);
     expect(screen.getByText("Grouped errors")).toBeInTheDocument();
   });
 
@@ -177,5 +177,6 @@ describe("ErrorsView", () => {
     );
 
     expect(screen.getByText(/hide resolved/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /resolve checkouterror/i })).not.toBeInTheDocument();
   });
 });

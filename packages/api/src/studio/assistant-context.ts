@@ -1,8 +1,10 @@
+import { buildBackgroundJobRunDetail } from "./background-jobs";
 import { buildGroupDetails } from "./grouping";
 import { filterRecords } from "./query";
 import { resolveRecordSourceContext } from "./source";
 
 import type {
+  StudioBackgroundJobRunDetail,
   StudioAssistantReference,
   StudioLogsQueryInput,
   StudioNormalizedRecord,
@@ -21,6 +23,7 @@ interface BuildAssistantContextInput {
   >;
   selectedRecordId?: string;
   selectedGroupId?: string;
+  selectedBackgroundRunId?: string;
   projectPath: string;
   userQuestion: string;
 }
@@ -29,6 +32,7 @@ export interface StudioAssistantContext {
   selectedRecord: StudioNormalizedRecord | null;
   selectedRecordSource: StudioSourceContext | null;
   selectedGroup: StudioStructuredGroupDetail | null;
+  selectedBackgroundRun: StudioBackgroundJobRunDetail | null;
   evidenceRecords: StudioNormalizedRecord[];
   references: StudioAssistantReference[];
 }
@@ -37,12 +41,22 @@ export async function buildAssistantContext(
   input: BuildAssistantContextInput,
 ): Promise<StudioAssistantContext> {
   const groups = buildGroupDetails(input.allRecords);
+  const recordsById = new Map(
+    input.allRecords.map((record) => [record.id, record] as const),
+  );
   const selectedRecord =
     input.selectedRecordId
       ? input.allRecords.find((record) => record.id === input.selectedRecordId) ?? null
       : null;
   const selectedGroup =
     input.selectedGroupId ? groups.get(input.selectedGroupId) ?? null : null;
+  const selectedBackgroundRun =
+    input.selectedBackgroundRunId
+      ? buildBackgroundJobRunDetail({
+          runId: input.selectedBackgroundRunId,
+          records: input.allRecords,
+        })
+      : null;
   const filteredRecords = filterRecords(input.allRecords, input.filters);
   const scored = new Map<string, { record: StudioNormalizedRecord; score: number }>();
 
@@ -56,6 +70,15 @@ export async function buildAssistantContext(
   if (selectedGroup) {
     for (const record of selectedGroup.records) {
       addRecord(record, 1_000);
+    }
+  }
+
+  if (selectedBackgroundRun) {
+    for (const event of selectedBackgroundRun.timeline) {
+      const matched = recordsById.get(event.recordId);
+      if (matched) {
+        addRecord(matched, 1_050);
+      }
     }
   }
 
@@ -148,6 +171,7 @@ export async function buildAssistantContext(
     evidenceRecords,
     selectedGroup,
     selectedRecord,
+    selectedBackgroundRun,
     allGroups: groups,
   });
   const selectedRecordSource = selectedRecord
@@ -158,6 +182,7 @@ export async function buildAssistantContext(
     selectedRecord,
     selectedRecordSource,
     selectedGroup,
+    selectedBackgroundRun,
     evidenceRecords,
     references,
   };
@@ -167,9 +192,21 @@ function buildReferences(input: {
   evidenceRecords: StudioNormalizedRecord[];
   selectedGroup: StudioStructuredGroupDetail | null;
   selectedRecord: StudioNormalizedRecord | null;
+  selectedBackgroundRun: StudioBackgroundJobRunDetail | null;
   allGroups: Map<string, StudioStructuredGroupDetail>;
 }): StudioAssistantReference[] {
   const references: StudioAssistantReference[] = [];
+
+  if (input.selectedBackgroundRun) {
+    references.push({
+      kind: "background-run",
+      id: input.selectedBackgroundRun.run.id,
+      label: input.selectedBackgroundRun.run.jobName,
+      fileName: null,
+      timestamp: input.selectedBackgroundRun.run.finishedAt ?? input.selectedBackgroundRun.run.startedAt,
+      reason: "selected background run",
+    });
+  }
 
   if (input.selectedGroup) {
     references.push({

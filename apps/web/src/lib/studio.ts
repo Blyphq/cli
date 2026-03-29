@@ -10,11 +10,16 @@ export type StudioFile = StudioFiles["files"][number];
 export type StudioLogsPage = RouterOutputs["studio"]["logs"];
 export type StudioErrorsPage = RouterOutputs["studio"]["errors"];
 export type StudioAuthOverview = RouterOutputs["studio"]["auth"];
+export type StudioBackgroundJobsOverview = RouterOutputs["studio"]["backgroundJobs"];
+export type StudioBackgroundJobRunDetail = NonNullable<RouterOutputs["studio"]["backgroundJobRun"]>;
 export type StudioDatabaseOverview = RouterOutputs["studio"]["database"];
 export type StudioOverview = RouterOutputs["studio"]["overview"];
 export type StudioAuthEvent = StudioAuthOverview["timeline"][number];
 export type StudioAuthSuspiciousPattern = StudioAuthOverview["suspiciousPatterns"][number];
 export type StudioAuthUserSummary = StudioAuthOverview["users"][number];
+export type StudioBackgroundJobRun = StudioBackgroundJobsOverview["runs"][number];
+export type StudioBackgroundJobPerformanceRow = StudioBackgroundJobsOverview["performance"][number];
+export type StudioBackgroundJobTimelineEvent = StudioBackgroundJobRunDetail["timeline"][number];
 export type StudioDatabaseQueryEvent = StudioDatabaseOverview["queries"][number];
 export type StudioDatabaseTransactionSummary = StudioDatabaseOverview["transactions"][number];
 export type StudioDatabaseMigrationEvent = StudioDatabaseOverview["migrationEvents"][number];
@@ -57,6 +62,7 @@ export type StudioChatMessage = UIMessage<StudioAssistantMessageMetadata>;
 export type StudioSelection =
   | { kind: "record"; id: string }
   | { kind: "group"; id: string }
+  | { kind: "background-run"; id: string }
   | { kind: "error-group"; id: string }
   | { kind: "error-occurrence"; id: string }
   | null;
@@ -189,6 +195,29 @@ export function formatDurationMs(value: number | null | undefined): string {
   return value >= 1000 ? `${(value / 1000).toFixed(2)}s` : `${Math.round(value)}ms`;
 }
 
+export function formatDuration(value: number | null | undefined): string {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return "Unknown";
+  }
+
+  if (value < 1_000) {
+    return `${Math.round(value)} ms`;
+  }
+
+  if (value < 60_000) {
+    return `${(value / 1_000).toFixed(1)} s`;
+  }
+
+  const totalSeconds = Math.round(value / 1_000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}m ${seconds}s`;
+}
+
+export function formatPercent(value: number): string {
+  return `${Math.round(value * 100)}%`;
+}
+
 export function formatCalendarDate(value: Date | null | undefined): string {
   if (!value) {
     return "Pick a date";
@@ -319,6 +348,35 @@ export function getDurationClasses(value: number | null | undefined): string {
   }
 
   return "text-foreground";
+}
+
+export function getBackgroundJobStatusBadgeVariant(
+  status: StudioBackgroundJobRun["status"],
+): StudioBadgeVariant {
+  switch (status) {
+    case "COMPLETED":
+      return "default";
+    case "FAILED":
+    case "TIMEOUT":
+      return "destructive";
+    default:
+      return "secondary";
+  }
+}
+
+export function getBackgroundJobTrendLabel(
+  trend: StudioBackgroundJobPerformanceRow["trend"],
+): string {
+  switch (trend) {
+    case "slower":
+      return "Slower";
+    case "faster":
+      return "Faster";
+    case "stable":
+      return "Stable";
+    default:
+      return "Insufficient data";
+  }
 }
 
 export function getAssistantStatusLabel(status: StudioAssistantStatus): string {
@@ -528,29 +586,12 @@ export function isDatabaseSection(section: StudioSectionId): boolean {
   return section === "database";
 }
 
-export function isErrorsSection(section: StudioSectionId): boolean {
-  return section === "errors";
+export function isBackgroundSection(section: StudioSectionId): boolean {
+  return section === "background";
 }
 
-export function formatDuration(value: number): string {
-  if (!Number.isFinite(value) || value < 0) {
-    return "0s";
-  }
-
-  const totalSeconds = Math.floor(value / 1000);
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-
-  if (hours > 0) {
-    return `${hours}h ${minutes}m`;
-  }
-
-  if (minutes > 0) {
-    return `${minutes}m ${seconds}s`;
-  }
-
-  return `${seconds}s`;
+export function isErrorsSection(section: StudioSectionId): boolean {
+  return section === "errors";
 }
 
 export function formatOverviewMetricValue(
@@ -594,7 +635,6 @@ export function getOverviewStatusClasses(status: StudioOverviewStatus): string {
       return "border-primary/30 bg-primary/8 text-primary";
   }
 }
-
 export function formatRelativeToSessionStart(
   value: string | null | undefined,
   sessionStart: string | null | undefined,

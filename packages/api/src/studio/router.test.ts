@@ -283,6 +283,73 @@ describe("studio router", () => {
       status: "slow",
     });
   });
+
+  it("serves background job routes and accepts background-run assistant selections", async () => {
+    const projectDir = await createProject();
+    const logDir = path.join(projectDir, "logs");
+
+    await mkdir(logDir, { recursive: true });
+    await writeFile(
+      path.join(logDir, "log.ndjson"),
+      [
+        JSON.stringify({
+          timestamp: "2026-03-13T14:00:00.000Z",
+          level: "info",
+          message: "queue rebuild job started",
+          queue: { name: "Queue Rebuild", runId: "rebuild-1", status: "started" },
+        }),
+        JSON.stringify({
+          timestamp: "2026-03-13T14:00:15.000Z",
+          level: "error",
+          message: "queue rebuild job failed",
+          queue: {
+            name: "Queue Rebuild",
+            runId: "rebuild-1",
+            step: "publish",
+            status: "failed",
+          },
+          error: { message: "publish rejected" },
+        }),
+      ].join("\n") + "\n",
+    );
+
+    process.env.OPENROUTER_API_KEY = "test-key";
+    process.env.OPENROUTER_MODEL = "openai/gpt-5.4";
+    __setGenerateTextForTests(async () => ({ text: "Use the failed run timeline." }));
+
+    const caller = appRouter.createCaller({ session: null });
+    const overview = await caller.studio.backgroundJobs({
+      projectPath: projectDir,
+      limit: 10,
+    });
+    const detail = await caller.studio.backgroundJobRun({
+      projectPath: projectDir,
+      runId: overview.runs[0]?.id ?? "",
+    });
+    const description = await caller.studio.describeSelection({
+      projectPath: projectDir,
+      history: [],
+      filters: {},
+      selectedBackgroundRunId: overview.runs[0]?.id,
+    });
+
+    expect(overview.runs[0]).toMatchObject({
+      jobName: "Queue Rebuild",
+      status: "FAILED",
+    });
+    expect(detail?.run.failure).toMatchObject({
+      message: "publish rejected",
+      step: "publish",
+    });
+    expect(description.references).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "background-run",
+          label: "Queue Rebuild",
+        }),
+      ]),
+    );
+  });
 });
 
 async function createProject(): Promise<string> {

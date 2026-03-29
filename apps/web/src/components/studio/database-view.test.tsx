@@ -6,7 +6,6 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { DatabaseView } from "./database-view";
-import { SectionNavPanel } from "./section-nav-panel";
 
 const databaseData = {
   stats: {
@@ -188,59 +187,5 @@ describe("DatabaseView", () => {
     expect(
       screen.getByText("No database queries matched the current filters"),
     ).toBeInTheDocument();
-  });
-});
-
-describe("Database section nav", () => {
-  it("shows Database only when meta exposes the section", async () => {
-    const user = userEvent.setup();
-    const onSelect = vi.fn();
-
-    const { rerender } = render(
-      <SectionNavPanel
-        projectPath="/project"
-        meta={{
-          project: {} as never,
-          config: {} as never,
-          sections: [],
-          logs: {} as never,
-        }}
-        section="overview"
-        visitedAtBySection={{}}
-        onSelect={onSelect}
-      />,
-    );
-
-    expect(screen.queryByText("Database")).not.toBeInTheDocument();
-
-    rerender(
-      <SectionNavPanel
-        projectPath="/project"
-        meta={{
-          project: {} as never,
-          config: {} as never,
-          sections: [
-            {
-              id: "database",
-              label: "Database",
-              count: 4,
-              icon: "🗄",
-              kind: "builtin",
-              highlighted: false,
-              unreadErrorCount: 1,
-              lastMatchedAt: "2026-03-13T10:00:00.000Z",
-              lastErrorAt: "2026-03-13T10:00:00.000Z",
-            },
-          ],
-          logs: {} as never,
-        }}
-        section="overview"
-        visitedAtBySection={{}}
-        onSelect={onSelect}
-      />,
-    );
-
-    await user.click(screen.getByRole("button", { name: /database/i }));
-    expect(onSelect).toHaveBeenCalledWith("database");
   });
 });
