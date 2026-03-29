@@ -123,6 +123,18 @@ export function useStudioData({
     refetchInterval: 1000,
   });
 
+  const overviewQuery = useQuery({
+    ...trpc.studio.overview.queryOptions({
+      projectPath,
+      fileId: filters.fileId || undefined,
+      from: filters.from || undefined,
+      to: filters.to || undefined,
+      search: deferredSearch || undefined,
+    }),
+    enabled: metaQuery.isSuccess && metaQuery.data.project.valid && isOverviewSection(section),
+    refetchInterval: 1000,
+  });
+
   const authQuery = useQuery({
     ...trpc.studio.auth.queryOptions({
       projectPath,
@@ -257,6 +269,7 @@ export function useStudioData({
     filesQuery.isError ||
     logsQuery.isError ||
     errorsQuery.isError ||
+    overviewQuery.isError ||
     authQuery.isError ||
     backgroundJobsQuery.isError ||
     backgroundJobRunQuery.isError ||
@@ -278,6 +291,7 @@ export function useStudioData({
     facetsQuery,
     logsQuery,
     errorsQuery,
+    overviewQuery,
     authQuery,
     backgroundJobsQuery,
     backgroundJobRunQuery,

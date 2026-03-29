@@ -20,6 +20,7 @@ import {
   getStudioGroup,
   getStudioLogs,
   getStudioMeta,
+  getStudioOverview,
   getStudioRecord,
   getStudioRecordSource,
   replyWithStudioAssistant,
@@ -86,6 +87,14 @@ const studioBackgroundJobsInput = z.object({
   limit: z.number().int().positive().max(500).optional(),
 });
 
+const studioOverviewInput = z.object({
+  projectPath: z.string().optional(),
+  fileId: z.string().optional(),
+  from: z.string().optional(),
+  to: z.string().optional(),
+  search: z.string().optional(),
+});
+
 const assistantInput = z.object({
   projectPath: z.string().optional(),
   history: z.array(
@@ -123,6 +132,9 @@ export const studioRouter = router({
   errors: publicProcedure
     .input(studioErrorsInput.optional())
     .query(({ input }) => getStudioErrors(input ?? {})),
+  overview: publicProcedure
+    .input(studioOverviewInput.optional())
+    .query(({ input }) => getStudioOverview(input ?? {})),
   auth: publicProcedure
     .input(studioAuthInput.optional())
     .query(({ input }) => getStudioAuth(input ?? {})),

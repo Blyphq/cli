@@ -347,6 +347,10 @@ export function isErrorRecord(record: StudioNormalizedRecord): boolean {
   );
 }
 
+export function matchesErrorSignal(record: StudioNormalizedRecord): boolean {
+  return isErrorRecord(record);
+}
+
 function getString(record: StudioNormalizedRecord, keys: string[]): string | null {
   for (const key of keys) {
     const value = getValue(record, key);

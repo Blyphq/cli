@@ -23,6 +23,7 @@ import { buildErrorGroupDetail, buildErrorsPage } from "./errors";
 import { getLogFacets } from "./facets";
 import { buildGroupDetails } from "./grouping";
 import { discoverLogFiles } from "./logs";
+import { buildStudioOverview } from "./overview";
 import { loadProjectClaudeMd } from "./project-context";
 import { resolveStudioProject } from "./project";
 import { filterRecords, loadNormalizedRecords, queryLogs } from "./query";
@@ -51,6 +52,8 @@ import type {
   StudioLogsQueryInput,
   StudioMeta,
   StudioNormalizedRecord,
+  StudioOverview,
+  StudioOverviewQueryInput,
   StudioSourceContext,
   StudioStructuredGroupDetail,
 } from "./types";
@@ -206,6 +209,49 @@ export async function getStudioSections(projectPath?: string): Promise<StudioDet
 
   const loaded = await loadProjectRecords(project.absolutePath, config, files);
   return buildDetectedSections(loaded.records, config.resolved.studio.sections);
+}
+
+export async function getStudioOverview(
+  input: StudioOverviewQueryInput,
+): Promise<StudioOverview> {
+  const { files, project, config } = await getStudioProjectFiles(input.projectPath);
+  const candidateFiles = input.fileId
+    ? files.files.filter((file) => file.id === input.fileId)
+    : files.files;
+
+  const loaded =
+    files.mode === "database"
+      ? await loadDatabaseRecords({
+          projectPath: project.absolutePath,
+          config,
+          input,
+        })
+      : await loadProjectRecords(
+          project.absolutePath,
+          config,
+          { ...files, files: candidateFiles },
+          input,
+        );
+
+  const filtered = filterRecords(
+    loaded.records,
+    {
+      fileId: input.fileId,
+      from: input.from,
+      to: input.to,
+      search: input.search,
+    },
+    config.resolved.studio.sections,
+  );
+  const sections = buildDetectedSections(filtered, config.resolved.studio.sections);
+
+  return buildStudioOverview({
+    records: filtered,
+    projectPath: project.absolutePath,
+    generatedAt: new Date().toISOString(),
+    sections,
+    customSections: config.resolved.studio.sections,
+  });
 }
 
 export async function getStudioAuth(input: StudioAuthQueryInput): Promise<StudioAuthOverview> {
