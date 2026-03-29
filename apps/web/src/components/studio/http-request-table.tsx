@@ -75,7 +75,7 @@ export function HttpRequestTable({
                   role="button"
                   aria-label={`${row.method} ${row.route}`}
                   onClick={() => onSelectRecord(row.recordId)}
-                  onKeyDown={(event) => handleKeyDown(event, row.recordId, onSelectRecord)}
+                  onKeyDown={(event) => handleRowKeyDown(event, row.recordId, onSelectRecord)}
                   className={cn(
                     "cursor-pointer border-b border-border/60 outline-none hover:bg-muted/30 focus-visible:bg-muted/40",
                     selectedRecordId === row.recordId && "bg-primary/10",
@@ -109,6 +109,10 @@ export function HttpRequestTable({
               aria-label={`${row.method} ${row.route}`}
               onClick={() => onSelectRecord(row.recordId)}
               onKeyDown={(event) => {
+                if (event.target !== event.currentTarget) {
+                  return;
+                }
+
                 if (event.key === "Enter" || event.key === " ") {
                   event.preventDefault();
                   onSelectRecord(row.recordId);
@@ -196,11 +200,15 @@ function TraceCell({
   return <span className="text-xs text-muted-foreground">n/a</span>;
 }
 
-function handleKeyDown(
+function handleRowKeyDown(
   event: KeyboardEvent<HTMLTableRowElement>,
   recordId: string,
   onSelectRecord: (recordId: string) => void,
 ) {
+  if (event.target !== event.currentTarget) {
+    return;
+  }
+
   if (event.key === "Enter" || event.key === " ") {
     event.preventDefault();
     onSelectRecord(recordId);

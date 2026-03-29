@@ -4,7 +4,6 @@ import type { StudioHttpDetails, StudioLogFile, StudioNormalizedRecord, StudioRe
 
 const SENSITIVE_HTTP_KEY_PATTERN =
   /(authorization|cookie|set-cookie|password|passcode|secret|access[_-]?token|refresh[_-]?token|api[_-]?key|session|^token$|\.token$|_token$)/i;
-const REDACTED_VALUE_PATTERN = /(\*{2,}|\[redacted\]|redacted|masked)/i;
 
 interface NormalizeRecordOptions {
   file: StudioLogFile;
@@ -525,7 +524,7 @@ function sanitizeSensitiveValue(value: unknown): unknown {
   }
 
   if (typeof value === "string") {
-    return REDACTED_VALUE_PATTERN.test(value) ? value : value;
+    return value;
   }
 
   if (Array.isArray(value)) {

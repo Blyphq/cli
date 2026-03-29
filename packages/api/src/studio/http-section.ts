@@ -87,7 +87,7 @@ function classifyHttpRecord(
   const statusCode = getStatusCode(record);
   const durationMs = getDurationMs(record);
 
-  if (!method || !rawPath || statusCode === null || durationMs === null) {
+  if (!method || !rawPath || statusCode === null) {
     return null;
   }
 
@@ -566,6 +566,12 @@ function compareHttpCandidatesDescending(left: HttpCandidate, right: HttpCandida
 
   if (Number.isFinite(leftTime) && Number.isFinite(rightTime) && leftTime !== rightTime) {
     return rightTime - leftTime;
+  }
+  if (Number.isFinite(leftTime)) {
+    return -1;
+  }
+  if (Number.isFinite(rightTime)) {
+    return 1;
   }
 
   return right.record.id.localeCompare(left.record.id);
