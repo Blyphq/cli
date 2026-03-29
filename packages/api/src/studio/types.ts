@@ -567,3 +567,76 @@ export interface StudioMeta {
     archiveFileCount: number;
   };
 }
+
+export type StudioOverviewStatus = "healthy" | "warning" | "critical";
+export type StudioOverviewTrend = "up" | "down" | "flat";
+
+export interface StudioOverviewStat<T> {
+  value: T;
+  label: string;
+  status: StudioOverviewStatus;
+  helperText: string;
+}
+
+export interface StudioOverviewTrendStat<T> extends StudioOverviewStat<T> {
+  trend: StudioOverviewTrend;
+  deltaPercent: number | null;
+  comparisonWindowLabel: string;
+}
+
+export interface StudioOverviewFeedField {
+  key: string;
+  value: string;
+}
+
+export interface StudioOverviewTarget {
+  sectionId: StudioSectionId | "all-logs";
+  selection:
+    | { kind: "record"; id: string }
+    | { kind: "group"; id: string };
+}
+
+export interface StudioOverviewFeedItem {
+  recordId: string;
+  timestamp: string | null;
+  level: string;
+  message: string;
+  summaryFields: StudioOverviewFeedField[];
+  target: StudioOverviewTarget | null;
+}
+
+export interface StudioOverviewSectionCard {
+  id: StudioSectionId;
+  label: string;
+  icon: string;
+  eventCount: number;
+  errorCount: number;
+  lastEventAt: string | null;
+  status: StudioOverviewStatus;
+}
+
+export interface StudioOverviewRecentErrorItem {
+  groupId: string;
+  recordId: string;
+  message: string;
+  timestamp: string | null;
+  sourceFile: string | null;
+  sourceLine: number | null;
+  traceReference: StudioErrorTraceReference | null;
+}
+
+export interface StudioOverview {
+  connectedAt: string;
+  generatedAt: string;
+  stats: {
+    totalEvents: StudioOverviewStat<number>;
+    errorRate: StudioOverviewTrendStat<number>;
+    activeTraces: StudioOverviewStat<number>;
+    warnings: StudioOverviewStat<number>;
+    avgResponseTime: StudioOverviewStat<number | null>;
+    uptime: StudioOverviewStat<number>;
+  };
+  liveFeed: StudioOverviewFeedItem[];
+  sections: StudioOverviewSectionCard[];
+  recentErrors: StudioOverviewRecentErrorItem[];
+}

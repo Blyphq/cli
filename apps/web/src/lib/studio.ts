@@ -10,6 +10,11 @@ export type StudioFile = StudioFiles["files"][number];
 export type StudioLogsPage = RouterOutputs["studio"]["logs"];
 export type StudioErrorsPage = RouterOutputs["studio"]["errors"];
 export type StudioAuthOverview = RouterOutputs["studio"]["auth"];
+export type StudioOverview = RouterOutputs["studio"]["overview"];
+export type StudioOverviewFeedItem = StudioOverview["liveFeed"][number];
+export type StudioOverviewTarget = StudioOverviewFeedItem["target"];
+export type StudioOverviewSectionCard = StudioOverview["sections"][number];
+export type StudioOverviewRecentErrorItem = StudioOverview["recentErrors"][number];
 export type StudioAuthEvent = StudioAuthOverview["timeline"][number];
 export type StudioAuthSuspiciousPattern = StudioAuthOverview["suspiciousPatterns"][number];
 export type StudioAuthUserSummary = StudioAuthOverview["users"][number];
@@ -37,6 +42,8 @@ export type StudioBadgeVariant =
   | "muted"
   | "outline"
   | "destructive";
+export type StudioOverviewStatus = StudioOverview["stats"]["totalEvents"]["status"];
+export type StudioOverviewTrend = StudioOverview["stats"]["errorRate"]["trend"];
 
 export interface StudioAssistantMessageMetadata {
   references?: StudioAssistantReference[];
@@ -109,6 +116,43 @@ export function formatCompactDateTime(value: string | null | undefined): string 
     hour: "numeric",
     minute: "2-digit",
   }).format(parsed);
+}
+
+export function formatRelativeTime(value: string | null | undefined, now = Date.now()): string {
+  if (!value) {
+    return "Unknown";
+  }
+
+  const parsed = new Date(value);
+  const timestamp = parsed.getTime();
+  if (Number.isNaN(timestamp)) {
+    return value;
+  }
+
+  const diffMs = now - timestamp;
+  const tense = diffMs >= 0 ? "ago" : "from now";
+  const absoluteMs = Math.abs(diffMs);
+  const seconds = Math.round(absoluteMs / 1000);
+
+  if (seconds < 5) {
+    return "just now";
+  }
+  if (seconds < 60) {
+    return `${seconds}s ${tense}`;
+  }
+
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) {
+    return `${minutes}m ${tense}`;
+  }
+
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) {
+    return `${hours}h ${tense}`;
+  }
+
+  const days = Math.round(hours / 24);
+  return `${days}d ${tense}`;
 }
 
 export function formatRotation(maxSizeBytes: number, maxArchives: number): string {
@@ -192,6 +236,66 @@ export function getLevelClasses(level: string): string {
     default:
       return "border-border bg-muted text-muted-foreground";
   }
+}
+
+export function getOverviewStatusClasses(status: StudioOverviewStatus): string {
+  switch (status) {
+    case "critical":
+      return "border-destructive/30 bg-destructive/10 text-destructive";
+    case "warning":
+      return "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300";
+    case "healthy":
+      return "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300";
+  }
+}
+
+export function formatOverviewMetricValue(
+  label: string,
+  value: number | null,
+): string {
+  if (value === null) {
+    return "n/a";
+  }
+
+  switch (label) {
+    case "Error rate":
+      return `${value.toFixed(1)}%`;
+    case "Avg response time":
+      return `${Math.round(value)}ms`;
+    case "Uptime":
+      return formatDuration(value);
+    default:
+      return Intl.NumberFormat().format(Math.round(value));
+  }
+}
+
+export function formatDuration(durationMs: number): string {
+  const totalSeconds = Math.max(0, Math.floor(durationMs / 1000));
+  const days = Math.floor(totalSeconds / 86_400);
+  const hours = Math.floor((totalSeconds % 86_400) / 3_600);
+  const minutes = Math.floor((totalSeconds % 3_600) / 60);
+  const seconds = totalSeconds % 60;
+
+  if (days > 0) {
+    return `${days}d ${hours}h`;
+  }
+  if (hours > 0) {
+    return `${hours}h ${minutes}m`;
+  }
+  if (minutes > 0) {
+    return `${minutes}m ${seconds}s`;
+  }
+  return `${seconds}s`;
+}
+
+export function formatOverviewTrend(
+  trend: StudioOverviewTrend,
+  deltaPercent: number | null,
+): string {
+  if (trend === "flat" || deltaPercent === null) {
+    return "No change";
+  }
+  return `${Math.abs(deltaPercent).toFixed(1)}% ${trend === "up" ? "up" : "down"}`;
 }
 
 export function getStatusClasses(

@@ -35,6 +35,7 @@ export interface StudioPageProps {
 
 export function StudioPage({ navigate, search }: StudioPageProps) {
   const projectPath = search.project ?? "";
+  const [overviewConnectedAt, setOverviewConnectedAt] = useState(() => new Date().toISOString());
   const [errorView, setErrorView] = useState<"grouped" | "raw">("grouped");
   const [errorSort, setErrorSort] = useState<"most-recent" | "most-frequent" | "first-seen">("most-recent");
   const [errorType, setErrorType] = useState("");
@@ -109,6 +110,7 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
     setErrorType("");
     setErrorSourceFile("");
     setErrorTag("");
+    setOverviewConnectedAt(new Date().toISOString());
   }, [projectPath]);
 
   useEffect(() => {
@@ -258,6 +260,45 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
     );
   };
 
+  const handleOpenOverviewTarget = (
+    target: NonNullable<NonNullable<typeof studioData.overviewQuery.data>["liveFeed"][number]["target"]> | null,
+  ) => {
+    if (!target) {
+      return;
+    }
+    setSection(target.sectionId);
+    setSelection(target.selection);
+  };
+
+  const handleViewOverviewTrace = (
+    item: NonNullable<typeof studioData.overviewQuery.data>["recentErrors"][number],
+  ) => {
+    if (item.traceReference) {
+      setSection(item.traceReference.sectionId);
+      setSelection(
+        item.traceReference.kind === "group"
+          ? { kind: "group", id: item.traceReference.id }
+          : { kind: "record", id: item.traceReference.id },
+      );
+      return;
+    }
+
+    setSection("errors");
+    setSelectedErrorGroupId(item.groupId);
+  };
+
+  const handleAskAiForOverviewError = (
+    item: NonNullable<typeof studioData.overviewQuery.data>["recentErrors"][number],
+  ) => {
+    setSelection({ kind: "record", id: item.recordId });
+    const sourceText = item.sourceFile
+      ? ` Source: ${item.sourceFile}:${item.sourceLine ?? "?"}.`
+      : "";
+    assistant.createSelectionChatAndSubmit(
+      `Diagnose this Studio error and propose a concrete fix.${sourceText} Message: ${item.message}. The selected Studio context includes the relevant event and surrounding log context.`,
+    );
+  };
+
   return (
     <>
       <StudioShell
@@ -325,6 +366,7 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
               title="Studio backend failed"
               description={
                 metaQuery.error?.message ??
+                studioData.overviewQuery.error?.message ??
                 configQuery.error?.message ??
                 filesQuery.error?.message ??
                 logsQuery.error?.message ??
@@ -346,8 +388,12 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
             />
           ) : isOverviewSection(section) ? (
             <OverviewView
-              sections={metaQuery.data?.sections ?? []}
+              overview={studioData.overviewQuery.data}
+              connectedAt={overviewConnectedAt}
               onSelect={setSection}
+              onSelectFeedTarget={handleOpenOverviewTarget}
+              onViewTrace={handleViewOverviewTrace}
+              onAskAiForError={handleAskAiForOverviewError}
             />
           ) : section === "auth" ? (
             <AuthView
@@ -430,7 +476,7 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
           )
         }
         detail={
-          section === "errors" && errorView === "grouped" ? (
+          isOverviewSection(section) ? null : section === "errors" && errorView === "grouped" ? (
             <ErrorDetailPanel
               detail={studioData.errorGroupQuery.data ?? null}
               loading={studioData.errorGroupQuery.isLoading}

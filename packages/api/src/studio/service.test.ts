@@ -28,6 +28,7 @@ import {
   getStudioGroup,
   getStudioLogs,
   getStudioMeta,
+  getStudioOverview,
   getStudioRecordSource,
   replyWithStudioAssistant,
   streamStudioAssistant,
@@ -135,6 +136,112 @@ describe("studio log discovery and queries", () => {
       "log.20260309T101530Z.ndjson.gz",
     ]);
     expect(files.files[1]?.kind).toBe("archive");
+  });
+
+  it("builds overview stats, sections, feed, and recent errors", async () => {
+    const projectDir = await createProject();
+    const logDir = path.join(projectDir, "logs");
+
+    await mkdir(logDir, { recursive: true });
+    await writeFile(
+      path.join(logDir, "log.ndjson"),
+      [
+        createLogLine({
+          timestamp: "2026-03-13T11:30:00.000Z",
+          level: "info",
+          message: "checkout started",
+          type: "checkout_flow",
+          path: "/checkout",
+          responseTime: 240,
+          traceId: "trace-1",
+        }),
+        createLogLine({
+          timestamp: "2026-03-13T11:40:00.000Z",
+          level: "warn",
+          message: "checkout slow",
+          type: "checkout_flow",
+          path: "/checkout",
+          responseTime: 612,
+          traceId: "trace-2",
+        }),
+        createLogLine({
+          timestamp: "2026-03-13T11:55:00.000Z",
+          level: "error",
+          message: "checkout failed",
+          type: "TypeError",
+          path: "/checkout",
+          method: "POST",
+          statusCode: 500,
+          responseTime: 900,
+          traceId: "trace-1",
+          error: { message: "checkout failed" },
+        }),
+      ].join(""),
+    );
+
+    const overview = await getStudioOverview({ projectPath: projectDir });
+
+    expect(overview.stats.totalEvents.value).toBe(3);
+    expect(overview.stats.errorRate.status).toBe("critical");
+    expect(overview.stats.warnings.value).toBeGreaterThanOrEqual(0);
+    expect(overview.stats.avgResponseTime.value).toBe(612);
+    expect(overview.liveFeed).toHaveLength(3);
+    expect(overview.sections.some((section) => section.id === "payments")).toBe(true);
+    expect(overview.recentErrors[0]?.message).toBe("checkout failed");
+  });
+
+  it("uses pino-style time/msg fields and parses HTTP timing from message fallback", async () => {
+    const projectDir = await createProject();
+    const logDir = path.join(projectDir, "logs");
+
+    await mkdir(logDir, { recursive: true });
+    await writeFile(
+      path.join(logDir, "log.ndjson"),
+      [
+        JSON.stringify({
+          level: 30,
+          time: 1774818753547,
+          pid: 153934,
+          hostname: "pop-os",
+          caller: "src/index.ts:8",
+          msg: "Elysia running at localhost:3006",
+        }),
+        JSON.stringify({
+          level: 30,
+          time: 1774818761044,
+          pid: 153934,
+          hostname: "pop-os",
+          msg: "GET → 200 /test/logs/info 7ms",
+        }),
+      ].join("\n") + "\n",
+    );
+
+    const logs = await getStudioLogs({
+      projectPath: projectDir,
+      limit: 50,
+    });
+
+    expect(logs.records[0]?.message).toBe("GET → 200 /test/logs/info 7ms");
+    expect(logs.records[0]?.timestamp).toBe("2026-03-28T16:19:21.044Z");
+    expect(logs.records[0]?.http?.method).toBe("GET");
+    expect(logs.records[0]?.http?.durationMs).toBe(7);
+
+    const overview = await getStudioOverview({ projectPath: projectDir });
+    expect(overview.stats.avgResponseTime.value).toBe(7);
+    expect(overview.stats.avgResponseTime.helperText).not.toContain("No HTTP timing data");
+  });
+
+  it("returns stable empty overview payloads when no events match", async () => {
+    const projectDir = await createProject();
+    await mkdir(path.join(projectDir, "logs"), { recursive: true });
+    await writeFile(path.join(projectDir, "logs", "log.ndjson"), "");
+
+    const overview = await getStudioOverview({ projectPath: projectDir, search: "missing" });
+
+    expect(overview.stats.totalEvents.value).toBe(0);
+    expect(overview.liveFeed).toEqual([]);
+    expect(overview.sections).toEqual([]);
+    expect(overview.recentErrors).toEqual([]);
   });
 
   it("reads ndjson and gz, keeps malformed lines, and filters server-side", async () => {

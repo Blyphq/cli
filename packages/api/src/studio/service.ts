@@ -21,6 +21,7 @@ import { buildErrorGroupDetail, buildErrorsPage } from "./errors";
 import { getLogFacets } from "./facets";
 import { buildGroupDetails } from "./grouping";
 import { discoverLogFiles } from "./logs";
+import { buildStudioOverview } from "./overview";
 import { loadProjectClaudeMd } from "./project-context";
 import { resolveStudioProject } from "./project";
 import { filterRecords, loadNormalizedRecords, queryLogs } from "./query";
@@ -44,6 +45,7 @@ import type {
   StudioLogsQueryInput,
   StudioMeta,
   StudioNormalizedRecord,
+  StudioOverview,
   StudioSourceContext,
   StudioStructuredGroupDetail,
 } from "./types";
@@ -170,6 +172,52 @@ export async function getStudioSections(projectPath?: string): Promise<StudioDet
 
   const loaded = await loadProjectRecords(project.absolutePath, config, files);
   return buildDetectedSections(loaded.records, config.resolved.studio.sections);
+}
+
+export async function getStudioOverview(input: {
+  projectPath?: string;
+  fileId?: string;
+  from?: string;
+  to?: string;
+  search?: string;
+}): Promise<StudioOverview> {
+  const { files, project, config } = await getStudioProjectFiles(input.projectPath);
+  const generatedAt = new Date().toISOString();
+  if (!project.valid) {
+    return buildStudioOverview({
+      records: [],
+      projectPath: project.absolutePath,
+      generatedAt,
+      sections: [],
+      customSections: config.resolved.studio.sections,
+    });
+  }
+
+  const loaded = await loadProjectRecords(project.absolutePath, config, files, {
+    fileId: input.fileId,
+    from: input.from,
+    to: input.to,
+    search: input.search,
+  });
+  const filtered = filterRecords(
+    loaded.records,
+    {
+      fileId: input.fileId,
+      from: input.from,
+      to: input.to,
+      search: input.search,
+    },
+    config.resolved.studio.sections,
+  );
+  const sections = buildDetectedSections(filtered, config.resolved.studio.sections);
+
+  return buildStudioOverview({
+    records: filtered,
+    projectPath: project.absolutePath,
+    generatedAt,
+    sections,
+    customSections: config.resolved.studio.sections,
+  });
 }
 
 export async function getStudioAuth(input: StudioAuthQueryInput): Promise<StudioAuthOverview> {

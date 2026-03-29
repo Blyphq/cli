@@ -65,6 +65,18 @@ export function useStudioData({
     enabled: metaQuery.isSuccess && metaQuery.data.project.valid,
   });
 
+  const overviewQuery = useQuery({
+    ...trpc.studio.overview.queryOptions({
+      projectPath,
+      fileId: filters.fileId || undefined,
+      from: filters.from || undefined,
+      to: filters.to || undefined,
+      search: deferredSearch || undefined,
+    }),
+    enabled: metaQuery.isSuccess && metaQuery.data.project.valid && isOverviewSection(section),
+    refetchInterval: 1000,
+  });
+
   const filesQuery = useQuery({
     ...trpc.studio.files.queryOptions({ projectPath }),
     enabled: metaQuery.isSuccess && metaQuery.data.project.valid,
@@ -202,6 +214,7 @@ export function useStudioData({
     metaQuery.data?.project.error ??
     "Studio could not inspect the requested path.";
   const hasLogsError =
+    overviewQuery.isError ||
     filesQuery.isError ||
     logsQuery.isError ||
     authQuery.isError ||
@@ -216,6 +229,7 @@ export function useStudioData({
 
   return {
     metaQuery,
+    overviewQuery,
     configQuery,
     filesQuery,
     facetsQuery,
