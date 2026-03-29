@@ -2,6 +2,9 @@ import { useEffect, useState } from "react";
 
 import type {
   StudioAuthUiState,
+  StudioErrorGroup,
+  StudioErrorOccurrence,
+  StudioErrorUiState,
   StudioFilters,
   StudioGroupingMode,
   StudioLogEntry,
@@ -20,6 +23,16 @@ export const DEFAULT_FILTERS: StudioFilters = {
   to: "",
 };
 
+export const DEFAULT_ERROR_UI: StudioErrorUiState = {
+  view: "grouped",
+  sort: "most-recent",
+  type: "",
+  sourceFile: "",
+  sectionTag: "",
+  showResolved: false,
+  showIgnored: false,
+};
+
 export function useStudioFiltersAndSelection(initialProjectPath: string) {
   const [filters, setFilters] = useState<StudioFilters>(DEFAULT_FILTERS);
   const [selection, setSelection] = useState<StudioSelection>(null);
@@ -31,6 +44,7 @@ export function useStudioFiltersAndSelection(initialProjectPath: string) {
     selectedUserId: null,
     selectedPatternId: null,
   });
+  const [errorUi, setErrorUi] = useState<StudioErrorUiState>(DEFAULT_ERROR_UI);
   const [draftProjectPath, setDraftProjectPath] = useState(initialProjectPath);
 
   useEffect(() => {
@@ -39,6 +53,7 @@ export function useStudioFiltersAndSelection(initialProjectPath: string) {
     setSectionState(persisted.selectedSection);
     setVisitedAtBySection(persisted.visitedAtBySection);
     setAuthUi({ selectedUserId: null, selectedPatternId: null });
+    setErrorUi(DEFAULT_ERROR_UI);
   }, [initialProjectPath]);
 
   const setSection = (next: StudioSectionId) => {
@@ -70,6 +85,8 @@ export function useStudioFiltersAndSelection(initialProjectPath: string) {
     visitedAtBySection,
     authUi,
     setAuthUi,
+    errorUi,
+    setErrorUi,
     draftProjectPath,
     setDraftProjectPath,
   };
@@ -160,4 +177,52 @@ export function useSyncSelectionFromEntries(
       );
     }
   }, [enabled, entries, selection, setSelection]);
+}
+
+export function useSyncErrorSelectionFromEntries(
+  entries: Array<StudioErrorGroup | StudioErrorOccurrence>,
+  selection: StudioSelection,
+  setSelection: (s: StudioSelection) => void,
+  groupedView: boolean,
+  enabled = true,
+) {
+  useEffect(() => {
+    if (!enabled) {
+      return;
+    }
+
+    if (!entries.length) {
+      setSelection(null);
+      return;
+    }
+
+    const hasMatchingSelection = entries.some((entry) =>
+      groupedView
+        ? entry.kind === "error-group" && entry.fingerprint === selection?.id
+        : entry.kind === "occurrence" && entry.id === selection?.id,
+    );
+
+    if (
+      !selection ||
+      (groupedView && selection.kind !== "error-group") ||
+      (!groupedView && selection.kind !== "error-occurrence") ||
+      !hasMatchingSelection
+    ) {
+      const firstEntry = entries[0];
+      if (!firstEntry) {
+        setSelection(null);
+        return;
+      }
+
+      if (firstEntry.kind === "error-group") {
+        setSelection({ kind: "error-group", id: firstEntry.fingerprint });
+        return;
+      }
+
+      setSelection({
+        kind: "error-occurrence",
+        id: firstEntry.id,
+      });
+    }
+  }, [enabled, entries, groupedView, selection, setSelection]);
 }

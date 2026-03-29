@@ -146,6 +146,59 @@ describe("studio router", () => {
     expect(description.references.length).toBeGreaterThan(0);
   });
 
+  it("serves error grouping routes through tRPC callers", async () => {
+    const projectDir = await createProject();
+    const logDir = path.join(projectDir, "logs");
+
+    await mkdir(logDir, { recursive: true });
+    await writeFile(
+      path.join(logDir, "log.ndjson"),
+      [
+        JSON.stringify({
+          timestamp: "2026-03-13T12:00:00.000Z",
+          level: "error",
+          message: "checkout failed",
+          error: { name: "CheckoutError", message: "checkout failed" },
+          stack: "CheckoutError: checkout failed\n    at checkout (/tmp/project/src/routes/checkout.ts:4:1)",
+          groupId: "checkout-1",
+          path: "/checkout",
+          method: "POST",
+          statusCode: 500,
+        }),
+        JSON.stringify({
+          timestamp: "2026-03-13T12:00:01.000Z",
+          level: "error",
+          message: "checkout failed",
+          error: { name: "CheckoutError", message: "checkout failed" },
+          stack: "CheckoutError: checkout failed\n    at checkout (/tmp/project/src/routes/checkout.ts:4:1)",
+          groupId: "checkout-1",
+          path: "/checkout",
+          method: "POST",
+          statusCode: 500,
+        }),
+      ].join("\n") + "\n",
+    );
+
+    const caller = appRouter.createCaller({ session: null });
+    const errors = await caller.studio.errors({
+      projectPath: projectDir,
+      view: "grouped",
+      limit: 10,
+    });
+
+    expect(errors.groups[0]).toMatchObject({
+      errorType: "CheckoutError",
+      occurrenceCount: 2,
+    });
+
+    const detail = await caller.studio.errorGroup({
+      projectPath: projectDir,
+      fingerprint: errors.groups[0]!.fingerprint,
+    });
+
+    expect(detail?.occurrences).toHaveLength(2);
+  });
+
   it("serves DB-backed Studio routes through tRPC callers", async () => {
     const projectDir = await createProject();
     process.env.DATABASE_URL = "postgresql://user:pass@localhost:5432/test";

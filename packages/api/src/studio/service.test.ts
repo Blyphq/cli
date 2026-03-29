@@ -24,6 +24,8 @@ import {
   getStudioAuth,
   getStudioConfig,
   getStudioDatabase,
+  getStudioErrorGroup,
+  getStudioErrors,
   getStudioFacets,
   getStudioFiles,
   getStudioGroup,
@@ -278,6 +280,100 @@ describe("studio log discovery and queries", () => {
     const facets = await getStudioFacets({ projectPath: projectDir });
     expect(facets.types).toEqual(["checkout_flow", "http_request", "plain_log"]);
     expect(facets.levels).toEqual(["error", "info"]);
+  });
+
+  it("builds grouped errors, detail views, and raw error entries", async () => {
+    const projectDir = await createProject();
+    const logDir = path.join(projectDir, "logs");
+
+    await mkdir(logDir, { recursive: true });
+    await writeFile(
+      path.join(logDir, "log.ndjson"),
+      [
+        createLogLine({
+          timestamp: "2026-03-13T10:00:00.000Z",
+          level: "error",
+          message: "Database request failed",
+          error: { name: "DatabaseError", message: "Database request failed" },
+          stack: [
+            "DatabaseError: Database request failed",
+            `    at saveOrder (${path.join(projectDir, "src/server/orders.ts")}:42:9)`,
+          ].join("\n"),
+          traceId: "trace-1",
+          groupId: "trace-1",
+          method: "POST",
+          path: "/checkout",
+          statusCode: 500,
+        }),
+        createLogLine({
+          timestamp: "2026-03-13T10:02:00.000Z",
+          level: "error",
+          message: "Database request failed",
+          error: { name: "DatabaseError", message: "Database request failed" },
+          stack: [
+            "DatabaseError: Database request failed",
+            `    at saveOrder (${path.join(projectDir, "src/server/orders.ts")}:42:9)`,
+          ].join("\n"),
+          traceId: "trace-1",
+          groupId: "trace-1",
+          method: "POST",
+          path: "/checkout",
+          statusCode: 500,
+        }),
+        createLogLine({
+          timestamp: "2026-03-13T10:03:00.000Z",
+          level: "error",
+          message: "Payment provider timeout",
+          error: { name: "PaymentError", message: "Payment provider timeout" },
+          stack: [
+            "PaymentError: Payment provider timeout",
+            `    at chargeCard (${path.join(projectDir, "src/server/payments.ts")}:18:3)`,
+          ].join("\n"),
+          method: "POST",
+          path: "/payment/charge",
+          statusCode: 502,
+        }),
+      ].join(""),
+    );
+
+    const grouped = await getStudioErrors({
+      projectPath: projectDir,
+      view: "grouped",
+      sort: "most-frequent",
+      limit: 50,
+    });
+
+    expect(grouped.stats.uniqueErrorTypes).toBe(2);
+    expect(grouped.stats.totalOccurrences).toBe(3);
+    expect(grouped.groups[0]).toMatchObject({
+      errorType: "DatabaseError",
+      occurrenceCount: 2,
+      messageFirstLine: "Database request failed",
+    });
+    expect(grouped.groups[0]?.sparklineBuckets).toHaveLength(12);
+    expect(grouped.groups[0]?.relatedTraceGroupId).toBeTruthy();
+
+    const detail = await getStudioErrorGroup({
+      projectPath: projectDir,
+      fingerprint: grouped.groups[0]!.fingerprint,
+    });
+
+    expect(detail?.occurrences).toHaveLength(2);
+    expect(detail?.occurrences[0]?.structuredFields).toMatchObject({
+      error: { name: "DatabaseError" },
+    });
+
+    const raw = await getStudioErrors({
+      projectPath: projectDir,
+      view: "raw",
+      sort: "most-recent",
+      limit: 50,
+    });
+
+    expect(raw.entries[0]).toMatchObject({
+      kind: "occurrence",
+      type: "PaymentError",
+    });
   });
 
   it("creates heuristic structured groups when explicit ids are missing", async () => {

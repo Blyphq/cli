@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useDeferredValue } from "react";
 
 import type {
+  StudioErrorUiState,
   StudioFilters,
   StudioGroupingMode,
   StudioSectionId,
@@ -11,6 +12,7 @@ import {
   isAllLogsSection,
   isAuthSection,
   isDatabaseSection,
+  isErrorsSection,
   isOverviewSection,
 } from "@/lib/studio";
 import { useTRPC } from "@/utils/trpc";
@@ -21,6 +23,7 @@ export interface UseStudioDataParams {
   offset: number;
   grouping: StudioGroupingMode;
   section: StudioSectionId;
+  errorUi: StudioErrorUiState;
   authUserId: string | null;
   selection: StudioSelection;
 }
@@ -31,6 +34,7 @@ export function useStudioData({
   offset,
   grouping,
   section,
+  errorUi,
   authUserId,
   selection,
 }: UseStudioDataParams) {
@@ -40,7 +44,8 @@ export function useStudioData({
     isOverviewSection(section) ||
     isAllLogsSection(section) ||
     isAuthSection(section) ||
-    isDatabaseSection(section)
+    isDatabaseSection(section) || 
+    isErrorsSection(section)
       ? undefined
       : section;
 
@@ -91,7 +96,27 @@ export function useStudioData({
       metaQuery.data.project.valid &&
       !isOverviewSection(section) &&
       !isAuthSection(section) &&
-      !isDatabaseSection(section),
+      !isDatabaseSection(section) &&
+      !isErrorsSection(section),
+    refetchInterval: 1000,
+  });
+
+  const errorsQuery = useQuery({
+    ...trpc.studio.errors.queryOptions({
+      projectPath,
+      offset,
+      limit: 100,
+      view: errorUi.view,
+      sort: errorUi.sort,
+      type: errorUi.type || undefined,
+      sourceFile: errorUi.sourceFile || undefined,
+      search: deferredSearch || undefined,
+      fileId: filters.fileId || undefined,
+      from: filters.from || undefined,
+      to: filters.to || undefined,
+      sectionId: errorUi.sectionTag || undefined,
+    }),
+    enabled: metaQuery.isSuccess && metaQuery.data.project.valid && isErrorsSection(section),
     refetchInterval: 1000,
   });
 
@@ -135,26 +160,43 @@ export function useStudioData({
       selection?.kind === "group",
   });
 
-  const recordQuery = useQuery({
-    ...trpc.studio.record.queryOptions({
+  const errorGroupQuery = useQuery({
+    ...trpc.studio.errorGroup.queryOptions({
       projectPath,
-      recordId: selection?.kind === "record" ? selection.id : "",
+      fingerprint: selection?.kind === "error-group" ? selection.id : "",
     }),
     enabled:
       metaQuery.isSuccess &&
       metaQuery.data.project.valid &&
-      selection?.kind === "record",
+      selection?.kind === "error-group",
+  });
+
+  const recordQuery = useQuery({
+    ...trpc.studio.record.queryOptions({
+      projectPath,
+      recordId:
+        selection?.kind === "record" || selection?.kind === "error-occurrence"
+          ? selection.id
+          : "",
+    }),
+    enabled:
+      metaQuery.isSuccess &&
+      metaQuery.data.project.valid &&
+      (selection?.kind === "record" || selection?.kind === "error-occurrence"),
   });
 
   const recordSourceQuery = useQuery({
     ...trpc.studio.recordSource.queryOptions({
       projectPath,
-      recordId: selection?.kind === "record" ? selection.id : "",
+      recordId:
+        selection?.kind === "record" || selection?.kind === "error-occurrence"
+          ? selection.id
+          : "",
     }),
     enabled:
       metaQuery.isSuccess &&
       metaQuery.data.project.valid &&
-      selection?.kind === "record",
+      (selection?.kind === "record" || selection?.kind === "error-occurrence"),
   });
 
   const assistantStatusQuery = useQuery(
@@ -164,9 +206,13 @@ export function useStudioData({
   const files = filesQuery.data?.files ?? [];
   const entries = logsQuery.data?.entries ?? [];
   const selectedRecord =
-    selection?.kind === "record" ? recordQuery.data ?? null : null;
+    selection?.kind === "record" || selection?.kind === "error-occurrence"
+      ? recordQuery.data ?? null
+      : null;
   const selectedGroup =
     selection?.kind === "group" ? groupQuery.data ?? null : null;
+  const selectedErrorGroup =
+    selection?.kind === "error-group" ? errorGroupQuery.data ?? null : null;
 
   const isLoadingMeta = !metaQuery.data && metaQuery.isLoading;
   const isProjectInvalid = Boolean(metaQuery.data && !metaQuery.data.project.valid);
@@ -176,9 +222,11 @@ export function useStudioData({
   const hasLogsError =
     filesQuery.isError ||
     logsQuery.isError ||
+    errorsQuery.isError ||
     authQuery.isError ||
     databaseQuery.isError ||
     groupQuery.isError ||
+    errorGroupQuery.isError ||
     recordQuery.isError;
   const hasBackendError =
     metaQuery.isError || configQuery.isError || hasLogsError;
@@ -193,9 +241,11 @@ export function useStudioData({
     filesQuery,
     facetsQuery,
     logsQuery,
+    errorsQuery,
     authQuery,
     databaseQuery,
     groupQuery,
+    errorGroupQuery,
     recordQuery,
     recordSourceQuery,
     assistantStatusQuery,
@@ -203,6 +253,7 @@ export function useStudioData({
     entries,
     selectedRecord,
     selectedGroup,
+    selectedErrorGroup,
     isLoadingMeta,
     isProjectInvalid,
     projectError,
