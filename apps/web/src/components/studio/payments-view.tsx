@@ -65,24 +65,18 @@ export function PaymentsView({
     );
   }
 
+  if (!page) {
+    return (
+      <EmptyState
+        title="Payments unavailable"
+        description="Studio could not load payment activity for the current scope."
+      />
+    );
+  }
+
   return (
     <div className="space-y-6">
-      <PaymentsStatsBar
-        stats={
-          page?.stats ?? {
-            checkoutAttempts: 0,
-            successRate: 0,
-            successRateTrend: "flat",
-            successRateDeltaPercent: null,
-            successRateComparisonWindowLabel: "vs previous session window",
-            failedPayments: 0,
-            mostCommonFailureReason: null,
-            revenueProcessed: null,
-            currency: null,
-            webhookEvents: 0,
-          }
-        }
-      />
+      <PaymentsStatsBar stats={page.stats} />
       <PaymentTraceList
         traces={pagedTraces}
         selectedTraceId={selectedTraceId}
@@ -98,7 +92,7 @@ export function PaymentsView({
       />
       <div className="grid gap-4 2xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
         <div className="min-w-0">
-          <PaymentFailureBreakdownTable rows={page?.failures ?? []} />
+          <PaymentFailureBreakdownTable rows={page.failures} />
         </div>
         <div className="min-w-0">
           <PaymentWebhookPanel

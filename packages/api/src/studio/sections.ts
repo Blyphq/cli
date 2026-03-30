@@ -71,9 +71,10 @@ const BUILTIN_SECTION_DEFINITIONS: SectionDefinition[] = [
           "cart.*",
           "order.*",
           "stripe.*",
+          "stripe.webhook*",
           "invoice.*",
           "subscription.*",
-          "webhook.*",
+          "webhook.stripe*",
         ],
         statuses: [402],
         messages: [

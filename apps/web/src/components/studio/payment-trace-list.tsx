@@ -2,6 +2,7 @@ import type { StudioPaymentTrace, StudioPaymentTraceDetail } from "@/lib/studio"
 import {
   Pagination,
   PaginationContent,
+  PaginationEllipsis,
   PaginationItem,
   PaginationLink,
   PaginationNext,
@@ -39,6 +40,8 @@ export function PaymentTraceList({
   onAskAi,
   onPageChange,
 }: PaymentTraceListProps) {
+  const pages = buildVisiblePages(currentPage, totalPages);
+
   return (
     <div className="space-y-3">
       <PanelHeader
@@ -79,16 +82,22 @@ export function PaymentTraceList({
                     onClick={() => onPageChange(Math.max(1, currentPage - 1))}
                   />
                 </PaginationItem>
-                {Array.from({ length: totalPages }, (_, index) => index + 1).map((page) => (
-                  <PaginationItem key={page}>
-                    <PaginationLink
-                      isActive={page === currentPage}
-                      onClick={() => onPageChange(page)}
-                    >
-                      {page}
-                    </PaginationLink>
-                  </PaginationItem>
-                ))}
+                {pages.map((page, index) =>
+                  page === "ellipsis" ? (
+                    <PaginationItem key={`ellipsis-${index}`}>
+                      <PaginationEllipsis />
+                    </PaginationItem>
+                  ) : (
+                    <PaginationItem key={page}>
+                      <PaginationLink
+                        isActive={page === currentPage}
+                        onClick={() => onPageChange(page)}
+                      >
+                        {page}
+                      </PaginationLink>
+                    </PaginationItem>
+                  ),
+                )}
                 <PaginationItem>
                   <PaginationNext
                     disabled={currentPage === totalPages}
@@ -102,4 +111,32 @@ export function PaymentTraceList({
       )}
     </div>
   );
+}
+
+function buildVisiblePages(
+  currentPage: number,
+  totalPages: number,
+): Array<number | "ellipsis"> {
+  if (totalPages <= 7) {
+    return Array.from({ length: totalPages }, (_, index) => index + 1);
+  }
+
+  const windowStart = Math.max(2, currentPage - 1);
+  const windowEnd = Math.min(totalPages - 1, currentPage + 1);
+  const pages: Array<number | "ellipsis"> = [1];
+
+  if (windowStart > 2) {
+    pages.push("ellipsis");
+  }
+
+  for (let page = windowStart; page <= windowEnd; page += 1) {
+    pages.push(page);
+  }
+
+  if (windowEnd < totalPages - 1) {
+    pages.push("ellipsis");
+  }
+
+  pages.push(totalPages);
+  return pages;
 }

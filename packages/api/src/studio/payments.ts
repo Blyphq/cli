@@ -420,6 +420,11 @@ function sumAmounts(amounts: StudioPaymentAmount[]): StudioPaymentAmount | null 
     return null;
   }
 
+  const currencies = new Set(amounts.map((amount) => amount.currency ?? null));
+  if (currencies.size > 1) {
+    return null;
+  }
+
   const currency = amounts[0]?.currency ?? null;
   const value = amounts.reduce((sum, amount) => sum + amount.value, 0);
   return toAmount(value, currency, true);
@@ -745,7 +750,7 @@ function normalizeFailureReason(
 
 function inferRouteFamily(route: string | null): string | null {
   if (!route) return null;
-  if (route.includes("/webhook/")) return "webhook";
+  if (/\/webhooks?(?:\/|$)/.test(route)) return "webhook";
   if (route.includes("/checkout")) return "checkout";
   if (route.includes("/payment")) return "payment";
   if (route.includes("/billing")) return "billing";
