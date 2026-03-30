@@ -305,6 +305,20 @@ export type StudioBackgroundJobStatus =
   | "IN_PROGRESS"
   | "TIMEOUT";
 
+export type StudioAgentTaskStatus =
+  | "COMPLETED"
+  | "FAILED"
+  | "IN_PROGRESS"
+  | "TIMEOUT";
+export type StudioAgentStepType = "AGENT" | "LLM" | "TOOL" | "RETRIEVAL";
+export type StudioAgentDurationSource =
+  | "explicit"
+  | "inferred-next-step"
+  | "paired-terminal"
+  | "task-boundary"
+  | "unknown";
+export type StudioAgentErrorKind = "llm" | "tool" | "agent" | "unknown";
+
 export type StudioBackgroundJobTrend =
   | "slower"
   | "stable"
@@ -423,6 +437,16 @@ export interface StudioErrorsQueryInput {
 }
 
 export interface StudioBackgroundJobsQueryInput {
+  projectPath?: string;
+  fileId?: string;
+  from?: string;
+  to?: string;
+  search?: string;
+  offset?: number;
+  limit?: number;
+}
+
+export interface StudioAgentsQueryInput {
   projectPath?: string;
   fileId?: string;
   from?: string;
@@ -671,6 +695,120 @@ export interface StudioBackgroundJobsOverview {
   truncated: boolean;
 }
 
+export interface StudioAgentPricingEstimate {
+  amountUsd: number | null;
+  label: string;
+}
+
+export interface StudioAgentsStats {
+  agentTasks: number;
+  llmCalls: number;
+  avgTaskDurationMs: number | null;
+  toolCalls: number;
+  failedTasks: number;
+  totalTokens: number;
+}
+
+export interface StudioAgentTaskStep {
+  id: string;
+  recordId: string;
+  timestamp: string | null;
+  offsetMs: number | null;
+  type: StudioAgentStepType;
+  name: string;
+  summary: string;
+  durationMs: number | null;
+  durationSource: StudioAgentDurationSource;
+  status: string | null;
+  model: string | null;
+  toolName: string | null;
+  promptTokens: number | null;
+  completionTokens: number | null;
+  totalTokens: number | null;
+  resultCount: number | null;
+  inputPreview: string | null;
+  outputPreview: string | null;
+  errorMessage: string | null;
+  rawDetails: unknown;
+}
+
+export interface StudioAgentTaskSummary {
+  id: string;
+  title: string;
+  status: StudioAgentTaskStatus;
+  startedAt: string | null;
+  finishedAt: string | null;
+  durationMs: number | null;
+  stepCount: number;
+  llmCallCount: number;
+  toolCallCount: number;
+  retrievalCount: number;
+  totalTokens: number;
+  failureKind: StudioAgentErrorKind | null;
+  failureMessage: string | null;
+  recordIds: string[];
+  correlationSource: "task_id" | "trace_id" | "session_proximity";
+}
+
+export interface StudioAgentLlmCallRow {
+  id: string;
+  taskId: string;
+  taskTitle: string;
+  recordId: string;
+  timestamp: string | null;
+  model: string | null;
+  promptTokens: number | null;
+  completionTokens: number | null;
+  totalTokens: number | null;
+  durationMs: number | null;
+  approxCostUsd: number | null;
+}
+
+export interface StudioAgentToolCallRow {
+  id: string;
+  taskId: string;
+  taskTitle: string;
+  recordId: string;
+  timestamp: string | null;
+  name: string;
+  durationMs: number | null;
+  outcome: "success" | "failure" | "unknown";
+  errorMessage: string | null;
+}
+
+export interface StudioAgentFailureItem {
+  taskId: string;
+  taskTitle: string;
+  status: StudioAgentTaskStatus;
+  errorKind: StudioAgentErrorKind;
+  errorMessage: string | null;
+  failedStepId: string | null;
+  failedStepName: string | null;
+  failedAt: string | null;
+}
+
+export interface StudioAgentTaskDetail {
+  task: StudioAgentTaskSummary;
+  steps: StudioAgentTaskStep[];
+  failure: StudioAgentFailureItem | null;
+}
+
+export interface StudioAgentsOverview {
+  stats: StudioAgentsStats;
+  tasks: StudioAgentTaskSummary[];
+  totalTasks: number;
+  offset: number;
+  limit: number;
+  truncated: boolean;
+  llmCalls: StudioAgentLlmCallRow[];
+  toolCalls: StudioAgentToolCallRow[];
+  toolSummary: {
+    mostFrequentlyCalled: Array<{ name: string; count: number }>;
+    slowestByP95: Array<{ name: string; p95DurationMs: number | null; sampleCount: number }>;
+  };
+  failures: StudioAgentFailureItem[];
+}
+
 export type StudioPaymentTraceStatus =
   | "COMPLETED"
   | "DECLINED"
@@ -775,7 +913,6 @@ export interface StudioPaymentsOverview {
   limit: number;
   truncated: boolean;
 }
-
 export interface StudioErrorsPage {
   entries: Array<StudioErrorGroupSummary | StudioErrorOccurrence>;
   groups: StudioErrorGroupSummary[];
@@ -979,7 +1116,7 @@ export interface StudioAssistantHistoryItem {
 }
 
 export interface StudioAssistantReference {
-  kind: "record" | "group" | "background-run" | "payment-trace";
+  kind: "record" | "group" | "background-run" | "agent-task" | "payment-trace";
   id: string;
   label: string;
   fileName: string | null;
@@ -1018,6 +1155,7 @@ export interface StudioAssistantReplyInput {
   selectedRecordId?: string;
   selectedGroupId?: string;
   selectedBackgroundRunId?: string;
+  selectedAgentTaskId?: string;
   selectedPaymentTraceId?: string;
 }
 

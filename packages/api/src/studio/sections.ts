@@ -110,9 +110,9 @@ const BUILTIN_SECTION_DEFINITIONS: SectionDefinition[] = [
     match(record) {
       return buildDomainMatch(record, {
         routes: [],
-        fields: ["agent.*", "llm.*", "tool.*", "tokens.*", "prompt.*"],
+        fields: ["agent.*", "llm.*", "tool.*", "tokens.*", "prompt.*", "completion.*", "model.*"],
         statuses: [],
-        messages: ["tool call", "completion", "prompt", "agent", "function call"],
+        messages: ["tool call", "function call", "completion", "prompt", "agent task", "retrieval"],
       });
     },
   },

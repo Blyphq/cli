@@ -1,3 +1,4 @@
+import { getAgentTaskDetail } from "./agents";
 import { buildBackgroundJobRunDetail } from "./background-jobs";
 import { buildGroupDetails } from "./grouping";
 import { buildPaymentTraceDetail } from "./payments";
@@ -5,6 +6,7 @@ import { filterRecords } from "./query";
 import { resolveRecordSourceContext } from "./source";
 
 import type {
+  StudioAgentTaskDetail,
   StudioBackgroundJobRunDetail,
   StudioAssistantReference,
   StudioLogsQueryInput,
@@ -26,6 +28,7 @@ interface BuildAssistantContextInput {
   selectedRecordId?: string;
   selectedGroupId?: string;
   selectedBackgroundRunId?: string;
+  selectedAgentTaskId?: string;
   selectedPaymentTraceId?: string;
   projectPath: string;
   userQuestion: string;
@@ -36,6 +39,7 @@ export interface StudioAssistantContext {
   selectedRecordSource: StudioSourceContext | null;
   selectedGroup: StudioStructuredGroupDetail | null;
   selectedBackgroundRun: StudioBackgroundJobRunDetail | null;
+  selectedAgentTask: StudioAgentTaskDetail | null;
   selectedPaymentTrace: StudioPaymentTraceDetail | null;
   evidenceRecords: StudioNormalizedRecord[];
   references: StudioAssistantReference[];
@@ -58,6 +62,13 @@ export async function buildAssistantContext(
     input.selectedBackgroundRunId
       ? buildBackgroundJobRunDetail({
           runId: input.selectedBackgroundRunId,
+          records: input.allRecords,
+        })
+      : null;
+  const selectedAgentTask =
+    input.selectedAgentTaskId
+      ? getAgentTaskDetail({
+          taskId: input.selectedAgentTaskId,
           records: input.allRecords,
         })
       : null;
@@ -89,6 +100,15 @@ export async function buildAssistantContext(
       const matched = recordsById.get(event.recordId);
       if (matched) {
         addRecord(matched, 1_050);
+      }
+    }
+  }
+
+  if (selectedAgentTask) {
+    for (const step of selectedAgentTask.steps) {
+      const matched = recordsById.get(step.recordId);
+      if (matched) {
+        addRecord(matched, 1_075);
       }
     }
   }
@@ -192,6 +212,8 @@ export async function buildAssistantContext(
     selectedGroup,
     selectedRecord,
     selectedBackgroundRun,
+    selectedAgentTask,
+    selectedPaymentTrace,
     selectedPaymentTrace,
     allGroups: groups,
   });
@@ -204,6 +226,8 @@ export async function buildAssistantContext(
     selectedRecordSource,
     selectedGroup,
     selectedBackgroundRun,
+    selectedAgentTask,
+    selectedPaymentTrace,
     selectedPaymentTrace,
     evidenceRecords,
     references,
@@ -215,10 +239,23 @@ function buildReferences(input: {
   selectedGroup: StudioStructuredGroupDetail | null;
   selectedRecord: StudioNormalizedRecord | null;
   selectedBackgroundRun: StudioBackgroundJobRunDetail | null;
+  selectedAgentTask: StudioAgentTaskDetail | null;
+  selectedPaymentTrace: StudioPaymentTraceDetail | null;
   selectedPaymentTrace: StudioPaymentTraceDetail | null;
   allGroups: Map<string, StudioStructuredGroupDetail>;
 }): StudioAssistantReference[] {
   const references: StudioAssistantReference[] = [];
+
+  if (input.selectedAgentTask) {
+    references.push({
+      kind: "agent-task",
+      id: input.selectedAgentTask.task.id,
+      label: input.selectedAgentTask.task.title || `task ${input.selectedAgentTask.task.id}`,
+      fileName: null,
+      timestamp: input.selectedAgentTask.task.finishedAt ?? input.selectedAgentTask.task.startedAt,
+      reason: "selected agent task",
+    });
+  }
 
   if (input.selectedBackgroundRun) {
     references.push({

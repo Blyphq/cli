@@ -101,6 +101,8 @@ export function useAssistantChat({
             assistantScopeMode === "selection" && selection?.kind === "background-run"
               ? selection.id
               : undefined,
+          selectedAgentTaskId:
+            assistantScopeMode === "selection" && selection?.kind === "agent-task"
           selectedPaymentTraceId:
             assistantScopeMode === "selection" && selection?.kind === "payment-trace"
               ? selection.id
@@ -155,10 +157,12 @@ export function useAssistantChat({
       ? "current filters"
       : selection?.kind === "record"
         ? "selected log"
-        : selection?.kind === "group"
-          ? "selected structured group"
-          : selection?.kind === "background-run"
-            ? "selected background run"
+      : selection?.kind === "group"
+        ? "selected structured group"
+        : selection?.kind === "background-run"
+          ? "selected background run"
+          : selection?.kind === "agent-task"
+            ? "selected agent task"
             : selection?.kind === "payment-trace"
               ? "selected payment trace"
               : "no selection";
@@ -307,6 +311,8 @@ export function useAssistantChat({
         ? "group" as const
         : reference.kind === "background-run"
           ? "background-run" as const
+          : reference.kind === "agent-task"
+            ? "agent-task" as const
           : reference.kind === "payment-trace"
             ? "payment-trace" as const
             : "record" as const,

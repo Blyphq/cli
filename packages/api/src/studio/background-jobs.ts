@@ -808,9 +808,6 @@ function compareTimestamps(left: string | null, right: string | null): number {
   if (Number.isFinite(leftTime) && Number.isFinite(rightTime) && leftTime !== rightTime) {
     return leftTime - rightTime;
   }
-  if (Number.isFinite(leftTime) && Number.isFinite(rightTime)) {
-    return 0;
-  }
   if (Number.isFinite(leftTime)) {
     return 1;
   }

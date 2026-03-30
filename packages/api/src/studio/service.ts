@@ -6,6 +6,7 @@ import {
   streamAssistant,
   type StudioAssistantStreamResult,
 } from "./assistant";
+import { analyzeAgentRecords, getAgentTaskDetail } from "./agents";
 import { generateAssistantText, getAssistantStatus } from "./assistant-provider";
 import { analyzeAuthRecords } from "./auth";
 import { buildBackgroundJobRunDetail, buildBackgroundJobsOverview } from "./background-jobs";
@@ -36,6 +37,9 @@ import type {
   StudioAssistantMessage,
   StudioAssistantReplyInput,
   StudioAssistantStatus,
+  StudioAgentTaskDetail,
+  StudioAgentsOverview,
+  StudioAgentsQueryInput,
   StudioAuthOverview,
   StudioAuthQueryInput,
   StudioBackgroundJobRunDetail,
@@ -376,6 +380,95 @@ export async function getStudioDatabase(
   );
 
   return analyzeDatabaseRecords(filtered, input);
+}
+
+export async function getStudioAgents(
+  input: StudioAgentsQueryInput,
+): Promise<StudioAgentsOverview> {
+  const { files, project, config } = await getStudioProjectFiles(input.projectPath);
+  if (!project.valid) {
+    return {
+      stats: {
+        agentTasks: 0,
+        llmCalls: 0,
+        avgTaskDurationMs: null,
+        toolCalls: 0,
+        failedTasks: 0,
+        totalTokens: 0,
+      },
+      tasks: [],
+      totalTasks: 0,
+      offset: input.offset ?? 0,
+      limit: input.limit ?? 100,
+      truncated: false,
+      llmCalls: [],
+      toolCalls: [],
+      toolSummary: {
+        mostFrequentlyCalled: [],
+        slowestByP95: [],
+      },
+      failures: [],
+    };
+  }
+
+  const loaded = await loadProjectRecords(project.absolutePath, config, files, {
+    from: input.from,
+    to: input.to,
+    search: input.search,
+  });
+  const filtered = filterRecords(
+    loaded.records,
+    {
+      fileId: input.fileId,
+      from: input.from,
+      to: input.to,
+      search: input.search,
+      sectionId: "agents",
+    },
+    config.resolved.studio.sections,
+  );
+
+  return analyzeAgentRecords({
+    records: filtered,
+    query: input,
+    truncated: loaded.truncated,
+  });
+}
+
+export async function getStudioAgentTask(input: {
+  projectPath?: string;
+  taskId: string;
+  fileId?: string;
+  from?: string;
+  to?: string;
+  search?: string;
+}): Promise<StudioAgentTaskDetail | null> {
+  const { files, project, config } = await getStudioProjectFiles(input.projectPath);
+  if (!project.valid) {
+    return null;
+  }
+
+  const loaded = await loadProjectRecords(project.absolutePath, config, files, {
+    from: input.from,
+    to: input.to,
+    search: input.search,
+  });
+  const filtered = filterRecords(
+    loaded.records,
+    {
+      fileId: input.fileId,
+      from: input.from,
+      to: input.to,
+      search: input.search,
+      sectionId: "agents",
+    },
+    config.resolved.studio.sections,
+  );
+
+  return getAgentTaskDetail({
+    records: filtered,
+    taskId: input.taskId,
+  });
 }
 
 export async function getStudioBackgroundJobs(
@@ -740,6 +833,7 @@ export async function streamStudioAssistant(input: {
   selectedRecordId?: string;
   selectedGroupId?: string;
   selectedBackgroundRunId?: string;
+  selectedAgentTaskId?: string;
   selectedPaymentTraceId?: string;
   messages: import("ai").UIMessage[];
   mode?: "chat" | "describe-selection";
@@ -768,6 +862,7 @@ export async function streamStudioAssistant(input: {
     selectedRecordId: input.selectedRecordId,
     selectedGroupId: input.selectedGroupId,
     selectedBackgroundRunId: input.selectedBackgroundRunId,
+    selectedAgentTaskId: input.selectedAgentTaskId,
     selectedPaymentTraceId: input.selectedPaymentTraceId,
     messages: input.messages,
     mode: input.mode,

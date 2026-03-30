@@ -1,4 +1,5 @@
 import type {
+  StudioAgentTaskDetail,
   StudioBackgroundJobRunDetail,
   StudioAssistantHistoryItem,
   StudioAssistantReference,
@@ -15,6 +16,7 @@ interface PromptEvidence {
   selectedRecordSource: StudioSourceContext | null;
   selectedGroup: StudioStructuredGroupDetail | null;
   selectedBackgroundRun: StudioBackgroundJobRunDetail | null;
+  selectedAgentTask: StudioAgentTaskDetail | null;
   selectedPaymentTrace: StudioPaymentTraceDetail | null;
   records: StudioNormalizedRecord[];
   references: StudioAssistantReference[];
@@ -48,6 +50,8 @@ export function buildAssistantReplyPrompt(input: PromptEvidence): string {
     `Filters: ${input.filtersSummary}`,
     input.selectedGroup
       ? `Selected structured group: ${input.selectedGroup.group.title}`
+      : input.selectedAgentTask
+        ? `Selected agent task: ${input.selectedAgentTask.task.title}`
       : input.selectedBackgroundRun
         ? `Selected background run: ${input.selectedBackgroundRun.run.jobName}`
       : input.selectedPaymentTrace
@@ -70,6 +74,8 @@ export function buildDescribeSelectionPrompt(input: PromptEvidence): string {
     `Filters: ${input.filtersSummary}`,
     input.selectedGroup
       ? `Explain this structured group: ${input.selectedGroup.group.title}`
+      : input.selectedAgentTask
+        ? `Explain this agent task: ${input.selectedAgentTask.task.title}`
       : input.selectedBackgroundRun
         ? `Explain this background run: ${input.selectedBackgroundRun.run.jobName}`
       : input.selectedPaymentTrace
@@ -100,13 +106,21 @@ function renderEvidence(input: PromptEvidence): string {
           records: input.selectedGroup.records.slice(0, 5).map(summarizeRecord),
         },
       }
-    : input.selectedBackgroundRun
-      ? {
-          backgroundRun: {
-            run: input.selectedBackgroundRun.run,
-            timeline: input.selectedBackgroundRun.timeline.slice(0, 20),
-          },
-        }
+    : input.selectedAgentTask
+        ? {
+            agentTask: {
+              task: input.selectedAgentTask.task,
+              steps: input.selectedAgentTask.steps.slice(0, 20),
+              failure: input.selectedAgentTask.failure,
+            },
+          }
+      : input.selectedBackgroundRun
+        ? {
+            backgroundRun: {
+              run: input.selectedBackgroundRun.run,
+              timeline: input.selectedBackgroundRun.timeline.slice(0, 20),
+            },
+          }
       : input.selectedPaymentTrace
         ? {
             paymentTrace: {

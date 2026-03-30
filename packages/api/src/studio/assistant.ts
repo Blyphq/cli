@@ -56,6 +56,7 @@ export interface StreamAssistantInput {
   selectedRecordId?: string;
   selectedGroupId?: string;
   selectedBackgroundRunId?: string;
+  selectedAgentTaskId?: string;
   selectedPaymentTraceId?: string;
   messages: UIMessage[];
   mode?: "chat" | "describe-selection";
@@ -90,6 +91,7 @@ export async function replyWithAssistant(
     selectedRecordId: input.selectedRecordId,
     selectedGroupId: input.selectedGroupId,
     selectedBackgroundRunId: input.selectedBackgroundRunId,
+    selectedAgentTaskId: input.selectedAgentTaskId,
     selectedPaymentTraceId: input.selectedPaymentTraceId,
     projectPath: input.projectPath,
     userQuestion: latestUserMessage,
@@ -105,6 +107,7 @@ export async function replyWithAssistant(
       selectedRecordSource: context.selectedRecordSource,
       selectedGroup: context.selectedGroup,
       selectedBackgroundRun: context.selectedBackgroundRun,
+      selectedAgentTask: context.selectedAgentTask,
       selectedPaymentTrace: context.selectedPaymentTrace,
       records: context.evidenceRecords,
       references: context.references,
@@ -134,6 +137,7 @@ export async function describeSelectionWithAssistant(
     selectedRecordId: input.selectedRecordId,
     selectedGroupId: input.selectedGroupId,
     selectedBackgroundRunId: input.selectedBackgroundRunId,
+    selectedAgentTaskId: input.selectedAgentTaskId,
     selectedPaymentTraceId: input.selectedPaymentTraceId,
     projectPath: input.projectPath,
     userQuestion: "Describe this selection.",
@@ -149,6 +153,7 @@ export async function describeSelectionWithAssistant(
       selectedRecordSource: context.selectedRecordSource,
       selectedGroup: context.selectedGroup,
       selectedBackgroundRun: context.selectedBackgroundRun,
+      selectedAgentTask: context.selectedAgentTask,
       selectedPaymentTrace: context.selectedPaymentTrace,
       records: context.evidenceRecords,
       references: context.references,
@@ -184,6 +189,7 @@ export async function streamAssistant(
     selectedRecordId: input.selectedRecordId,
     selectedGroupId: input.selectedGroupId,
     selectedBackgroundRunId: input.selectedBackgroundRunId,
+    selectedAgentTaskId: input.selectedAgentTaskId,
     selectedPaymentTraceId: input.selectedPaymentTraceId,
     projectPath: input.projectPath,
     userQuestion: latestUserMessage,
@@ -197,6 +203,7 @@ export async function streamAssistant(
           selectedRecordSource: context.selectedRecordSource,
           selectedGroup: context.selectedGroup,
           selectedBackgroundRun: context.selectedBackgroundRun,
+          selectedAgentTask: context.selectedAgentTask,
           selectedPaymentTrace: context.selectedPaymentTrace,
           records: context.evidenceRecords,
           references: context.references,
@@ -211,6 +218,7 @@ export async function streamAssistant(
           selectedRecordSource: context.selectedRecordSource,
           selectedGroup: context.selectedGroup,
           selectedBackgroundRun: context.selectedBackgroundRun,
+          selectedAgentTask: context.selectedAgentTask,
           selectedPaymentTrace: context.selectedPaymentTrace,
           records: context.evidenceRecords,
           references: context.references,
