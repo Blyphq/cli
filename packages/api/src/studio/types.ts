@@ -203,10 +203,17 @@ export interface StudioHttpDetails {
   statusCode: number | null;
   durationMs: number | null;
   url: string | null;
+  routeTemplate: string | null;
   type: string | null;
   hostname: string | null;
   ip: string | null;
   userAgent: string | null;
+  requestHeaders: Record<string, unknown> | null;
+  responseHeaders: Record<string, unknown> | null;
+  requestBody: unknown;
+  responseBody: unknown;
+  requestId: string | null;
+  traceId: string | null;
   error: unknown;
 }
 
@@ -447,6 +454,85 @@ export interface StudioAgentsQueryInput {
   search?: string;
   offset?: number;
   limit?: number;
+}
+
+export type StudioHttpStatusGroup = "2xx" | "3xx" | "4xx" | "5xx";
+export type StudioHttpPerformanceHighlight = "none" | "slow" | "error";
+
+export interface StudioHttpQueryInput {
+  projectPath?: string;
+  fileId?: string;
+  from?: string;
+  to?: string;
+  search?: string;
+  offset?: number;
+  limit?: number;
+  method?: string;
+  statusGroup?: StudioHttpStatusGroup;
+  route?: string;
+  minDurationMs?: number;
+}
+
+export interface StudioHttpStats {
+  totalRequests: number;
+  errorRate: number;
+  p50DurationMs: number | null;
+  p95DurationMs: number | null;
+  requestsPerMinute: number;
+  statusGroups: Record<StudioHttpStatusGroup, number>;
+}
+
+export interface StudioHttpRequestRow {
+  id: string;
+  recordId: string;
+  timestamp: string | null;
+  method: string;
+  route: string;
+  rawPath: string;
+  statusCode: number;
+  statusGroup: StudioHttpStatusGroup;
+  durationMs: number | null;
+  traceGroupId: string | null;
+  traceId: string | null;
+  requestId: string | null;
+}
+
+export interface StudioHttpEndpointPerformanceRow {
+  route: string;
+  requests: number;
+  p50DurationMs: number | null;
+  p95DurationMs: number | null;
+  errorRate: number;
+  lastSeenAt: string | null;
+  highlight: StudioHttpPerformanceHighlight;
+}
+
+export interface StudioHttpStatusTimeseriesBucket {
+  start: string;
+  end: string;
+  counts: Record<StudioHttpStatusGroup, number>;
+}
+
+export interface StudioHttpUiFacets {
+  methods: string[];
+  routes: string[];
+  statusGroups: StudioHttpStatusGroup[];
+  durationRange: {
+    min: number | null;
+    max: number | null;
+  };
+}
+
+export interface StudioHttpOverview {
+  stats: StudioHttpStats;
+  requests: StudioHttpRequestRow[];
+  totalRequests: number;
+  offset: number;
+  limit: number;
+  truncated: boolean;
+  performance: StudioHttpEndpointPerformanceRow[];
+  timeseries: StudioHttpStatusTimeseriesBucket[];
+  facets: StudioHttpUiFacets;
 }
 
 export interface StudioLogsPage {

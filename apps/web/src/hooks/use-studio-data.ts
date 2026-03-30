@@ -5,6 +5,7 @@ import type {
   StudioErrorUiState,
   StudioFilters,
   StudioGroupingMode,
+  StudioHttpUiState,
   StudioSectionId,
   StudioSelection,
 } from "@/lib/studio";
@@ -15,6 +16,7 @@ import {
   isDatabaseSection,
   isErrorsSection,
   isAgentsSection,
+  isHttpSection,
   isOverviewSection,
 } from "@/lib/studio";
 import { useTRPC } from "@/utils/trpc";
@@ -26,6 +28,7 @@ export interface UseStudioDataParams {
   grouping: StudioGroupingMode;
   section: StudioSectionId;
   errorUi: StudioErrorUiState;
+  httpUi: StudioHttpUiState;
   authUserId: string | null;
   selection: StudioSelection;
 }
@@ -37,6 +40,7 @@ export function useStudioData({
   grouping,
   section,
   errorUi,
+  httpUi,
   authUserId,
   selection,
 }: UseStudioDataParams) {
@@ -49,6 +53,7 @@ export function useStudioData({
     isDatabaseSection(section) ||
     isAgentsSection(section) ||
     isBackgroundSection(section) ||
+    isHttpSection(section) ||
     isErrorsSection(section)
       ? undefined
       : section;
@@ -103,7 +108,26 @@ export function useStudioData({
       !isAgentsSection(section) &&
       !isBackgroundSection(section) &&
       !isDatabaseSection(section) &&
+      !isHttpSection(section) &&
       !isErrorsSection(section),
+    refetchInterval: 1000,
+  });
+
+  const httpQuery = useQuery({
+    ...trpc.studio.http.queryOptions({
+      projectPath,
+      fileId: filters.fileId || undefined,
+      from: filters.from || undefined,
+      to: filters.to || undefined,
+      search: deferredSearch || undefined,
+      offset,
+      limit: 100,
+      method: httpUi.method || undefined,
+      statusGroup: httpUi.statusGroup || undefined,
+      route: httpUi.route || undefined,
+      minDurationMs: httpUi.minDurationMs ? Number(httpUi.minDurationMs) : undefined,
+    }),
+    enabled: metaQuery.isSuccess && metaQuery.data.project.valid && isHttpSection(section),
     refetchInterval: 1000,
   });
 
@@ -304,6 +328,7 @@ export function useStudioData({
     overviewQuery.isError ||
     authQuery.isError ||
     backgroundJobsQuery.isError ||
+    httpQuery.isError ||
     backgroundJobRunQuery.isError ||
     databaseQuery.isError ||
     agentsQuery.isError ||
@@ -324,6 +349,7 @@ export function useStudioData({
     filesQuery,
     facetsQuery,
     logsQuery,
+    httpQuery,
     errorsQuery,
     overviewQuery,
     authQuery,

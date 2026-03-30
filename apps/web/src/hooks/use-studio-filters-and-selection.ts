@@ -7,6 +7,7 @@ import type {
   StudioErrorUiState,
   StudioFilters,
   StudioGroupingMode,
+  StudioHttpUiState,
   StudioLogEntry,
   StudioSidebarState,
   StudioSectionId,
@@ -33,6 +34,13 @@ export const DEFAULT_ERROR_UI: StudioErrorUiState = {
   showIgnored: false,
 };
 
+export const DEFAULT_HTTP_UI: StudioHttpUiState = {
+  method: "",
+  statusGroup: "",
+  route: "",
+  minDurationMs: "",
+};
+
 export function useStudioFiltersAndSelection(initialProjectPath: string) {
   const [filters, setFilters] = useState<StudioFilters>(DEFAULT_FILTERS);
   const [selection, setSelection] = useState<StudioSelection>(null);
@@ -45,6 +53,7 @@ export function useStudioFiltersAndSelection(initialProjectPath: string) {
     selectedPatternId: null,
   });
   const [errorUi, setErrorUi] = useState<StudioErrorUiState>(DEFAULT_ERROR_UI);
+  const [httpUi, setHttpUi] = useState<StudioHttpUiState>(DEFAULT_HTTP_UI);
   const [draftProjectPath, setDraftProjectPath] = useState(initialProjectPath);
 
   useEffect(() => {
@@ -54,6 +63,7 @@ export function useStudioFiltersAndSelection(initialProjectPath: string) {
     setVisitedAtBySection(persisted.visitedAtBySection);
     setAuthUi({ selectedUserId: null, selectedPatternId: null });
     setErrorUi(DEFAULT_ERROR_UI);
+    setHttpUi(DEFAULT_HTTP_UI);
   }, [initialProjectPath]);
 
   const setSection = (next: StudioSectionId) => {
@@ -87,6 +97,8 @@ export function useStudioFiltersAndSelection(initialProjectPath: string) {
     setAuthUi,
     errorUi,
     setErrorUi,
+    httpUi,
+    setHttpUi,
     draftProjectPath,
     setDraftProjectPath,
   };

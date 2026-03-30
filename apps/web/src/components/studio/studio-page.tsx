@@ -12,6 +12,7 @@ import { EmptyState } from "@/components/studio/empty-state";
 import { ErrorDetailPanel } from "@/components/studio/error-detail-panel";
 import { ErrorState } from "@/components/studio/error-state";
 import { GroupDetailPanel } from "@/components/studio/group-detail-panel";
+import { HttpView } from "@/components/studio/http-view";
 import { LogDetailPanel } from "@/components/studio/log-detail-panel";
 import { LogFilesPanel } from "@/components/studio/log-files-panel";
 import { LogList } from "@/components/studio/log-list";
@@ -24,6 +25,7 @@ import { useAssistantChat } from "@/hooks/use-assistant-chat";
 import {
   useErrorSessionState,
   DEFAULT_FILTERS,
+  DEFAULT_HTTP_UI,
   useStudioFiltersAndSelection,
   useSyncErrorSelectionFromEntries,
   useSyncSelectionFromEntries,
@@ -35,6 +37,7 @@ import {
   isBackgroundSection,
   isDatabaseSection,
   isErrorsSection,
+  isHttpSection,
   isOverviewSection,
 } from "@/lib/studio";
 import { formatDurationMs } from "@/lib/studio";
@@ -75,6 +78,8 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
     setAuthUi,
     errorUi,
     setErrorUi,
+    httpUi,
+    setHttpUi,
     draftProjectPath,
     setDraftProjectPath,
   } = useStudioFiltersAndSelection(projectPath);
@@ -87,6 +92,7 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
     grouping,
     section,
     errorUi,
+    httpUi,
     authUserId: authUi.selectedUserId,
     selection,
   });
@@ -115,6 +121,7 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
     !isAgentsSection(section) &&
     !isDatabaseSection(section) &&
     !isBackgroundSection(section) &&
+    !isHttpSection(section) &&
     !isErrorsSection(section);
   useSyncSelectionFromEntries(entries, selection, setSelection, shouldSyncSelection);
   useSyncErrorSelectionFromEntries(
@@ -124,6 +131,36 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
     errorUi.view === "grouped",
     isErrorsSection(section),
   );
+
+  useEffect(() => {
+    if (!isHttpSection(section)) {
+      return;
+    }
+
+    if (studioData.httpQuery.isLoading && !studioData.httpQuery.data) {
+      return;
+    }
+
+    const requests = studioData.httpQuery.data?.requests ?? [];
+    if (requests.length === 0) {
+      setSelection(null);
+      return;
+    }
+
+    const hasMatchingSelection =
+      selection?.kind === "record" &&
+      requests.some((request) => request.recordId === selection.id);
+
+    if (!hasMatchingSelection) {
+      setSelection({ kind: "record", id: requests[0]!.recordId });
+    }
+  }, [
+    section,
+    selection,
+    setSelection,
+    studioData.httpQuery.isLoading,
+    studioData.httpQuery.data,
+  ]);
 
   useEffect(() => {
     setOverviewConnectedAt(new Date().toISOString());
@@ -151,6 +188,10 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
     errorUi.type,
     errorUi.sourceFile,
     errorUi.sectionTag,
+    httpUi.method,
+    httpUi.statusGroup,
+    httpUi.route,
+    httpUi.minDurationMs,
     setOffset,
   ]);
 
@@ -394,6 +435,12 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
     assistant.createSelectionChatAndSubmit(prompt);
   };
 
+  const handleViewHttpTrace = (traceGroupId: string) => {
+    setGrouping("grouped");
+    setSection("all-logs");
+    setSelection({ kind: "group", id: traceGroupId });
+  };
+
   return (
     <>
       <StudioShell
@@ -470,6 +517,7 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
                 studioData.agentsQuery.error?.message ??
                 studioData.agentTaskQuery.error?.message ??
                 studioData.backgroundJobsQuery.error?.message ??
+                studioData.httpQuery.error?.message ??
                 studioData.backgroundJobRunQuery.error?.message ??
                 studioData.databaseQuery.error?.message ??
                 groupQuery.error?.message ??
@@ -576,6 +624,54 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
                     "Diagnose this failed agent task using the full correlated timeline in scope. Identify the failing step, separate likely LLM, tool, and agent-logic causes, and propose the smallest defensible fix.",
                 });
                 setSelection({ kind: "agent-task", id: taskId });
+              }}
+            />
+          ) : isHttpSection(section) ? (
+            <HttpView
+              page={studioData.httpQuery.data}
+              loading={studioData.httpQuery.isLoading}
+              selectedRecordId={selection?.kind === "record" ? selection.id : null}
+              httpUi={httpUi}
+              onHttpUiChange={setHttpUi}
+              onResetHttpFilters={() => setHttpUi(DEFAULT_HTTP_UI)}
+              onSelectRecord={(recordId) => setSelection({ kind: "record", id: recordId })}
+              onPageChange={setOffset}
+              onSelectRoute={(route) => {
+                setOffset(0);
+                setHttpUi((current) => ({ ...current, route }));
+              }}
+              onViewTrace={handleViewHttpTrace}
+            />
+          ) : isBackgroundSection(section) ? (
+            <BackgroundJobsView
+              page={studioData.backgroundJobsQuery.data}
+              loading={studioData.backgroundJobsQuery.isLoading}
+              selectedRunId={selection?.kind === "background-run" ? selection.id : null}
+              expandedRunId={expandedBackgroundRunId}
+              expandedRunDetail={
+                expandedBackgroundRunId &&
+                selection?.kind === "background-run" &&
+                expandedBackgroundRunId === selection.id
+                  ? studioData.backgroundJobRunQuery.data
+                  : null
+              }
+              expandedRunLoading={
+                Boolean(expandedBackgroundRunId) &&
+                selection?.kind === "background-run" &&
+                expandedBackgroundRunId === selection.id &&
+                studioData.backgroundJobRunQuery.isLoading
+              }
+              onSelectRun={(runId) => {
+                setExpandedBackgroundRunId(null);
+                setSelection({ kind: "background-run", id: runId });
+              }}
+              onToggleExpand={(runId) => {
+                const nextExpandedRunId =
+                  expandedBackgroundRunId === runId ? null : runId;
+                setExpandedBackgroundRunId(nextExpandedRunId);
+                if (nextExpandedRunId) {
+                  setSelection({ kind: "background-run", id: nextExpandedRunId });
+                }
               }}
             />
           ) : isBackgroundSection(section) ? (
