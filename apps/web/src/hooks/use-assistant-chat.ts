@@ -101,6 +101,10 @@ export function useAssistantChat({
             assistantScopeMode === "selection" && selection?.kind === "background-run"
               ? selection.id
               : undefined,
+          selectedPaymentTraceId:
+            assistantScopeMode === "selection" && selection?.kind === "payment-trace"
+              ? selection.id
+              : undefined,
           model: selectedModel || undefined,
         },
       }),
@@ -155,7 +159,9 @@ export function useAssistantChat({
           ? "selected structured group"
           : selection?.kind === "background-run"
             ? "selected background run"
-          : "no selection";
+            : selection?.kind === "payment-trace"
+              ? "selected payment trace"
+              : "no selection";
 
   useEffect(() => {
     if (!hasHydrated || !projectPath) return;
@@ -301,7 +307,9 @@ export function useAssistantChat({
         ? "group" as const
         : reference.kind === "background-run"
           ? "background-run" as const
-          : "record" as const,
+          : reference.kind === "payment-trace"
+            ? "payment-trace" as const
+            : "record" as const,
     id: reference.id,
   });
 

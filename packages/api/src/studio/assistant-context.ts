@@ -1,5 +1,6 @@
 import { buildBackgroundJobRunDetail } from "./background-jobs";
 import { buildGroupDetails } from "./grouping";
+import { buildPaymentTraceDetail } from "./payments";
 import { filterRecords } from "./query";
 import { resolveRecordSourceContext } from "./source";
 
@@ -8,6 +9,7 @@ import type {
   StudioAssistantReference,
   StudioLogsQueryInput,
   StudioNormalizedRecord,
+  StudioPaymentTraceDetail,
   StudioSourceContext,
   StudioStructuredGroupDetail,
 } from "./types";
@@ -24,6 +26,7 @@ interface BuildAssistantContextInput {
   selectedRecordId?: string;
   selectedGroupId?: string;
   selectedBackgroundRunId?: string;
+  selectedPaymentTraceId?: string;
   projectPath: string;
   userQuestion: string;
 }
@@ -33,6 +36,7 @@ export interface StudioAssistantContext {
   selectedRecordSource: StudioSourceContext | null;
   selectedGroup: StudioStructuredGroupDetail | null;
   selectedBackgroundRun: StudioBackgroundJobRunDetail | null;
+  selectedPaymentTrace: StudioPaymentTraceDetail | null;
   evidenceRecords: StudioNormalizedRecord[];
   references: StudioAssistantReference[];
 }
@@ -57,6 +61,13 @@ export async function buildAssistantContext(
           records: input.allRecords,
         })
       : null;
+  const selectedPaymentTrace =
+    input.selectedPaymentTraceId
+      ? buildPaymentTraceDetail({
+          traceId: input.selectedPaymentTraceId,
+          records: input.allRecords,
+        })
+      : null;
   const filteredRecords = filterRecords(input.allRecords, input.filters);
   const scored = new Map<string, { record: StudioNormalizedRecord; score: number }>();
 
@@ -78,6 +89,15 @@ export async function buildAssistantContext(
       const matched = recordsById.get(event.recordId);
       if (matched) {
         addRecord(matched, 1_050);
+      }
+    }
+  }
+
+  if (selectedPaymentTrace) {
+    for (const event of selectedPaymentTrace.timeline) {
+      const matched = recordsById.get(event.recordId);
+      if (matched) {
+        addRecord(matched, 1_075);
       }
     }
   }
@@ -172,6 +192,7 @@ export async function buildAssistantContext(
     selectedGroup,
     selectedRecord,
     selectedBackgroundRun,
+    selectedPaymentTrace,
     allGroups: groups,
   });
   const selectedRecordSource = selectedRecord
@@ -183,6 +204,7 @@ export async function buildAssistantContext(
     selectedRecordSource,
     selectedGroup,
     selectedBackgroundRun,
+    selectedPaymentTrace,
     evidenceRecords,
     references,
   };
@@ -193,6 +215,7 @@ function buildReferences(input: {
   selectedGroup: StudioStructuredGroupDetail | null;
   selectedRecord: StudioNormalizedRecord | null;
   selectedBackgroundRun: StudioBackgroundJobRunDetail | null;
+  selectedPaymentTrace: StudioPaymentTraceDetail | null;
   allGroups: Map<string, StudioStructuredGroupDetail>;
 }): StudioAssistantReference[] {
   const references: StudioAssistantReference[] = [];
@@ -205,6 +228,19 @@ function buildReferences(input: {
       fileName: null,
       timestamp: input.selectedBackgroundRun.run.finishedAt ?? input.selectedBackgroundRun.run.startedAt,
       reason: "selected background run",
+    });
+  }
+
+  if (input.selectedPaymentTrace) {
+    references.push({
+      kind: "payment-trace",
+      id: input.selectedPaymentTrace.trace.id,
+      label: input.selectedPaymentTrace.trace.correlationLabel,
+      fileName: null,
+      timestamp:
+        input.selectedPaymentTrace.trace.finishedAt ??
+        input.selectedPaymentTrace.trace.startedAt,
+      reason: "selected payment trace",
     });
   }
 

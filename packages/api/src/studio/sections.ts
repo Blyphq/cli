@@ -57,10 +57,35 @@ const BUILTIN_SECTION_DEFINITIONS: SectionDefinition[] = [
     kind: "builtin",
     match(record) {
       return buildDomainMatch(record, {
-        routes: ["/checkout/*", "/payment/*", "/webhook/stripe", "/billing/*"],
-        fields: ["payment.*", "cart.*", "order.*", "stripe.*", "invoice.*"],
+        routes: [
+          "/checkout/*",
+          "/payment/*",
+          "/webhook/stripe",
+          "/webhook/stripe/*",
+          "/billing/*",
+          "/subscribe/*",
+          "/order/*",
+        ],
+        fields: [
+          "payment.*",
+          "cart.*",
+          "order.*",
+          "stripe.*",
+          "stripe.webhook*",
+          "invoice.*",
+          "subscription.*",
+          "webhook.stripe*",
+        ],
         statuses: [402],
-        messages: ["payment", "charge", "invoice", "subscription", "declined"],
+        messages: [
+          "payment",
+          "charge",
+          "invoice",
+          "subscription",
+          "declined",
+          "checkout",
+          "refund",
+        ],
       });
     },
   },

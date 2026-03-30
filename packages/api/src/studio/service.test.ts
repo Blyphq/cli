@@ -35,6 +35,8 @@ import {
   getStudioLogs,
   getStudioMeta,
   getStudioOverview,
+  getStudioPaymentTrace,
+  getStudioPayments,
   getStudioRecordSource,
   replyWithStudioAssistant,
   streamStudioAssistant,
@@ -2616,6 +2618,100 @@ function buildDbConfig({
     loadError: null,
   };
 }
+
+it("builds payment traces, failure breakdowns, and webhook summaries", async () => {
+  const projectDir = await createProject();
+  const logDir = path.join(projectDir, "logs");
+
+  await mkdir(logDir, { recursive: true });
+  await writeFile(
+    path.join(logDir, "log.ndjson"),
+    [
+      createLogLine({
+        timestamp: "2026-03-13T12:00:00.000Z",
+        level: "info",
+        message: "checkout started",
+        traceId: "trace-success",
+        path: "/checkout/start",
+        user: { id: "1842" },
+        cart: { total: 9999, currency: "usd" },
+      }),
+      createLogLine({
+        timestamp: "2026-03-13T12:00:00.084Z",
+        level: "info",
+        message: "POST /api/checkout",
+        traceId: "trace-success",
+        method: "POST",
+        path: "/api/checkout",
+        statusCode: 200,
+        responseTime: 84,
+      }),
+      createLogLine({
+        timestamp: "2026-03-13T12:00:00.189Z",
+        level: "info",
+        message: "payment authorized",
+        traceId: "trace-success",
+        payment: { status: "processing", amount: 9999, currency: "usd" },
+      }),
+      createLogLine({
+        timestamp: "2026-03-13T12:00:00.243Z",
+        level: "info",
+        message: "payment succeeded",
+        traceId: "trace-success",
+        payment: { status: "succeeded", amount: 9999, currency: "usd" },
+      }),
+      createLogLine({
+        timestamp: "2026-03-13T12:00:01.000Z",
+        level: "info",
+        message: "stripe webhook received",
+        traceId: "trace-success",
+        path: "/webhook/stripe",
+        webhook: { type: "payment_intent.succeeded" },
+        data: { event: { id: "evt_1", type: "payment_intent.succeeded" } },
+      }),
+      createLogLine({
+        timestamp: "2026-03-13T12:01:00.000Z",
+        level: "info",
+        message: "checkout started",
+        traceId: "trace-declined",
+        path: "/checkout/start",
+        user: { id: "2112" },
+        cart: { total: 4200, currency: "usd" },
+      }),
+      createLogLine({
+        timestamp: "2026-03-13T12:01:00.243Z",
+        level: "error",
+        message: "payment.status=declined",
+        traceId: "trace-declined",
+        path: "/payment/confirm",
+        statusCode: 402,
+        payment: { status: "declined", amount: 4200, currency: "usd" },
+        stripe: { error: { code: "card_declined" } },
+        error: { message: "Card declined by issuer" },
+      }),
+    ].join(""),
+  );
+
+  const payments = await getStudioPayments({ projectPath: projectDir, limit: 20 });
+  const declinedTrace = payments.traces.find((trace) => trace.status === "DECLINED");
+  const successTrace = payments.traces.find((trace) => trace.status === "COMPLETED");
+  const detail = await getStudioPaymentTrace({
+    projectPath: projectDir,
+    traceId: declinedTrace?.id ?? "",
+  });
+
+  expect(payments.stats.checkoutAttempts).toBe(2);
+  expect(payments.stats.failedPayments).toBe(1);
+  expect(payments.stats.webhookEvents).toBe(1);
+  expect(payments.stats.revenueProcessed?.display).toContain("99.99");
+  expect(payments.failures[0]).toMatchObject({
+    reason: "Card declined",
+    count: 1,
+  });
+  expect(successTrace?.amount?.display).toContain("99.99");
+  expect(detail?.trace.status).toBe("DECLINED");
+  expect(detail?.timeline.some((event) => event.kind === "ERROR")).toBe(true);
+});
 
 async function createProject(): Promise<string> {
   const directory = await mkdtemp(path.join(os.tmpdir(), "blyp-studio-"));
