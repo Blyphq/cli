@@ -22,6 +22,17 @@ export function AgentsView({
   onSelectTask,
   onAskAi,
 }: AgentsViewProps) {
+  const sessionStart =
+    agents?.tasks.reduce<string | null>((earliest, task) => {
+      if (!task.startedAt) {
+        return earliest;
+      }
+      if (!earliest) {
+        return task.startedAt;
+      }
+      return Date.parse(task.startedAt) < Date.parse(earliest) ? task.startedAt : earliest;
+    }, null) ?? null;
+
   if (!agents && loading) {
     return (
       <EmptyState
@@ -49,6 +60,7 @@ export function AgentsView({
         tasks={agents?.tasks ?? []}
         loading={loading}
         selectedTaskId={selectedTaskId}
+        sessionStart={sessionStart}
         onSelect={onSelectTask}
       />
       <AgentFailureAnalysisPanel

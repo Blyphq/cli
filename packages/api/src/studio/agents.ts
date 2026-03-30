@@ -172,13 +172,7 @@ export function getAgentTaskDetail(input: {
   records: StudioNormalizedRecord[];
   taskId: string;
 }): StudioAgentTaskDetail | null {
-  const analysis = analyzeAgentRecords({ records: input.records, query: {} });
-  const task = analysis.tasks.find((candidate) => candidate.id === input.taskId);
-  if (!task) {
-    return null;
-  }
-
-  const rebuilt = buildTasks(
+  const task = buildTasks(
     input.records
       .filter(isAgentCandidate)
       .map(toCandidate)
@@ -193,11 +187,11 @@ export function getAgentTaskDetail(input: {
     ),
   ).find((candidate) => candidate.task.id === input.taskId);
 
-  return rebuilt
+  return task
     ? {
-        task: rebuilt.task,
-        steps: rebuilt.steps,
-        failure: rebuilt.failure,
+        task: task.task,
+        steps: task.steps,
+        failure: task.failure,
       }
     : null;
 }

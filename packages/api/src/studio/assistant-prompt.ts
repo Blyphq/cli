@@ -100,19 +100,19 @@ function renderEvidence(input: PromptEvidence): string {
           records: input.selectedGroup.records.slice(0, 5).map(summarizeRecord),
         },
       }
-    : input.selectedBackgroundRun
-      ? {
-          backgroundRun: {
-            run: input.selectedBackgroundRun.run,
-            timeline: input.selectedBackgroundRun.timeline.slice(0, 20),
-          },
-        }
-      : input.selectedAgentTask
+    : input.selectedAgentTask
         ? {
             agentTask: {
               task: input.selectedAgentTask.task,
               steps: input.selectedAgentTask.steps.slice(0, 20),
               failure: input.selectedAgentTask.failure,
+            },
+          }
+      : input.selectedBackgroundRun
+        ? {
+            backgroundRun: {
+              run: input.selectedBackgroundRun.run,
+              timeline: input.selectedBackgroundRun.timeline.slice(0, 20),
             },
           }
     : input.selectedRecord

@@ -121,6 +121,35 @@ describe("agents analyzer", () => {
       status: "TIMEOUT",
     });
   });
+
+  it("finds task detail beyond the default overview pagination window", () => {
+    const records = Array.from({ length: 101 }, (_, index) =>
+      record(
+        String(index + 1),
+        new Date(Date.UTC(2026, 2, 13, 10, index, 0, 0)).toISOString(),
+        {
+        message: "agent task started",
+        raw: {
+          agent: {
+            task_id: `task-${index + 1}`,
+            taskName: `Task ${index + 1}`,
+            status: "started",
+          },
+        },
+      },
+      ),
+    );
+
+    const detail = getAgentTaskDetail({
+      records,
+      taskId: "agent:task:task-101",
+    });
+
+    expect(detail?.task).toMatchObject({
+      id: "agent:task:task-101",
+      title: "Task 101",
+    });
+  });
 });
 
 function record(

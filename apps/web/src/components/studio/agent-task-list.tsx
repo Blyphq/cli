@@ -14,6 +14,7 @@ interface AgentTaskListProps {
   tasks: StudioAgentsOverview["tasks"];
   loading: boolean;
   selectedTaskId: string | null;
+  sessionStart: string | null;
   onSelect(taskId: string): void;
 }
 
@@ -21,6 +22,7 @@ export function AgentTaskList({
   tasks,
   loading,
   selectedTaskId,
+  sessionStart,
   onSelect,
 }: AgentTaskListProps) {
   if (!loading && tasks.length === 0) {
@@ -53,7 +55,7 @@ export function AgentTaskList({
               <span className="text-xs text-muted-foreground">{formatDurationMs(task.durationMs)}</span>
             </div>
             <div className="mt-3 space-y-2">
-              <TaskMeta task={task} />
+              <TaskMeta task={task} sessionStart={sessionStart} />
             </div>
           </button>
         ))}
@@ -62,7 +64,13 @@ export function AgentTaskList({
   );
 }
 
-function TaskMeta({ task }: { task: StudioAgentTask }) {
+function TaskMeta({
+  task,
+  sessionStart,
+}: {
+  task: StudioAgentTask;
+  sessionStart: string | null;
+}) {
   const previews = [
     `${task.stepCount} steps`,
     `${task.llmCallCount} LLM`,
@@ -78,7 +86,7 @@ function TaskMeta({ task }: { task: StudioAgentTask }) {
         ))}
         {task.startedAt ? (
           <span>
-            Start {formatRelativeToSessionStart(task.startedAt, task.startedAt)}
+            Start {formatRelativeToSessionStart(task.startedAt, sessionStart)}
           </span>
         ) : null}
       </div>
