@@ -350,6 +350,65 @@ describe("studio router", () => {
       ]),
     );
   });
+
+  it("serves agents routes and accepts agent-task assistant selections", async () => {
+    const projectDir = await createProject();
+    const logDir = path.join(projectDir, "logs");
+
+    await mkdir(logDir, { recursive: true });
+    await writeFile(
+      path.join(logDir, "log.ndjson"),
+      [
+        JSON.stringify({
+          timestamp: "2026-03-13T18:00:00.000Z",
+          level: "info",
+          message: "agent task started",
+          agent: { task_id: "task-router", taskName: "Summarise run", status: "started" },
+        }),
+        JSON.stringify({
+          timestamp: "2026-03-13T18:00:00.300Z",
+          level: "error",
+          message: "tool call failed",
+          agent: { task_id: "task-router" },
+          tool: { name: "search_database", durationMs: 300, status: "failed" },
+          error: { message: "db unavailable" },
+        }),
+      ].join("\n") + "\n",
+    );
+
+    process.env.OPENROUTER_API_KEY = "test-key";
+    process.env.OPENROUTER_MODEL = "openai/gpt-5.4";
+    __setGenerateTextForTests(async () => ({ text: "Use the failed task timeline." }));
+
+    const caller = appRouter.createCaller({ session: null });
+    const agents = await caller.studio.agents({ projectPath: projectDir, limit: 10 });
+    const detail = await caller.studio.agentTask({
+      projectPath: projectDir,
+      taskId: agents.tasks[0]!.id,
+    });
+    const description = await caller.studio.describeSelection({
+      projectPath: projectDir,
+      history: [],
+      filters: {},
+      selectedAgentTaskId: agents.tasks[0]!.id,
+    });
+
+    expect(agents.tasks[0]).toMatchObject({
+      title: "Summarise run",
+      status: "FAILED",
+    });
+    expect(detail?.failure).toMatchObject({
+      errorKind: "tool",
+    });
+    expect(description.references).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "agent-task",
+          label: "Summarise run",
+        }),
+      ]),
+    );
+  });
 });
 
 async function createProject(): Promise<string> {

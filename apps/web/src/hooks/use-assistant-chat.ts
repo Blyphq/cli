@@ -101,6 +101,10 @@ export function useAssistantChat({
             assistantScopeMode === "selection" && selection?.kind === "background-run"
               ? selection.id
               : undefined,
+          selectedAgentTaskId:
+            assistantScopeMode === "selection" && selection?.kind === "agent-task"
+              ? selection.id
+              : undefined,
           model: selectedModel || undefined,
         },
       }),
@@ -155,6 +159,8 @@ export function useAssistantChat({
           ? "selected structured group"
           : selection?.kind === "background-run"
             ? "selected background run"
+            : selection?.kind === "agent-task"
+              ? "selected agent task"
           : "no selection";
 
   useEffect(() => {
@@ -301,6 +307,8 @@ export function useAssistantChat({
         ? "group" as const
         : reference.kind === "background-run"
           ? "background-run" as const
+          : reference.kind === "agent-task"
+            ? "agent-task" as const
           : "record" as const,
     id: reference.id,
   });

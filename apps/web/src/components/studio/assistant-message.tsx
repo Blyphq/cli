@@ -105,6 +105,8 @@ export function AssistantMessage({
                           ? "Group"
                           : reference.kind === "background-run"
                             ? "Run"
+                            : reference.kind === "agent-task"
+                              ? "Task"
                             : "Log"}
                         : {reference.label}
                       </ChainOfThoughtSearchResult>

@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 
 import { BackgroundJobDetailPanel } from "@/components/studio/background-job-detail-panel";
 import { BackgroundJobsView } from "@/components/studio/background-jobs-view";
+import { AgentTaskDetailPanel } from "@/components/studio/agent-task-detail-panel";
+import { AgentsView } from "@/components/studio/agents-view";
 import { ErrorsView } from "@/components/studio/errors-view";
 import { AuthView } from "@/components/studio/auth-view";
 import { AssistantSheet } from "@/components/studio/assistant-sheet";
@@ -29,6 +31,7 @@ import {
 import { useStudioData } from "@/hooks";
 import {
   isAuthSection,
+  isAgentsSection,
   isBackgroundSection,
   isDatabaseSection,
   isErrorsSection,
@@ -49,6 +52,10 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
   const [expandedBackgroundRunId, setExpandedBackgroundRunId] = useState<string | null>(null);
   const [pendingDatabaseAiPrompt, setPendingDatabaseAiPrompt] = useState<{
     recordId: string;
+    prompt: string;
+  } | null>(null);
+  const [pendingAgentTaskAiPrompt, setPendingAgentTaskAiPrompt] = useState<{
+    taskId: string;
     prompt: string;
   } | null>(null);
 
@@ -105,6 +112,7 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
   const shouldSyncSelection =
     !isOverviewSection(section) &&
     !isAuthSection(section) &&
+    !isAgentsSection(section) &&
     !isDatabaseSection(section) &&
     !isBackgroundSection(section) &&
     !isErrorsSection(section);
@@ -201,6 +209,37 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
     selection,
   ]);
 
+  useEffect(() => {
+    if (!pendingAgentTaskAiPrompt) {
+      return;
+    }
+
+    if (selection?.kind !== "agent-task" || selection.id !== pendingAgentTaskAiPrompt.taskId) {
+      return;
+    }
+
+    const prompt = pendingAgentTaskAiPrompt.prompt;
+    setPendingAgentTaskAiPrompt(null);
+
+    if (!assistant.activeChatId || assistant.assistantScopeMode === "standalone") {
+      assistant.createSelectionChatAndSubmit(prompt);
+      return;
+    }
+
+    assistant.openAssistant();
+    void assistant.submitAssistantPrompt(prompt, "describe-selection", {
+      scopeMode: "selection",
+    });
+  }, [
+    assistant.activeChatId,
+    assistant.assistantScopeMode,
+    assistant.createSelectionChatAndSubmit,
+    assistant.openAssistant,
+    assistant.submitAssistantPrompt,
+    pendingAgentTaskAiPrompt,
+    selection,
+  ]);
+
   const canEdit = Boolean(projectPath && assistant.activeChatId);
 
   const handleReferenceSelect = (
@@ -217,6 +256,8 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
     selection?.kind === "group" ? studioData.selectedGroup : null;
   const selectedBackgroundRun =
     selection?.kind === "background-run" ? studioData.selectedBackgroundRun : null;
+  const selectedAgentTask =
+    selection?.kind === "agent-task" ? studioData.selectedAgentTask : null;
   const selectedErrorGroup =
     selection?.kind === "error-group" ? studioData.selectedErrorGroup : null;
 
@@ -279,6 +320,29 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
     setSelection({ kind: "background-run", id: detail.run.id });
     assistant.createSelectionChatAndSubmit(
       `Diagnose this failed background job run. Use the full run timeline, identify the failing step, explain the likely root cause, and propose the smallest defensible fix. Job: ${detail.run.jobName}. Status: ${detail.run.status}. Failure: ${detail.run.failure?.message ?? "Unknown failure"}.`,
+    );
+  };
+
+  const handleAskAiOnAgentTask = () => {
+    const detail = studioData.agentTaskQuery.data;
+    if (!detail) {
+      return;
+    }
+
+    setSection("agents");
+    setSelection({ kind: "agent-task", id: detail.task.id });
+    assistant.createSelectionChatAndSubmit(
+      [
+        "Diagnose this failed agent task using the full correlated timeline in scope.",
+        `Task: ${detail.task.title}`,
+        `Status: ${detail.task.status}`,
+        detail.failure?.failedStepName ? `Failed step: ${detail.failure.failedStepName}` : null,
+        detail.failure?.errorKind ? `Failure kind: ${detail.failure.errorKind}` : null,
+        detail.failure?.errorMessage ? `Failure: ${detail.failure.errorMessage}` : null,
+        "Separate likely LLM, tool, and agent-logic causes, then propose the smallest defensible fix.",
+      ]
+        .filter(Boolean)
+        .join("\n\n"),
     );
   };
 
@@ -403,6 +467,8 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
                 studioData.errorsQuery.error?.message ??
                 studioData.overviewQuery.error?.message ??
                 studioData.authQuery.error?.message ??
+                studioData.agentsQuery.error?.message ??
+                studioData.agentTaskQuery.error?.message ??
                 studioData.backgroundJobsQuery.error?.message ??
                 studioData.backgroundJobRunQuery.error?.message ??
                 studioData.databaseQuery.error?.message ??
@@ -496,6 +562,22 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
                 setSelection({ kind: "record", id: query.recordId });
               }}
             />
+          ) : isAgentsSection(section) ? (
+            <AgentsView
+              agents={studioData.agentsQuery.data}
+              loading={studioData.agentsQuery.isLoading}
+              selectedTaskId={selection?.kind === "agent-task" ? selection.id : null}
+              onSelectTask={(taskId) => setSelection({ kind: "agent-task", id: taskId })}
+              onAskAi={(taskId) => {
+                setSection("agents");
+                setPendingAgentTaskAiPrompt({
+                  taskId,
+                  prompt:
+                    "Diagnose this failed agent task using the full correlated timeline in scope. Identify the failing step, separate likely LLM, tool, and agent-logic causes, and propose the smallest defensible fix.",
+                });
+                setSelection({ kind: "agent-task", id: taskId });
+              }}
+            />
           ) : isBackgroundSection(section) ? (
             <BackgroundJobsView
               page={studioData.backgroundJobsQuery.data}
@@ -585,7 +667,13 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
               }}
             />
           ) : (
-            selection?.kind === "background-run" ? (
+            selection?.kind === "agent-task" ? (
+              <AgentTaskDetailPanel
+                detail={selectedAgentTask}
+                loading={studioData.agentTaskQuery.isLoading}
+                onAskAi={handleAskAiOnAgentTask}
+              />
+            ) : selection?.kind === "background-run" ? (
               <BackgroundJobDetailPanel
                 detail={selectedBackgroundRun}
                 loading={studioData.backgroundJobRunQuery.isLoading}

@@ -7,6 +7,8 @@ import {
   describeStudioSelection,
   generateStudioChatTitle,
   getStudioAssistantStatus,
+  getStudioAgentTask,
+  getStudioAgents,
   addStudioCustomSection,
   getStudioAuth,
   getStudioBackgroundJobRun,
@@ -77,6 +79,16 @@ const studioDatabaseInput = z.object({
   limit: z.number().int().positive().max(500).optional(),
 });
 
+const studioAgentsInput = z.object({
+  projectPath: z.string().optional(),
+  fileId: z.string().optional(),
+  from: z.string().optional(),
+  to: z.string().optional(),
+  search: z.string().optional(),
+  offset: z.number().int().min(0).optional(),
+  limit: z.number().int().positive().max(500).optional(),
+});
+
 const studioBackgroundJobsInput = z.object({
   projectPath: z.string().optional(),
   fileId: z.string().optional(),
@@ -114,6 +126,7 @@ const assistantInput = z.object({
   selectedRecordId: z.string().optional(),
   selectedGroupId: z.string().optional(),
   selectedBackgroundRunId: z.string().optional(),
+  selectedAgentTaskId: z.string().optional(),
 });
 
 export const studioRouter = router({
@@ -156,6 +169,21 @@ export const studioRouter = router({
   database: publicProcedure
     .input(studioDatabaseInput.optional())
     .query(({ input }) => getStudioDatabase(input ?? {})),
+  agents: publicProcedure
+    .input(studioAgentsInput.optional())
+    .query(({ input }) => getStudioAgents(input ?? {})),
+  agentTask: publicProcedure
+    .input(
+      z.object({
+        projectPath: z.string().optional(),
+        taskId: z.string(),
+        fileId: z.string().optional(),
+        from: z.string().optional(),
+        to: z.string().optional(),
+        search: z.string().optional(),
+      }),
+    )
+    .query(({ input }) => getStudioAgentTask(input)),
   fileLogs: publicProcedure
     .input(
       z.object({

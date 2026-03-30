@@ -56,6 +56,7 @@ export interface StreamAssistantInput {
   selectedRecordId?: string;
   selectedGroupId?: string;
   selectedBackgroundRunId?: string;
+  selectedAgentTaskId?: string;
   messages: UIMessage[];
   mode?: "chat" | "describe-selection";
   ai: {
@@ -89,6 +90,7 @@ export async function replyWithAssistant(
     selectedRecordId: input.selectedRecordId,
     selectedGroupId: input.selectedGroupId,
     selectedBackgroundRunId: input.selectedBackgroundRunId,
+    selectedAgentTaskId: input.selectedAgentTaskId,
     projectPath: input.projectPath,
     userQuestion: latestUserMessage,
   });
@@ -103,6 +105,7 @@ export async function replyWithAssistant(
       selectedRecordSource: context.selectedRecordSource,
       selectedGroup: context.selectedGroup,
       selectedBackgroundRun: context.selectedBackgroundRun,
+      selectedAgentTask: context.selectedAgentTask,
       records: context.evidenceRecords,
       references: context.references,
       userQuestion: latestUserMessage,
@@ -131,6 +134,7 @@ export async function describeSelectionWithAssistant(
     selectedRecordId: input.selectedRecordId,
     selectedGroupId: input.selectedGroupId,
     selectedBackgroundRunId: input.selectedBackgroundRunId,
+    selectedAgentTaskId: input.selectedAgentTaskId,
     projectPath: input.projectPath,
     userQuestion: "Describe this selection.",
   });
@@ -145,6 +149,7 @@ export async function describeSelectionWithAssistant(
       selectedRecordSource: context.selectedRecordSource,
       selectedGroup: context.selectedGroup,
       selectedBackgroundRun: context.selectedBackgroundRun,
+      selectedAgentTask: context.selectedAgentTask,
       records: context.evidenceRecords,
       references: context.references,
       userQuestion: "Describe this selection.",
@@ -179,6 +184,7 @@ export async function streamAssistant(
     selectedRecordId: input.selectedRecordId,
     selectedGroupId: input.selectedGroupId,
     selectedBackgroundRunId: input.selectedBackgroundRunId,
+    selectedAgentTaskId: input.selectedAgentTaskId,
     projectPath: input.projectPath,
     userQuestion: latestUserMessage,
   });
@@ -191,6 +197,7 @@ export async function streamAssistant(
           selectedRecordSource: context.selectedRecordSource,
           selectedGroup: context.selectedGroup,
           selectedBackgroundRun: context.selectedBackgroundRun,
+          selectedAgentTask: context.selectedAgentTask,
           records: context.evidenceRecords,
           references: context.references,
           userQuestion: latestUserMessage,
@@ -204,6 +211,7 @@ export async function streamAssistant(
           selectedRecordSource: context.selectedRecordSource,
           selectedGroup: context.selectedGroup,
           selectedBackgroundRun: context.selectedBackgroundRun,
+          selectedAgentTask: context.selectedAgentTask,
           records: context.evidenceRecords,
           references: context.references,
           userQuestion: latestUserMessage,

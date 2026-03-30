@@ -21,6 +21,8 @@ import {
   addStudioCustomSection,
   describeStudioSelection,
   getStudioAssistantStatus,
+  getStudioAgentTask,
+  getStudioAgents,
   getStudioAuth,
   getStudioBackgroundJobRun,
   getStudioBackgroundJobs,
@@ -1137,6 +1139,132 @@ describe("studio service", () => {
         expect.objectContaining({
           kind: "background-run",
           label: "Queue Rebuild",
+        }),
+      ]),
+    );
+  });
+
+  it("detects agent tasks and builds llm/tool breakdowns", async () => {
+    const projectDir = await createProject();
+    const logDir = path.join(projectDir, "logs");
+
+    await mkdir(logDir, { recursive: true });
+    await writeFile(
+      path.join(logDir, "log.ndjson"),
+      [
+        createLogLine({
+          timestamp: "2026-03-13T15:00:00.000Z",
+          level: "info",
+          message: "agent task started",
+          agent: { task_id: "task-a", taskName: "Summarise user feedback", status: "started" },
+          input: "Summarise Q3 feedback",
+        }),
+        createLogLine({
+          timestamp: "2026-03-13T15:00:00.012Z",
+          level: "info",
+          message: "tool call",
+          agent: { task_id: "task-a" },
+          tool: { name: "retrieve_documents", durationMs: 12, success: true },
+          retrieval: { count: 12 },
+        }),
+        createLogLine({
+          timestamp: "2026-03-13T15:00:00.340Z",
+          level: "info",
+          message: "completion",
+          agent: { task_id: "task-a" },
+          llm: { model: "anthropic/claude-3.5-sonnet", durationMs: 312 },
+          tokens: { prompt: 1200, completion: 642, total: 1842 },
+        }),
+        createLogLine({
+          timestamp: "2026-03-13T15:00:04.200Z",
+          level: "info",
+          message: "agent task completed",
+          agent: { task_id: "task-a", status: "completed", output_length: 847 },
+        }),
+        createLogLine({
+          timestamp: "2026-03-13T15:01:00.000Z",
+          level: "error",
+          message: "tool call failed",
+          traceId: "trace-failed",
+          tool: { name: "search_database", durationMs: 800, status: "failed" },
+          error: { message: "database unavailable" },
+        }),
+      ].join(""),
+    );
+
+    const meta = await getStudioMeta(projectDir);
+    const agents = await getStudioAgents({ projectPath: projectDir, limit: 10 });
+    const failedTask = agents.tasks.find((task) => task.status === "FAILED");
+    const failedDetail = await getStudioAgentTask({
+      projectPath: projectDir,
+      taskId: failedTask?.id ?? "",
+    });
+
+    expect(meta.sections.find((section) => section.id === "agents")).toBeTruthy();
+    expect(agents.stats).toMatchObject({
+      agentTasks: 2,
+      llmCalls: 1,
+      toolCalls: 2,
+      failedTasks: 1,
+      totalTokens: 1842,
+    });
+    expect(agents.llmCalls[0]).toMatchObject({
+      model: "anthropic/claude-3.5-sonnet",
+      totalTokens: 1842,
+      durationMs: 312,
+    });
+    expect(agents.toolCalls.find((call) => call.name === "search_database")).toMatchObject({
+      outcome: "failure",
+      errorMessage: "database unavailable",
+    });
+    expect(failedDetail?.failure).toMatchObject({
+      errorKind: "tool",
+      errorMessage: "database unavailable",
+    });
+  });
+
+  it("includes selected agent tasks in assistant evidence", async () => {
+    const projectDir = await createProject();
+    const logDir = path.join(projectDir, "logs");
+
+    await mkdir(logDir, { recursive: true });
+    await writeFile(
+      path.join(logDir, "log.ndjson"),
+      [
+        createLogLine({
+          timestamp: "2026-03-13T16:00:00.000Z",
+          level: "info",
+          message: "agent task started",
+          agent: { task_id: "task-assistant", taskName: "Classify ticket", status: "started" },
+        }),
+        createLogLine({
+          timestamp: "2026-03-13T16:00:00.300Z",
+          level: "error",
+          message: "completion failed",
+          agent: { task_id: "task-assistant" },
+          llm: { model: "openai/gpt-4o-mini", status: "failed" },
+          error: { message: "prompt blocked" },
+        }),
+      ].join(""),
+    );
+
+    process.env.OPENROUTER_API_KEY = "test-key";
+    process.env.OPENROUTER_MODEL = "openai/gpt-5.4";
+    __setGenerateTextForTests(async () => ({ text: "Use the failed task timeline." }));
+
+    const overview = await getStudioAgents({ projectPath: projectDir, limit: 10 });
+    const description = await describeStudioSelection({
+      projectPath: projectDir,
+      history: [],
+      filters: {},
+      selectedAgentTaskId: overview.tasks[0]?.id,
+    });
+
+    expect(description.references).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "agent-task",
+          label: "Classify ticket",
         }),
       ]),
     );

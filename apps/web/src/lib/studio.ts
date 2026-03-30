@@ -13,6 +13,7 @@ export type StudioAuthOverview = RouterOutputs["studio"]["auth"];
 export type StudioBackgroundJobsOverview = RouterOutputs["studio"]["backgroundJobs"];
 export type StudioBackgroundJobRunDetail = NonNullable<RouterOutputs["studio"]["backgroundJobRun"]>;
 export type StudioDatabaseOverview = RouterOutputs["studio"]["database"];
+export type StudioAgentsOverview = RouterOutputs["studio"]["agents"];
 export type StudioOverview = RouterOutputs["studio"]["overview"];
 export type StudioAuthEvent = StudioAuthOverview["timeline"][number];
 export type StudioAuthSuspiciousPattern = StudioAuthOverview["suspiciousPatterns"][number];
@@ -21,6 +22,11 @@ export type StudioBackgroundJobRun = StudioBackgroundJobsOverview["runs"][number
 export type StudioBackgroundJobPerformanceRow = StudioBackgroundJobsOverview["performance"][number];
 export type StudioBackgroundJobTimelineEvent = StudioBackgroundJobRunDetail["timeline"][number];
 export type StudioDatabaseQueryEvent = StudioDatabaseOverview["queries"][number];
+export type StudioAgentTask = StudioAgentsOverview["tasks"][number];
+export type StudioAgentTaskDetail = NonNullable<RouterOutputs["studio"]["agentTask"]>;
+export type StudioAgentTaskStep = StudioAgentTaskDetail["steps"][number];
+export type StudioAgentLlmCallRow = StudioAgentsOverview["llmCalls"][number];
+export type StudioAgentToolCallRow = StudioAgentsOverview["toolCalls"][number];
 export type StudioDatabaseTransactionSummary = StudioDatabaseOverview["transactions"][number];
 export type StudioDatabaseMigrationEvent = StudioDatabaseOverview["migrationEvents"][number];
 export type StudioRecord = StudioLogsPage["records"][number];
@@ -63,6 +69,7 @@ export type StudioSelection =
   | { kind: "record"; id: string }
   | { kind: "group"; id: string }
   | { kind: "background-run"; id: string }
+  | { kind: "agent-task"; id: string }
   | { kind: "error-group"; id: string }
   | { kind: "error-occurrence"; id: string }
   | null;
@@ -586,6 +593,10 @@ export function isDatabaseSection(section: StudioSectionId): boolean {
   return section === "database";
 }
 
+export function isAgentsSection(section: StudioSectionId): boolean {
+  return section === "agents";
+}
+
 export function isBackgroundSection(section: StudioSectionId): boolean {
   return section === "background";
 }
@@ -663,6 +674,41 @@ export function formatRelativeToSessionStart(
   }
 
   return `+${seconds}s`;
+}
+
+export function getAgentTaskStatusBadgeVariant(
+  status: StudioAgentTask["status"],
+): StudioBadgeVariant {
+  switch (status) {
+    case "FAILED":
+      return "destructive";
+    case "COMPLETED":
+      return "default";
+    case "TIMEOUT":
+      return "secondary";
+    default:
+      return "outline";
+  }
+}
+
+export function formatTokenCount(value: number | null | undefined): string {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return "n/a";
+  }
+
+  if (value >= 1000) {
+    return `${(value / 1000).toFixed(1)}k`;
+  }
+
+  return `${Math.round(value)}`;
+}
+
+export function formatApproxUsd(value: number | null | undefined): string {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return "n/a";
+  }
+
+  return `Approx. $${value.toFixed(value < 0.01 ? 4 : 2)}`;
 }
 
 export function getErrorGroupStatusLabel(

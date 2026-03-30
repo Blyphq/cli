@@ -1,4 +1,5 @@
 import type {
+  StudioAgentTaskDetail,
   StudioBackgroundJobRunDetail,
   StudioAssistantHistoryItem,
   StudioAssistantReference,
@@ -14,6 +15,7 @@ interface PromptEvidence {
   selectedRecordSource: StudioSourceContext | null;
   selectedGroup: StudioStructuredGroupDetail | null;
   selectedBackgroundRun: StudioBackgroundJobRunDetail | null;
+  selectedAgentTask: StudioAgentTaskDetail | null;
   records: StudioNormalizedRecord[];
   references: StudioAssistantReference[];
   userQuestion: string;
@@ -46,6 +48,8 @@ export function buildAssistantReplyPrompt(input: PromptEvidence): string {
     `Filters: ${input.filtersSummary}`,
     input.selectedGroup
       ? `Selected structured group: ${input.selectedGroup.group.title}`
+      : input.selectedAgentTask
+        ? `Selected agent task: ${input.selectedAgentTask.task.title}`
       : input.selectedBackgroundRun
         ? `Selected background run: ${input.selectedBackgroundRun.run.jobName}`
       : input.selectedRecord
@@ -66,6 +70,8 @@ export function buildDescribeSelectionPrompt(input: PromptEvidence): string {
     `Filters: ${input.filtersSummary}`,
     input.selectedGroup
       ? `Explain this structured group: ${input.selectedGroup.group.title}`
+      : input.selectedAgentTask
+        ? `Explain this agent task: ${input.selectedAgentTask.task.title}`
       : input.selectedBackgroundRun
         ? `Explain this background run: ${input.selectedBackgroundRun.run.jobName}`
       : `Explain this log: ${input.selectedRecord?.message ?? "unknown record"}`,
@@ -101,6 +107,14 @@ function renderEvidence(input: PromptEvidence): string {
             timeline: input.selectedBackgroundRun.timeline.slice(0, 20),
           },
         }
+      : input.selectedAgentTask
+        ? {
+            agentTask: {
+              task: input.selectedAgentTask.task,
+              steps: input.selectedAgentTask.steps.slice(0, 20),
+              failure: input.selectedAgentTask.failure,
+            },
+          }
     : input.selectedRecord
       ? { record: summarizeRecord(input.selectedRecord) }
       : null;

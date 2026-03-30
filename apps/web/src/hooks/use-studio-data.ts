@@ -14,6 +14,7 @@ import {
   isBackgroundSection,
   isDatabaseSection,
   isErrorsSection,
+  isAgentsSection,
   isOverviewSection,
 } from "@/lib/studio";
 import { useTRPC } from "@/utils/trpc";
@@ -46,6 +47,7 @@ export function useStudioData({
     isAllLogsSection(section) ||
     isAuthSection(section) ||
     isDatabaseSection(section) ||
+    isAgentsSection(section) ||
     isBackgroundSection(section) ||
     isErrorsSection(section)
       ? undefined
@@ -98,6 +100,7 @@ export function useStudioData({
       metaQuery.data.project.valid &&
       !isOverviewSection(section) &&
       !isAuthSection(section) &&
+      !isAgentsSection(section) &&
       !isBackgroundSection(section) &&
       !isDatabaseSection(section) &&
       !isErrorsSection(section),
@@ -176,6 +179,35 @@ export function useStudioData({
     }),
     enabled: metaQuery.isSuccess && metaQuery.data.project.valid && section === "database",
     refetchInterval: 1000,
+  });
+
+  const agentsQuery = useQuery({
+    ...trpc.studio.agents.queryOptions({
+      projectPath,
+      offset,
+      limit: 100,
+      fileId: filters.fileId || undefined,
+      from: filters.from || undefined,
+      to: filters.to || undefined,
+      search: deferredSearch || undefined,
+    }),
+    enabled: metaQuery.isSuccess && metaQuery.data.project.valid && isAgentsSection(section),
+    refetchInterval: 1000,
+  });
+
+  const agentTaskQuery = useQuery({
+    ...trpc.studio.agentTask.queryOptions({
+      projectPath,
+      taskId: selection?.kind === "agent-task" ? selection.id : "",
+      fileId: filters.fileId || undefined,
+      from: filters.from || undefined,
+      to: filters.to || undefined,
+      search: deferredSearch || undefined,
+    }),
+    enabled:
+      metaQuery.isSuccess &&
+      metaQuery.data.project.valid &&
+      selection?.kind === "agent-task",
   });
 
   const groupQuery = useQuery({
@@ -274,6 +306,8 @@ export function useStudioData({
     backgroundJobsQuery.isError ||
     backgroundJobRunQuery.isError ||
     databaseQuery.isError ||
+    agentsQuery.isError ||
+    agentTaskQuery.isError ||
     groupQuery.isError ||
     errorGroupQuery.isError ||
     recordQuery.isError;
@@ -296,6 +330,8 @@ export function useStudioData({
     backgroundJobsQuery,
     backgroundJobRunQuery,
     databaseQuery,
+    agentsQuery,
+    agentTaskQuery,
     groupQuery,
     errorGroupQuery,
     recordQuery,
@@ -306,6 +342,8 @@ export function useStudioData({
     selectedRecord,
     selectedGroup,
     selectedBackgroundRun,
+    selectedAgentTask:
+      selection?.kind === "agent-task" ? agentTaskQuery.data ?? null : null,
     selectedErrorGroup,
     isLoadingMeta,
     isProjectInvalid,
