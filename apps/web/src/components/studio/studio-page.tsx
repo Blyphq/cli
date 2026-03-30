@@ -18,6 +18,7 @@ import { LogFilesPanel } from "@/components/studio/log-files-panel";
 import { LogList } from "@/components/studio/log-list";
 import { ProjectConfigPanel } from "@/components/studio/project-config-panel";
 import { OverviewView } from "@/components/studio/overview-view";
+import { PaymentsView } from "@/components/studio/payments-view";
 import { SectionNavPanel } from "@/components/studio/section-nav-panel";
 import { StudioShell } from "@/components/studio/studio-shell";
 import { StudioToolbar } from "@/components/studio/studio-toolbar";
@@ -39,6 +40,7 @@ import {
   isErrorsSection,
   isHttpSection,
   isOverviewSection,
+  isPaymentsSection,
 } from "@/lib/studio";
 import { formatDurationMs } from "@/lib/studio";
 
@@ -53,6 +55,7 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
     new Date().toISOString(),
   );
   const [expandedBackgroundRunId, setExpandedBackgroundRunId] = useState<string | null>(null);
+  const [expandedPaymentTraceId, setExpandedPaymentTraceId] = useState<string | null>(null);
   const [pendingDatabaseAiPrompt, setPendingDatabaseAiPrompt] = useState<{
     recordId: string;
     prompt: string;
@@ -121,6 +124,7 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
     !isAgentsSection(section) &&
     !isDatabaseSection(section) &&
     !isBackgroundSection(section) &&
+    !isPaymentsSection(section) &&
     !isHttpSection(section) &&
     !isErrorsSection(section);
   useSyncSelectionFromEntries(entries, selection, setSelection, shouldSyncSelection);
@@ -169,6 +173,7 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
   useEffect(() => {
     setOffset(0);
     setExpandedBackgroundRunId(null);
+    setExpandedPaymentTraceId(null);
     if (section === "overview") {
       setOverviewConnectedAt(new Date().toISOString());
     }
@@ -299,6 +304,8 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
     selection?.kind === "background-run" ? studioData.selectedBackgroundRun : null;
   const selectedAgentTask =
     selection?.kind === "agent-task" ? studioData.selectedAgentTask : null;
+  const selectedPaymentTrace =
+    selection?.kind === "payment-trace" ? studioData.selectedPaymentTrace : null;
   const selectedErrorGroup =
     selection?.kind === "error-group" ? studioData.selectedErrorGroup : null;
 
@@ -381,6 +388,31 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
         detail.failure?.errorKind ? `Failure kind: ${detail.failure.errorKind}` : null,
         detail.failure?.errorMessage ? `Failure: ${detail.failure.errorMessage}` : null,
         "Separate likely LLM, tool, and agent-logic causes, then propose the smallest defensible fix.",
+      ]
+        .filter(Boolean)
+        .join("\n\n"),
+    );
+  };
+
+  const handleAskAiOnPaymentTrace = (trace = studioData.paymentTraceQuery.data?.trace) => {
+    if (!trace) {
+      return;
+    }
+
+    setSection("payments");
+    setSelection({ kind: "payment-trace", id: trace.id });
+    assistant.createSelectionChatAndSubmit(
+      [
+        "Diagnose this failed checkout/payment trace.",
+        `Trace: ${trace.correlationLabel}`,
+        `Trace ID: ${trace.id}`,
+        `Status: ${trace.status}`,
+        trace.userId ? `User ID: ${trace.userId}` : null,
+        trace.amount ? `Amount: ${trace.amount.display}` : null,
+        trace.durationMs != null ? `Duration: ${formatDurationMs(trace.durationMs)}` : null,
+        trace.failureReason ? `Failure reason: ${trace.failureReason}` : null,
+        `Webhook events: ${trace.webhookEventCount}`,
+        "Use the full selected trace to identify the failing step, missing confirmation signals, likely root cause, and the smallest defensible fix.",
       ]
         .filter(Boolean)
         .join("\n\n"),
@@ -519,6 +551,8 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
                 studioData.backgroundJobsQuery.error?.message ??
                 studioData.httpQuery.error?.message ??
                 studioData.backgroundJobRunQuery.error?.message ??
+                studioData.paymentsQuery.error?.message ??
+                studioData.paymentTraceQuery.error?.message ??
                 studioData.databaseQuery.error?.message ??
                 groupQuery.error?.message ??
                 studioData.errorGroupQuery.error?.message ??
@@ -642,37 +676,38 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
               }}
               onViewTrace={handleViewHttpTrace}
             />
-          ) : isBackgroundSection(section) ? (
-            <BackgroundJobsView
-              page={studioData.backgroundJobsQuery.data}
-              loading={studioData.backgroundJobsQuery.isLoading}
-              selectedRunId={selection?.kind === "background-run" ? selection.id : null}
-              expandedRunId={expandedBackgroundRunId}
-              expandedRunDetail={
-                expandedBackgroundRunId &&
-                selection?.kind === "background-run" &&
-                expandedBackgroundRunId === selection.id
-                  ? studioData.backgroundJobRunQuery.data
+          ) : isPaymentsSection(section) ? (
+            <PaymentsView
+              page={studioData.paymentsQuery.data}
+              loading={studioData.paymentsQuery.isLoading}
+              selectedTraceId={selection?.kind === "payment-trace" ? selection.id : null}
+              expandedTraceId={expandedPaymentTraceId}
+              expandedTraceDetail={
+                expandedPaymentTraceId &&
+                selection?.kind === "payment-trace" &&
+                expandedPaymentTraceId === selection.id
+                  ? studioData.paymentTraceQuery.data
                   : null
               }
-              expandedRunLoading={
-                Boolean(expandedBackgroundRunId) &&
-                selection?.kind === "background-run" &&
-                expandedBackgroundRunId === selection.id &&
-                studioData.backgroundJobRunQuery.isLoading
+              expandedTraceLoading={
+                Boolean(expandedPaymentTraceId) &&
+                selection?.kind === "payment-trace" &&
+                expandedPaymentTraceId === selection.id &&
+                studioData.paymentTraceQuery.isLoading
               }
-              onSelectRun={(runId) => {
-                setExpandedBackgroundRunId(null);
-                setSelection({ kind: "background-run", id: runId });
+              onSelectTrace={(traceId) => {
+                setExpandedPaymentTraceId(null);
+                setSelection({ kind: "payment-trace", id: traceId });
               }}
-              onToggleExpand={(runId) => {
-                const nextExpandedRunId =
-                  expandedBackgroundRunId === runId ? null : runId;
-                setExpandedBackgroundRunId(nextExpandedRunId);
-                if (nextExpandedRunId) {
-                  setSelection({ kind: "background-run", id: nextExpandedRunId });
+              onToggleExpand={(traceId) => {
+                const nextExpandedTraceId =
+                  expandedPaymentTraceId === traceId ? null : traceId;
+                setExpandedPaymentTraceId(nextExpandedTraceId);
+                if (nextExpandedTraceId) {
+                  setSelection({ kind: "payment-trace", id: nextExpandedTraceId });
                 }
               }}
+              onAskAi={handleAskAiOnPaymentTrace}
             />
           ) : isBackgroundSection(section) ? (
             <BackgroundJobsView
@@ -775,6 +810,31 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
                 loading={studioData.backgroundJobRunQuery.isLoading}
                 onAskAi={handleAskAiOnBackgroundRun}
               />
+            ) : selection?.kind === "payment-trace" ? (
+              <div className="space-y-4">
+                <EmptyState
+                  title={selectedPaymentTrace?.trace.correlationLabel ?? "Select a payment trace"}
+                  description={
+                    selectedPaymentTrace
+                      ? `Status ${selectedPaymentTrace.trace.status}. Expand the trace in the Payments view to inspect the full timeline or ask AI for diagnosis.`
+                      : "Choose a payment trace to inspect its lifecycle."
+                  }
+                  size="compact"
+                  action={
+                    selectedPaymentTrace &&
+                    (selectedPaymentTrace.trace.status === "DECLINED" ||
+                      selectedPaymentTrace.trace.status === "ERROR") ? (
+                      <button
+                        type="button"
+                        className="text-xs font-medium text-primary"
+                        onClick={() => handleAskAiOnPaymentTrace(selectedPaymentTrace.trace)}
+                      >
+                        Ask AI
+                      </button>
+                    ) : undefined
+                  }
+                />
+              </div>
             ) : selection?.kind === "error-occurrence" ? (
               <ErrorDetailPanel
                 group={null}

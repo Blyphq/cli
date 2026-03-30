@@ -808,6 +808,111 @@ export interface StudioAgentsOverview {
   };
   failures: StudioAgentFailureItem[];
 }
+
+export type StudioPaymentTraceStatus =
+  | "COMPLETED"
+  | "DECLINED"
+  | "PENDING"
+  | "ERROR";
+
+export type StudioPaymentTraceEventKind =
+  | "INFO"
+  | "HTTP"
+  | "STRUCT"
+  | "ERROR"
+  | "WEBHOOK";
+
+export type StudioPaymentWebhookResult = "success" | "error";
+
+export interface StudioPaymentAmount {
+  value: number;
+  currency: string | null;
+  display: string;
+  inferredMinorUnits: boolean;
+}
+
+export interface StudioPaymentTraceField {
+  key: string;
+  value: string;
+}
+
+export interface StudioPaymentTraceEvent {
+  id: string;
+  recordId: string;
+  timestamp: string | null;
+  offsetMs: number | null;
+  level: string;
+  message: string;
+  kind: StudioPaymentTraceEventKind;
+  status: StudioPaymentTraceStatus | null;
+  route: string | null;
+  durationMs: number | null;
+  fields: StudioPaymentTraceField[];
+}
+
+export interface StudioPaymentWebhookEvent {
+  id: string;
+  recordId: string;
+  timestamp: string | null;
+  eventType: string | null;
+  route: string | null;
+  result: StudioPaymentWebhookResult;
+  traceId: string | null;
+  payloadPreview: string | null;
+}
+
+export interface StudioPaymentTraceSummary {
+  id: string;
+  correlationLabel: string;
+  userId: string | null;
+  amount: StudioPaymentAmount | null;
+  durationMs: number | null;
+  status: StudioPaymentTraceStatus;
+  startedAt: string | null;
+  finishedAt: string | null;
+  recordCount: number;
+  failureReason: string | null;
+  webhookEventCount: number;
+  representativeRecordId: string | null;
+}
+
+export interface StudioPaymentTraceDetail {
+  trace: StudioPaymentTraceSummary;
+  timeline: StudioPaymentTraceEvent[];
+  webhooks: StudioPaymentWebhookEvent[];
+  correlationSignals: StudioPaymentTraceField[];
+}
+
+export interface StudioPaymentFailureBreakdownRow {
+  reason: string;
+  count: number;
+  mostRecentAt: string | null;
+  affectedUserIds: string[];
+}
+
+export interface StudioPaymentsStats {
+  checkoutAttempts: number;
+  successRate: number;
+  successRateTrend: StudioOverviewTrend;
+  successRateDeltaPercent: number | null;
+  successRateComparisonWindowLabel: string;
+  failedPayments: number;
+  mostCommonFailureReason: string | null;
+  revenueProcessed: StudioPaymentAmount | null;
+  currency: string | null;
+  webhookEvents: number;
+}
+
+export interface StudioPaymentsOverview {
+  stats: StudioPaymentsStats;
+  traces: StudioPaymentTraceSummary[];
+  failures: StudioPaymentFailureBreakdownRow[];
+  webhooks: StudioPaymentWebhookEvent[];
+  totalTraces: number;
+  offset: number;
+  limit: number;
+  truncated: boolean;
+}
 export interface StudioErrorsPage {
   entries: Array<StudioErrorGroupSummary | StudioErrorOccurrence>;
   groups: StudioErrorGroupSummary[];
@@ -860,7 +965,8 @@ export type StudioOverviewTarget = {
   sectionId: StudioSectionId | "all-logs";
   selection:
     | { kind: "record"; id: string }
-    | { kind: "group"; id: string };
+    | { kind: "group"; id: string }
+    | { kind: "payment-trace"; id: string };
 };
 
 export interface StudioOverviewFeedItem {
@@ -988,6 +1094,16 @@ export interface StudioAuthOverview {
   users: StudioAuthUserSummary[];
 }
 
+export interface StudioPaymentsQueryInput {
+  projectPath?: string;
+  fileId?: string;
+  from?: string;
+  to?: string;
+  search?: string;
+  offset?: number;
+  limit?: number;
+}
+
 export interface StudioLogFacets {
   types: string[];
   sources: StudioRecordSource[];
@@ -1000,7 +1116,7 @@ export interface StudioAssistantHistoryItem {
 }
 
 export interface StudioAssistantReference {
-  kind: "record" | "group" | "background-run" | "agent-task";
+  kind: "record" | "group" | "background-run" | "agent-task" | "payment-trace";
   id: string;
   label: string;
   fileName: string | null;
@@ -1040,6 +1156,7 @@ export interface StudioAssistantReplyInput {
   selectedGroupId?: string;
   selectedBackgroundRunId?: string;
   selectedAgentTaskId?: string;
+  selectedPaymentTraceId?: string;
 }
 
 export interface StudioMeta {

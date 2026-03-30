@@ -103,6 +103,8 @@ export function useAssistantChat({
               : undefined,
           selectedAgentTaskId:
             assistantScopeMode === "selection" && selection?.kind === "agent-task"
+          selectedPaymentTraceId:
+            assistantScopeMode === "selection" && selection?.kind === "payment-trace"
               ? selection.id
               : undefined,
           model: selectedModel || undefined,
@@ -155,13 +157,15 @@ export function useAssistantChat({
       ? "current filters"
       : selection?.kind === "record"
         ? "selected log"
-        : selection?.kind === "group"
-          ? "selected structured group"
-          : selection?.kind === "background-run"
-            ? "selected background run"
-            : selection?.kind === "agent-task"
-              ? "selected agent task"
-          : "no selection";
+      : selection?.kind === "group"
+        ? "selected structured group"
+        : selection?.kind === "background-run"
+          ? "selected background run"
+          : selection?.kind === "agent-task"
+            ? "selected agent task"
+            : selection?.kind === "payment-trace"
+              ? "selected payment trace"
+              : "no selection";
 
   useEffect(() => {
     if (!hasHydrated || !projectPath) return;
@@ -309,7 +313,9 @@ export function useAssistantChat({
           ? "background-run" as const
           : reference.kind === "agent-task"
             ? "agent-task" as const
-          : "record" as const,
+          : reference.kind === "payment-trace"
+            ? "payment-trace" as const
+            : "record" as const,
     id: reference.id,
   });
 

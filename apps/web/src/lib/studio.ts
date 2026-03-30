@@ -16,6 +16,8 @@ export type StudioDatabaseOverview = RouterOutputs["studio"]["database"];
 export type StudioAgentsOverview = RouterOutputs["studio"]["agents"];
 export type StudioHttpOverview = RouterOutputs["studio"]["http"];
 export type StudioOverview = RouterOutputs["studio"]["overview"];
+export type StudioPaymentsOverview = RouterOutputs["studio"]["payments"];
+export type StudioPaymentTraceDetail = NonNullable<RouterOutputs["studio"]["paymentTrace"]>;
 export type StudioAuthEvent = StudioAuthOverview["timeline"][number];
 export type StudioAuthSuspiciousPattern = StudioAuthOverview["suspiciousPatterns"][number];
 export type StudioAuthUserSummary = StudioAuthOverview["users"][number];
@@ -51,6 +53,10 @@ export type StudioFacets = RouterOutputs["studio"]["facets"];
 export type StudioAssistantStatus = RouterOutputs["studio"]["assistantStatus"];
 export type StudioAssistantMessage = RouterOutputs["studio"]["assistantReply"];
 export type StudioAssistantReference = StudioAssistantMessage["references"][number];
+export type StudioPaymentTrace = StudioPaymentsOverview["traces"][number];
+export type StudioPaymentTraceEvent = StudioPaymentTraceDetail["timeline"][number];
+export type StudioPaymentWebhookEvent = StudioPaymentsOverview["webhooks"][number];
+export type StudioPaymentFailureBreakdownRow = StudioPaymentsOverview["failures"][number];
 export type StudioGroupingMode = "grouped" | "flat";
 export type StudioErrorViewMode = "grouped" | "raw";
 export type StudioErrorSort = "most-recent" | "most-frequent" | "first-seen";
@@ -76,6 +82,7 @@ export type StudioSelection =
   | { kind: "group"; id: string }
   | { kind: "background-run"; id: string }
   | { kind: "agent-task"; id: string }
+  | { kind: "payment-trace"; id: string }
   | { kind: "error-group"; id: string }
   | { kind: "error-occurrence"; id: string }
   | null;
@@ -448,6 +455,26 @@ export function getBackgroundJobTrendLabel(
   }
 }
 
+export function formatPaymentAmount(
+  amount: StudioPaymentTrace["amount"] | StudioPaymentsOverview["stats"]["revenueProcessed"],
+): string {
+  return amount?.display ?? "n/a";
+}
+
+export function getPaymentTraceStatusBadgeVariant(
+  status: StudioPaymentTrace["status"],
+): StudioBadgeVariant {
+  switch (status) {
+    case "COMPLETED":
+      return "default";
+    case "DECLINED":
+    case "ERROR":
+      return "destructive";
+    default:
+      return "secondary";
+  }
+}
+
 export function getAssistantStatusLabel(status: StudioAssistantStatus): string {
   if (status.enabled) {
     return status.model ?? "Configured";
@@ -661,6 +688,10 @@ export function isAgentsSection(section: StudioSectionId): boolean {
 
 export function isBackgroundSection(section: StudioSectionId): boolean {
   return section === "background";
+}
+
+export function isPaymentsSection(section: StudioSectionId): boolean {
+  return section === "payments";
 }
 
 export function isHttpSection(section: StudioSectionId): boolean {

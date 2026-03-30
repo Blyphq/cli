@@ -26,6 +26,7 @@ import { buildGroupDetails } from "./grouping";
 import { analyzeHttpRecords } from "./http-section";
 import { discoverLogFiles } from "./logs";
 import { buildStudioOverview } from "./overview";
+import { buildPaymentTraceDetail, buildPaymentsOverview } from "./payments";
 import { loadProjectClaudeMd } from "./project-context";
 import { resolveStudioProject } from "./project";
 import { filterRecords, loadNormalizedRecords, queryLogs } from "./query";
@@ -61,6 +62,9 @@ import type {
   StudioNormalizedRecord,
   StudioOverview,
   StudioOverviewQueryInput,
+  StudioPaymentTraceDetail,
+  StudioPaymentsOverview,
+  StudioPaymentsQueryInput,
   StudioSourceContext,
   StudioStructuredGroupDetail,
 } from "./types";
@@ -552,6 +556,96 @@ export async function getStudioBackgroundJobRun(input: {
   });
 }
 
+export async function getStudioPayments(
+  input: StudioPaymentsQueryInput,
+): Promise<StudioPaymentsOverview> {
+  const { files, project, config } = await getStudioProjectFiles(input.projectPath);
+  if (!project.valid) {
+    return {
+      stats: {
+        checkoutAttempts: 0,
+        successRate: 0,
+        successRateTrend: "flat",
+        successRateDeltaPercent: null,
+        successRateComparisonWindowLabel: "vs previous session window",
+        failedPayments: 0,
+        mostCommonFailureReason: null,
+        revenueProcessed: null,
+        currency: null,
+        webhookEvents: 0,
+      },
+      traces: [],
+      failures: [],
+      webhooks: [],
+      totalTraces: 0,
+      offset: input.offset ?? 0,
+      limit: input.limit ?? 100,
+      truncated: false,
+    };
+  }
+
+  const loaded = await loadProjectRecords(project.absolutePath, config, files, {
+    from: input.from,
+    to: input.to,
+    search: input.search,
+  });
+  const filtered = filterRecords(
+    loaded.records,
+    {
+      fileId: input.fileId,
+      from: input.from,
+      to: input.to,
+      search: input.search,
+      sectionId: "payments",
+    },
+    config.resolved.studio.sections,
+  );
+
+  return buildPaymentsOverview({
+    records: filtered,
+    query: input,
+    customSections: config.resolved.studio.sections,
+    truncated: loaded.truncated,
+  });
+}
+
+export async function getStudioPaymentTrace(input: {
+  projectPath?: string;
+  traceId: string;
+  fileId?: string;
+  from?: string;
+  to?: string;
+  search?: string;
+}): Promise<StudioPaymentTraceDetail | null> {
+  const { files, project, config } = await getStudioProjectFiles(input.projectPath);
+  if (!project.valid) {
+    return null;
+  }
+
+  const loaded = await loadProjectRecords(project.absolutePath, config, files, {
+    from: input.from,
+    to: input.to,
+    search: input.search,
+  });
+  const filtered = filterRecords(
+    loaded.records,
+    {
+      fileId: input.fileId,
+      from: input.from,
+      to: input.to,
+      search: input.search,
+      sectionId: "payments",
+    },
+    config.resolved.studio.sections,
+  );
+
+  return buildPaymentTraceDetail({
+    traceId: input.traceId,
+    records: filtered,
+    customSections: config.resolved.studio.sections,
+  });
+}
+
 export async function addStudioCustomSection(input: {
   projectPath?: string;
   name: string;
@@ -740,6 +834,7 @@ export async function streamStudioAssistant(input: {
   selectedGroupId?: string;
   selectedBackgroundRunId?: string;
   selectedAgentTaskId?: string;
+  selectedPaymentTraceId?: string;
   messages: import("ai").UIMessage[];
   mode?: "chat" | "describe-selection";
   model?: string;
@@ -768,6 +863,7 @@ export async function streamStudioAssistant(input: {
     selectedGroupId: input.selectedGroupId,
     selectedBackgroundRunId: input.selectedBackgroundRunId,
     selectedAgentTaskId: input.selectedAgentTaskId,
+    selectedPaymentTraceId: input.selectedPaymentTraceId,
     messages: input.messages,
     mode: input.mode,
     preloadedRecords,

@@ -4,6 +4,7 @@ import type {
   StudioAssistantHistoryItem,
   StudioAssistantReference,
   StudioNormalizedRecord,
+  StudioPaymentTraceDetail,
   StudioSourceContext,
   StudioStructuredGroupDetail,
 } from "./types";
@@ -16,6 +17,7 @@ interface PromptEvidence {
   selectedGroup: StudioStructuredGroupDetail | null;
   selectedBackgroundRun: StudioBackgroundJobRunDetail | null;
   selectedAgentTask: StudioAgentTaskDetail | null;
+  selectedPaymentTrace: StudioPaymentTraceDetail | null;
   records: StudioNormalizedRecord[];
   references: StudioAssistantReference[];
   userQuestion: string;
@@ -52,6 +54,8 @@ export function buildAssistantReplyPrompt(input: PromptEvidence): string {
         ? `Selected agent task: ${input.selectedAgentTask.task.title}`
       : input.selectedBackgroundRun
         ? `Selected background run: ${input.selectedBackgroundRun.run.jobName}`
+      : input.selectedPaymentTrace
+        ? `Selected payment trace: ${input.selectedPaymentTrace.trace.correlationLabel}`
       : input.selectedRecord
         ? `Selected record: ${input.selectedRecord.message}`
         : "Selected context: none",
@@ -74,6 +78,8 @@ export function buildDescribeSelectionPrompt(input: PromptEvidence): string {
         ? `Explain this agent task: ${input.selectedAgentTask.task.title}`
       : input.selectedBackgroundRun
         ? `Explain this background run: ${input.selectedBackgroundRun.run.jobName}`
+      : input.selectedPaymentTrace
+        ? `Explain this payment trace: ${input.selectedPaymentTrace.trace.correlationLabel}`
       : `Explain this log: ${input.selectedRecord?.message ?? "unknown record"}`,
     renderEvidence(input),
     "Explain it in markdown with sections titled: Takeaway, What this means, What likely caused it, Related signals, and What to inspect next.",
@@ -113,6 +119,14 @@ function renderEvidence(input: PromptEvidence): string {
             backgroundRun: {
               run: input.selectedBackgroundRun.run,
               timeline: input.selectedBackgroundRun.timeline.slice(0, 20),
+            },
+          }
+      : input.selectedPaymentTrace
+        ? {
+            paymentTrace: {
+              trace: input.selectedPaymentTrace.trace,
+              timeline: input.selectedPaymentTrace.timeline.slice(0, 20),
+              webhooks: input.selectedPaymentTrace.webhooks.slice(0, 10),
             },
           }
     : input.selectedRecord
