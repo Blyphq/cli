@@ -1,7 +1,19 @@
 import { useState, type ReactNode } from "react";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Settings2 } from "lucide-react";
+import {
+  AlertTriangle,
+  Bot,
+  Circle,
+  CreditCard,
+  Database,
+  Globe,
+  LayoutDashboard,
+  Logs,
+  Plus,
+  Settings2,
+  Shield,
+} from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 
 import { Button } from "@/components/ui/button";
@@ -73,9 +85,23 @@ export function SectionNavPanel({
 
   const detected = meta?.sections ?? [];
   const pinnedTop = [
-    { id: "overview" as const, label: "Overview", icon: "●", count: null, unread: false },
+    {
+      id: "overview" as const,
+      label: "Overview",
+      icon: getSectionIcon("overview"),
+      count: null,
+      unread: false,
+    },
   ];
-  const pinnedBottom = [{ id: "all-logs" as const, label: "All Logs", icon: "📋", count: null, unread: false }];
+  const pinnedBottom = [
+    {
+      id: "all-logs" as const,
+      label: "All Logs",
+      icon: getSectionIcon("all-logs"),
+      count: null,
+      unread: false,
+    },
+  ];
   const errors = detected.find((item) => item.id === "errors");
   const rest = detected.filter((item) => item.id !== "errors");
 
@@ -100,7 +126,7 @@ export function SectionNavPanel({
                 <AnimatedSectionRow key={errors.id}>
                   <SectionButton
                     active={section === errors.id}
-                    icon={errors.icon}
+                    icon={getSectionIcon(errors.id)}
                     label={errors.label}
                     count={errors.count}
                     unread={hasUnread(errors, visitedAtBySection)}
@@ -115,7 +141,7 @@ export function SectionNavPanel({
                 <AnimatedSectionRow key={item.id}>
                   <SectionButton
                     active={section === item.id}
-                    icon={item.icon}
+                    icon={getSectionIcon(item.id)}
                     label={item.label}
                     count={item.count}
                     unread={hasUnread(item, visitedAtBySection)}
@@ -202,7 +228,7 @@ export function SectionNavPanel({
 
 function SectionButton(props: {
   active: boolean;
-  icon: string;
+  icon: ReactNode;
   label: string;
   count?: number | null;
   unread: boolean;
@@ -219,7 +245,7 @@ function SectionButton(props: {
           !props.active ? "hover:bg-primary/20 hover:text-sidebar-accent-foreground" : "!bg-primary/70"
         )}
       >
-        <span>{props.icon}</span>
+        <span className="shrink-0 [&>svg]:size-4">{props.icon}</span>
         <span>{props.label}</span>
         {props.unread ? (
           <span className="ml-1 size-2 rounded-full bg-destructive" aria-hidden />
@@ -275,4 +301,27 @@ function hasUnread(
   }
 
   return Date.parse(section.lastErrorAt) > Date.parse(visitedAt);
+}
+
+function getSectionIcon(sectionId: string): ReactNode {
+  switch (sectionId) {
+    case "overview":
+      return <LayoutDashboard />;
+    case "all-logs":
+      return <Logs />;
+    case "errors":
+      return <AlertTriangle />;
+    case "http":
+      return <Globe />;
+    case "agents":
+      return <Bot />;
+    case "auth":
+      return <Shield />;
+    case "payments":
+      return <CreditCard />;
+    case "database":
+      return <Database />;
+    default:
+      return <Circle />;
+  }
 }
