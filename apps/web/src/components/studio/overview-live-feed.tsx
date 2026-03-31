@@ -5,6 +5,7 @@ import { ChevronDown, ChevronRight, ExternalLink } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   formatRelativeTime,
   getLevelClasses,
@@ -24,7 +25,7 @@ export function OverviewLiveFeed({ items, onOpen }: OverviewLiveFeedProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [paused, setPaused] = useState(false);
   const [now, setNow] = useState(() => Date.now());
-  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const scrollAreaRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const interval = window.setInterval(() => setNow(Date.now()), 1000);
@@ -35,7 +36,9 @@ export function OverviewLiveFeed({ items, onOpen }: OverviewLiveFeedProps) {
     if (paused) {
       return;
     }
-    const element = scrollRef.current;
+    const element = scrollAreaRef.current?.querySelector(
+      '[data-slot="scroll-area-viewport"]',
+    ) as HTMLDivElement | null;
     if (!element) {
       return;
     }
@@ -69,72 +72,74 @@ export function OverviewLiveFeed({ items, onOpen }: OverviewLiveFeedProps) {
         }
       />
       <CardContent className="pt-4">
-        <div
-          ref={scrollRef}
-          className="max-h-[34rem] space-y-3 overflow-y-auto pr-1"
+        <ScrollArea
+          ref={scrollAreaRef}
+          className="h-[34rem] pr-1"
           onMouseEnter={() => setPaused(true)}
           onMouseLeave={() => setPaused(false)}
         >
-          {orderedItems.map((item) => {
-            const expanded = expandedId === item.recordId;
-            return (
-              <div
-                key={item.recordId}
-                className="border border-border/60 bg-background/40 transition-colors hover:bg-muted/10"
-              >
-                <div className="flex items-start gap-2 p-4">
-                  <Button
-                    variant="ghost"
-                    size="icon-xs"
-                    aria-label={expanded ? "Collapse details" : "Expand details"}
-                    onClick={() => setExpandedId(expanded ? null : item.recordId)}
-                  >
-                    {expanded ? <ChevronDown /> : <ChevronRight />}
-                  </Button>
-                  <button
-                    type="button"
-                    className="min-w-0 flex-1 space-y-3 text-left"
-                    onClick={() => item.target && onOpen(item.target)}
-                  >
-                    <div className="flex flex-wrap items-center gap-2">
-                      <div className="text-[11px] text-muted-foreground">
-                        {formatRelativeTime(item.timestamp, now)}
+          <div className="space-y-3">
+            {orderedItems.map((item) => {
+              const expanded = expandedId === item.recordId;
+              return (
+                <div
+                  key={item.recordId}
+                  className="border border-border/60 bg-background/40 transition-colors hover:bg-muted/10"
+                >
+                  <div className="flex items-start gap-2 p-4">
+                    <Button
+                      variant="ghost"
+                      size="icon-xs"
+                      aria-label={expanded ? "Collapse details" : "Expand details"}
+                      onClick={() => setExpandedId(expanded ? null : item.recordId)}
+                    >
+                      {expanded ? <ChevronDown /> : <ChevronRight />}
+                    </Button>
+                    <button
+                      type="button"
+                      className="min-w-0 flex-1 space-y-3 text-left"
+                      onClick={() => item.target && onOpen(item.target)}
+                    >
+                      <div className="flex flex-wrap items-center gap-2">
+                        <div className="text-[11px] text-muted-foreground">
+                          {formatRelativeTime(item.timestamp, now)}
+                        </div>
+                        <Badge className={cn("rounded-md", getLevelClasses(item.level))}>
+                          {item.level}
+                        </Badge>
                       </div>
-                      <Badge className={cn("rounded-md", getLevelClasses(item.level))}>
-                        {item.level}
-                      </Badge>
-                    </div>
-                    <div className="line-clamp-2 break-words text-sm font-medium">
-                      {item.message}
-                    </div>
-                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
-                      {item.summaryFields.map((field) => (
-                        <span key={`${item.recordId}:${field.key}:${field.value}`}>
-                          {field.key}: {field.value}
-                        </span>
-                      ))}
-                    </div>
-                  </button>
-                  <Button
-                    variant="outline"
-                    size="xs"
-                    onClick={() => item.target && onOpen(item.target)}
-                    disabled={!item.target}
-                  >
-                    Open
-                    <ExternalLink />
-                  </Button>
-                </div>
-                {expanded ? (
-                  <div className="border-t border-border/60 bg-muted/10 px-4 py-3 text-[11px] text-muted-foreground">
-                    Record ID: {item.recordId}
-                    {item.target ? ` • Section: ${item.target.sectionId}` : ""}
+                      <div className="line-clamp-2 break-words text-sm font-medium">
+                        {item.message}
+                      </div>
+                      <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
+                        {item.summaryFields.map((field) => (
+                          <span key={`${item.recordId}:${field.key}:${field.value}`}>
+                            {field.key}: {field.value}
+                          </span>
+                        ))}
+                      </div>
+                    </button>
+                    <Button
+                      variant="outline"
+                      size="xs"
+                      onClick={() => item.target && onOpen(item.target)}
+                      disabled={!item.target}
+                    >
+                      Open
+                      <ExternalLink />
+                    </Button>
                   </div>
-                ) : null}
-              </div>
-            );
-          })}
-        </div>
+                  {expanded ? (
+                    <div className="border-t border-border/60 bg-muted/10 px-4 py-3 text-[11px] text-muted-foreground">
+                      Record ID: {item.recordId}
+                      {item.target ? ` • Section: ${item.target.sectionId}` : ""}
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+        </ScrollArea>
       </CardContent>
     </Card>
   );

@@ -48,16 +48,23 @@ export function OverviewView({
 
   return (
     <div className="space-y-6">
-      <OverviewHealthBar stats={overview.stats} connectedAt={connectedAt} now={now} />
+      <OverviewSectionsGrid sections={overview.sections} onSelect={onSelect} />
+      <OverviewHealthBar
+        stats={overview.stats}
+        connectedAt={connectedAt}
+        now={now}
+      />
       <div className="grid gap-5 2xl:grid-cols-[minmax(0,1.7fr)_minmax(24rem,0.9fr)]">
-        <OverviewLiveFeed items={overview.liveFeed} onOpen={onSelectFeedTarget} />
+        <OverviewLiveFeed
+          items={overview.liveFeed}
+          onOpen={onSelectFeedTarget}
+        />
         <OverviewRecentErrors
           items={overview.recentErrors}
           onAskAi={onAskAiForError}
           onViewTrace={onViewTrace}
         />
       </div>
-      <OverviewSectionsGrid sections={overview.sections} onSelect={onSelect} />
     </div>
   );
 }

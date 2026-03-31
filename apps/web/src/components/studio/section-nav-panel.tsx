@@ -177,7 +177,7 @@ export function SectionNavPanel({
               <SidebarMenuButton
                 isActive={section === "project-config"}
                 onClick={() => onSelect("project-config")}
-                className="transition-colors duration-150"
+                className="transition-colors duration-150 active:bg-primary/20 active:text-sidebar-accent-foreground"
               >
                 <Settings2 />
                 <span>Project Config</span>
