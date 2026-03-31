@@ -26,6 +26,7 @@ import { cn } from "@/lib/utils";
 
 import { EmptyState } from "./empty-state";
 import { ErrorState } from "./error-state";
+import { PanelSkeleton } from "./studio-skeletons";
 
 interface AssistantPanelProps {
   chatError?: Error;
@@ -87,10 +88,7 @@ export function AssistantPanel({
   if (!status) {
     return (
       <div className="flex min-h-0 flex-1 flex-col p-4">
-        <EmptyState
-          title="Loading assistant"
-          description="Checking server-side AI configuration."
-        />
+        <PanelSkeleton rows={5} compact />
       </div>
     );
   }

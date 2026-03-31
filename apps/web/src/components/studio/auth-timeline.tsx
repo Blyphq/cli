@@ -12,6 +12,7 @@ import { formatCompactDateTime } from "@/lib/studio";
 
 import { EmptyState } from "./empty-state";
 import { PanelHeader } from "./panel-header";
+import { ListRowsSkeleton } from "./studio-skeletons";
 
 interface AuthTimelineProps {
   events: StudioAuthEvent[];
@@ -49,9 +50,10 @@ export function AuthTimeline({
     <Card className="min-h-[28rem]">
       <PanelHeader
         title="Auth Timeline"
-        description={`${loading ? "Loading auth events..." : `${total} auth events`} shown in chronological order.`}
+        description={`${total} auth events shown in chronological order.`}
       />
       <CardContent className="space-y-3">
+        {loading && events.length === 0 ? <ListRowsSkeleton rows={6} /> : null}
         <div className="space-y-2">
           {events.map((event) => (
             <Button

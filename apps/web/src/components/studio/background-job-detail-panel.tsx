@@ -10,6 +10,7 @@ import {
 
 import { EmptyState } from "./empty-state";
 import { PanelHeader } from "./panel-header";
+import { DetailPanelSkeleton, TimelineSkeleton } from "./studio-skeletons";
 
 interface BackgroundJobDetailPanelProps {
   detail: StudioBackgroundJobRunDetail | null | undefined;
@@ -23,12 +24,7 @@ export function BackgroundJobDetailPanel({
   onAskAi,
 }: BackgroundJobDetailPanelProps) {
   if (loading && !detail) {
-    return (
-      <EmptyState
-        title="Loading run"
-        description="Resolving the selected background job run."
-      />
-    );
+    return <DetailPanelSkeleton />;
   }
 
   if (!detail) {
@@ -97,6 +93,7 @@ export function BackgroundJobDetailPanel({
           description="Chronological event stream for this run."
         />
         <CardContent className="space-y-3">
+          {loading && detail.timeline.length === 0 ? <TimelineSkeleton rows={5} /> : null}
           {detail.timeline.map((event) => (
             <div key={event.id} className="border border-border/60 bg-background/40 p-3">
               <div className="flex flex-wrap gap-2 text-sm font-medium">

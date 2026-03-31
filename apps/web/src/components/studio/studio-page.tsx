@@ -20,6 +20,7 @@ import { ProjectConfigPanel } from "@/components/studio/project-config-panel";
 import { OverviewView } from "@/components/studio/overview-view";
 import { PaymentsView } from "@/components/studio/payments-view";
 import { SectionNavPanel } from "@/components/studio/section-nav-panel";
+import { PanelSkeleton } from "@/components/studio/studio-skeletons";
 import { StudioToolbar } from "@/components/studio/studio-toolbar";
 import { AppSidebar } from "@/components/app-sidebar";
 import {
@@ -595,10 +596,7 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
               description={projectError}
             />
           ) : isLoadingMeta ? (
-            <EmptyState
-              title="Loading Studio"
-              description="Resolving project metadata, config, and logs."
-            />
+            <PanelSkeleton rows={8} />
           ) : isProjectConfigSection(section) ? (
             metaQuery.data ? (
               <ProjectConfigPanel
@@ -606,10 +604,7 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
                 config={configQuery.data}
               />
             ) : (
-              <EmptyState
-                title="Loading project metadata"
-                description="Resolving the target project and Blyp config."
-              />
+              <PanelSkeleton rows={6} />
             )
           ) : isOverviewSection(section) ? (
             <OverviewView

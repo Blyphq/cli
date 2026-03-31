@@ -5,7 +5,7 @@ import { AgentLlmCallTable } from "./agent-llm-call-table";
 import { AgentTaskList } from "./agent-task-list";
 import { AgentToolCallTable } from "./agent-tool-call-table";
 import { AgentsStatsBar } from "./agents-stats-bar";
-import { EmptyState } from "./empty-state";
+import { ListRowsSkeleton, PanelSkeleton, StatTilesSkeleton } from "./studio-skeletons";
 
 interface AgentsViewProps {
   agents: StudioAgentsOverview | undefined;
@@ -35,10 +35,12 @@ export function AgentsView({
 
   if (!agents && loading) {
     return (
-      <EmptyState
-        title="Loading agents"
-        description="Correlating AI-native logs into agent tasks."
-      />
+      <div className="space-y-4">
+        <StatTilesSkeleton />
+        <ListRowsSkeleton rows={5} />
+        <PanelSkeleton rows={4} compact />
+        <PanelSkeleton rows={4} compact />
+      </div>
     );
   }
 

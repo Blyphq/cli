@@ -17,6 +17,7 @@ import {
 
 import { EmptyState } from "./empty-state";
 import { PanelHeader } from "./panel-header";
+import { DetailPanelSkeleton, TimelineSkeleton } from "./studio-skeletons";
 
 interface AgentTaskDetailPanelProps {
   detail: StudioAgentTaskDetail | null | undefined;
@@ -30,12 +31,7 @@ export function AgentTaskDetailPanel({
   onAskAi,
 }: AgentTaskDetailPanelProps) {
   if (loading && !detail) {
-    return (
-      <EmptyState
-        title="Loading task"
-        description="Resolving the selected agent task."
-      />
-    );
+    return <DetailPanelSkeleton />;
   }
 
   if (!detail) {
@@ -80,6 +76,7 @@ export function AgentTaskDetailPanel({
       <Card size="sm">
         <PanelHeader title="Timeline" description="Chronological task steps and durations." />
         <CardContent className="space-y-3">
+          {loading && detail.steps.length === 0 ? <TimelineSkeleton rows={5} /> : null}
           {detail.steps.map((step) => (
             <Collapsible key={step.id} className="border border-border/60 bg-background/40 p-3">
               <div className="flex flex-wrap items-start justify-between gap-3">

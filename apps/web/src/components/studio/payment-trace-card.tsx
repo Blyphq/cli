@@ -8,6 +8,7 @@ import {
   formatPaymentAmount,
   getPaymentTraceStatusBadgeVariant,
 } from "@/lib/studio";
+import { TimelineSkeleton } from "./studio-skeletons";
 
 interface PaymentTraceCardProps {
   trace: StudioPaymentTrace;
@@ -76,7 +77,9 @@ export function PaymentTraceCard({
         </div>
         {expanded ? (
           detailLoading && !detail ? (
-            <div className="text-xs text-muted-foreground">Loading trace timeline.</div>
+            <div className="border-t border-border/60 pt-4">
+              <TimelineSkeleton rows={4} />
+            </div>
           ) : detail ? (
             <div className="space-y-3 border-t border-border/60 pt-4">
               {detail.timeline.map((event) => (

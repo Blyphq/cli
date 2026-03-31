@@ -15,6 +15,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 
 import { EmptyState } from "./empty-state";
 import { PanelHeader } from "./panel-header";
+import { ListRowsSkeleton } from "./studio-skeletons";
 
 interface HttpRequestTableProps {
   rows: StudioHttpRequestRow[];
@@ -52,9 +53,14 @@ export function HttpRequestTable({
     <Card className="min-w-0">
       <PanelHeader
         title="Request log"
-        description={loading ? "Loading HTTP requests..." : `${rows.length} shown from ${totalRequests} matching requests`}
+        description={`${rows.length} shown from ${totalRequests} matching requests`}
       />
       <CardContent className="p-0">
+        {loading && rows.length === 0 ? (
+          <div className="p-4">
+            <ListRowsSkeleton rows={6} />
+          </div>
+        ) : null}
         <div className="hidden overflow-x-auto lg:block">
           <table className="w-full table-fixed text-left text-sm">
             <thead className="border-b border-border/60 bg-background/60 text-xs uppercase tracking-[0.18em] text-muted-foreground">

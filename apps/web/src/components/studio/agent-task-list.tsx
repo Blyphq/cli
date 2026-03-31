@@ -9,6 +9,7 @@ import {
 
 import { EmptyState } from "./empty-state";
 import { PanelHeader } from "./panel-header";
+import { ListRowsSkeleton } from "./studio-skeletons";
 
 interface AgentTaskListProps {
   tasks: StudioAgentsOverview["tasks"];
@@ -38,9 +39,10 @@ export function AgentTaskList({
     <Card size="sm">
       <PanelHeader
         title="Task timeline"
-        description={loading ? "Loading agent tasks..." : `${tasks.length} task${tasks.length === 1 ? "" : "s"} shown`}
+        description={`${tasks.length} task${tasks.length === 1 ? "" : "s"} shown`}
       />
       <CardContent className="space-y-3">
+        {loading && tasks.length === 0 ? <ListRowsSkeleton rows={5} /> : null}
         {tasks.map((task) => (
           <button
             key={task.id}

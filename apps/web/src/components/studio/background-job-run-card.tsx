@@ -7,6 +7,7 @@ import {
   formatDuration,
   getBackgroundJobStatusBadgeVariant,
 } from "@/lib/studio";
+import { TimelineSkeleton } from "./studio-skeletons";
 
 interface BackgroundJobRunCardProps {
   run: StudioBackgroundJobRun;
@@ -69,7 +70,7 @@ export function BackgroundJobRunCard({
         {expanded ? (
           <div className="space-y-2 border-t border-border/60 pt-3">
             {loading && !detail ? (
-              <div className="text-sm text-muted-foreground">Loading run timeline…</div>
+              <TimelineSkeleton rows={4} />
             ) : detail ? (
               detail.timeline.map((event) => (
                 <div key={event.id} className="border border-border/60 bg-background/40 p-3">

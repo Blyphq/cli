@@ -7,6 +7,7 @@ import { PaymentFailureBreakdownTable } from "./payment-failure-breakdown-table"
 import { PaymentTraceList } from "./payment-trace-list";
 import { PaymentsStatsBar } from "./payments-stats-bar";
 import { PaymentWebhookPanel } from "./payment-webhook-panel";
+import { ListRowsSkeleton, PanelSkeleton, StatTilesSkeleton } from "./studio-skeletons";
 
 interface PaymentsViewProps {
   page: StudioPaymentsOverview | undefined;
@@ -58,10 +59,14 @@ export function PaymentsView({
 
   if (!page && loading) {
     return (
-      <EmptyState
-        title="Loading payments"
-        description="Assembling payment activity into correlated checkout traces."
-      />
+      <div className="space-y-6">
+        <StatTilesSkeleton />
+        <ListRowsSkeleton rows={5} />
+        <div className="grid gap-4 2xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
+          <PanelSkeleton rows={4} compact />
+          <PanelSkeleton rows={4} compact />
+        </div>
+      </div>
     );
   }
 

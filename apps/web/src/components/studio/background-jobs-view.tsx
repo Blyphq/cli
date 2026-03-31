@@ -1,9 +1,9 @@
 import type { StudioBackgroundJobRunDetail, StudioBackgroundJobsOverview } from "@/lib/studio";
 
-import { EmptyState } from "./empty-state";
 import { BackgroundJobPerformanceTable } from "./background-job-performance-table";
 import { BackgroundJobRunList } from "./background-job-run-list";
 import { BackgroundJobsStatsBar } from "./background-jobs-stats-bar";
+import { ListRowsSkeleton, PanelSkeleton, StatTilesSkeleton } from "./studio-skeletons";
 
 interface BackgroundJobsViewProps {
   page: StudioBackgroundJobsOverview | undefined;
@@ -28,10 +28,11 @@ export function BackgroundJobsView({
 }: BackgroundJobsViewProps) {
   if (!page && loading) {
     return (
-      <EmptyState
-        title="Loading background jobs"
-        description="Grouping background activity into job runs."
-      />
+      <div className="space-y-4">
+        <StatTilesSkeleton />
+        <PanelSkeleton rows={4} compact />
+        <ListRowsSkeleton rows={5} />
+      </div>
     );
   }
 

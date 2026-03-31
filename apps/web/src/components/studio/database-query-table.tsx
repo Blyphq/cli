@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 
 import { EmptyState } from "./empty-state";
 import { PanelHeader } from "./panel-header";
+import { ListRowsSkeleton } from "./studio-skeletons";
 
 interface DatabaseQueryTableProps {
   queries: StudioDatabaseQueryEvent[];
@@ -42,9 +43,14 @@ export function DatabaseQueryTable({
     <Card className="min-w-0">
       <PanelHeader
         title="Query log"
-        description={loading ? "Loading database queries..." : `${queries.length} shown from ${totalQueries} matching queries`}
+        description={`${queries.length} shown from ${totalQueries} matching queries`}
       />
       <CardContent className="p-0">
+        {loading && queries.length === 0 ? (
+          <div className="p-4">
+            <ListRowsSkeleton rows={6} />
+          </div>
+        ) : null}
         <div className="hidden overflow-x-auto lg:block">
           <table className="w-full table-fixed text-left text-sm">
             <thead className="border-b border-border/60 bg-background/60 text-xs uppercase tracking-[0.18em] text-muted-foreground">

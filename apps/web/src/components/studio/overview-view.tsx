@@ -11,7 +11,7 @@ import { OverviewHealthBar } from "./overview-health-bar";
 import { OverviewLiveFeed } from "./overview-live-feed";
 import { OverviewRecentErrors } from "./overview-recent-errors";
 import { OverviewSectionsGrid } from "./overview-sections-grid";
-import { EmptyState } from "./empty-state";
+import { ListRowsSkeleton, PanelSkeleton, StatTilesSkeleton } from "./studio-skeletons";
 
 interface OverviewViewProps {
   overview: StudioOverview | undefined;
@@ -39,10 +39,14 @@ export function OverviewView({
 
   if (!overview) {
     return (
-      <EmptyState
-        title="Loading overview"
-        description="Resolving health stats and recent activity for the current scope."
-      />
+      <div className="space-y-6">
+        <StatTilesSkeleton />
+        <PanelSkeleton rows={4} compact />
+        <div className="grid gap-5 2xl:grid-cols-[minmax(0,1.7fr)_minmax(24rem,0.9fr)]">
+          <PanelSkeleton rows={5} compact />
+          <ListRowsSkeleton rows={5} dense />
+        </div>
+      </div>
     );
   }
 

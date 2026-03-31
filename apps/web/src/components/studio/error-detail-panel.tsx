@@ -18,6 +18,7 @@ import { JsonDetailBlock } from "./json-detail-block";
 import { LogDetailPanel } from "./log-detail-panel";
 import { MetaList } from "./meta-list";
 import { PanelHeader } from "./panel-header";
+import { DetailPanelSkeleton } from "./studio-skeletons";
 
 interface ErrorDetailPanelProps {
   group: StudioErrorGroupDetail | null | undefined;
@@ -50,12 +51,7 @@ export function ErrorDetailPanel({
 }: ErrorDetailPanelProps) {
   if (occurrence) {
     if (!record) {
-      return (
-        <EmptyState
-          title="Loading occurrence"
-          description="Resolving the selected error occurrence and source context."
-        />
-      );
+      return <DetailPanelSkeleton />;
     }
 
     return (
@@ -68,12 +64,7 @@ export function ErrorDetailPanel({
   }
 
   if (loading && !group) {
-    return (
-      <EmptyState
-        title="Loading error"
-        description="Resolving the selected error group and its occurrences."
-      />
-    );
+    return <DetailPanelSkeleton />;
   }
 
   if (!group) {

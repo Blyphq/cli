@@ -9,6 +9,7 @@ import { EmptyState } from "./empty-state";
 import { GroupSummaryRow } from "./group-summary-row";
 import { LogRow } from "./log-row";
 import { PanelHeader } from "./panel-header";
+import { ListRowsSkeleton } from "./studio-skeletons";
 
 interface LogListProps {
   entries: StudioLogEntry[];
@@ -41,7 +42,7 @@ export function LogList({
   onSelect,
   onPageChange,
 }: LogListProps) {
-  const summary = `${loading ? "Loading logs..." : `${totalEntries} visible entries from ${totalMatched} matching logs`}${truncated ? " (scan limit reached)" : ""}`;
+  const summary = `${totalEntries} visible entries from ${totalMatched} matching logs${truncated ? " (scan limit reached)" : ""}`;
 
   if (!loading && entries.length === 0) {
     return (
@@ -56,6 +57,11 @@ export function LogList({
     <Card className="min-h-[36rem] min-w-0">
       <PanelHeader title={title} description={summary} />
       <CardContent className="min-w-0 p-0">
+        {loading && entries.length === 0 ? (
+          <div className="p-4">
+            <ListRowsSkeleton rows={8} />
+          </div>
+        ) : null}
         <div className="hidden min-w-0 overflow-x-auto lg:block">
           <table className="w-full table-fixed text-left text-sm">
             <thead className="border-b border-border/60 bg-background/60 text-xs uppercase tracking-[0.18em] text-muted-foreground">

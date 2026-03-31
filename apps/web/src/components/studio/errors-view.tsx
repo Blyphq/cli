@@ -22,6 +22,7 @@ import { ErrorGroupRow } from "./error-group-row";
 import { ErrorRawRow } from "./error-raw-row";
 import { ErrorStatsBar } from "./error-stats-bar";
 import { PanelHeader } from "./panel-header";
+import { ListRowsSkeleton } from "./studio-skeletons";
 
 interface ErrorsViewProps {
   data: StudioErrorsPage | undefined;
@@ -174,13 +175,14 @@ export function ErrorsView({
       <Card className="min-h-[36rem]">
         <PanelHeader
           title={ui.view === "grouped" ? "Grouped errors" : "Raw error events"}
-          description={
-            loading
-              ? "Loading errors..."
-              : `${data?.totalEntries ?? 0} visible entries from ${data?.totalMatched ?? 0} matched occurrences`
-          }
+          description={`${data?.totalEntries ?? 0} visible entries from ${data?.totalMatched ?? 0} matched occurrences`}
         />
         <CardContent className="p-0">
+          {loading && !data?.entries.length ? (
+            <div className="p-4">
+              <ListRowsSkeleton rows={7} />
+            </div>
+          ) : null}
           {!loading && !data?.entries.length ? (
             <EmptyState
               title="No errors matched"
