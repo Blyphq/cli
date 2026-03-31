@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from "react";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus } from "lucide-react";
+import { Plus, Settings2 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 
 import { Button } from "@/components/ui/button";
@@ -138,6 +138,23 @@ export function SectionNavPanel({
               <SidebarMenuButton onClick={() => setDialogOpen(true)}>
                 <Plus />
                 <span>Add section</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        </SidebarGroupContent>
+      </SidebarGroup>
+      <SidebarGroup>
+        <SidebarGroupLabel>Workspace</SidebarGroupLabel>
+        <SidebarGroupContent>
+          <SidebarMenu>
+            <SidebarMenuItem className="group/section-item">
+              <SidebarMenuButton
+                isActive={section === "project-config"}
+                onClick={() => onSelect("project-config")}
+                className="transition-colors duration-150"
+              >
+                <Settings2 />
+                <span>Project Config</span>
               </SidebarMenuButton>
             </SidebarMenuItem>
           </SidebarMenu>

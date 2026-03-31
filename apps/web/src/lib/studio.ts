@@ -61,7 +61,11 @@ export type StudioGroupingMode = "grouped" | "flat";
 export type StudioErrorViewMode = "grouped" | "raw";
 export type StudioErrorSort = "most-recent" | "most-frequent" | "first-seen";
 export type StudioDetectedSection = StudioMeta["sections"][number];
-export type StudioSectionId = StudioDetectedSection["id"] | "overview" | "all-logs";
+export type StudioSectionId =
+  | StudioDetectedSection["id"]
+  | "overview"
+  | "all-logs"
+  | "project-config";
 export type StudioChatStatus = "submitted" | "streaming" | "ready" | "error";
 export type StudioBadgeVariant =
   | "default"
@@ -672,6 +676,10 @@ export function isOverviewSection(section: StudioSectionId): boolean {
 
 export function isAllLogsSection(section: StudioSectionId): boolean {
   return section === "all-logs";
+}
+
+export function isProjectConfigSection(section: StudioSectionId): boolean {
+  return section === "project-config";
 }
 
 export function isAuthSection(section: StudioSectionId): boolean {

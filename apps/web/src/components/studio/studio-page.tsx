@@ -52,6 +52,7 @@ import {
   isErrorsSection,
   isHttpSection,
   isOverviewSection,
+  isProjectConfigSection,
   isPaymentsSection,
 } from "@/lib/studio";
 import { formatDurationMs } from "@/lib/studio";
@@ -220,6 +221,7 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
     const validSections = new Set([
       "overview",
       "all-logs",
+      "project-config",
       ...(studioData.metaQuery.data?.sections.map((item) => item.id) ?? []),
     ]);
     if (!validSections.has(section)) {
@@ -326,6 +328,8 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
   const currentSectionLabel =
     section === "all-logs"
       ? "All Logs"
+      : section === "project-config"
+        ? "Project Config"
       : metaQuery.data?.sections.find((item) => item.id === section)?.label ?? "Section";
 
   const handleAskAiToFix = () => {
@@ -497,18 +501,6 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
               visitedAtBySection={visitedAtBySection}
               onSelect={setSection}
             />
-            {metaQuery.data ? (
-              <ProjectConfigPanel
-                meta={metaQuery.data}
-                config={configQuery.data}
-              />
-            ) : (
-              <EmptyState
-                title="Loading project metadata"
-                description="Resolving the target project and Blyp config."
-                size="compact"
-              />
-            )}
             {filesQuery.isError ? (
               <ErrorState
                 title="Log discovery failed"
@@ -607,6 +599,18 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
               title="Loading Studio"
               description="Resolving project metadata, config, and logs."
             />
+          ) : isProjectConfigSection(section) ? (
+            metaQuery.data ? (
+              <ProjectConfigPanel
+                meta={metaQuery.data}
+                config={configQuery.data}
+              />
+            ) : (
+              <EmptyState
+                title="Loading project metadata"
+                description="Resolving the target project and Blyp config."
+              />
+            )
           ) : isOverviewSection(section) ? (
             <OverviewView
               overview={studioData.overviewQuery.data}

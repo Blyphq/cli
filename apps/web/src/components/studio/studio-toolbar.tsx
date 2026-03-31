@@ -10,7 +10,6 @@ import {
   SlidersHorizontal,
 } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Card, CardContent } from "@/components/ui/card";
@@ -34,7 +33,6 @@ import type {
 import {
   formatCalendarDate,
   fromCalendarFilterValue,
-  getStatusClasses,
   toCalendarFilterValue,
 } from "@/lib/studio";
 
@@ -129,7 +127,7 @@ export function StudioToolbar({
               <Button onClick={onInspect}>Inspect</Button>
             </div>
           </div>
-          <div className="flex min-w-0 flex-wrap items-center gap-2 text-[10px] uppercase tracking-[0.18em]">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
             <Button
               aria-label="Chat with Blyp"
               variant="outline"
@@ -139,30 +137,9 @@ export function StudioToolbar({
               <Bot />
               Chat with Blyp
             </Button>
-            <StatusPill
-              label="Project"
-              status={meta?.project.valid ? "valid" : "invalid"}
-              value={meta?.project.resolvedFrom ?? "cwd"}
-            />
-            <StatusPill
-              label="Config"
-              status={meta?.config.status ?? "not-found"}
-              value={meta?.config.status ?? "idle"}
-            />
-            <StatusPill
-              label="Logs"
-              status={meta?.logs.fileCount ? "found" : "not-found"}
-              value={
-                meta
-                  ? meta.logs.mode === "database"
-                    ? "database"
-                    : `${meta.logs.fileCount} files`
-                  : "pending"
-              }
-            />
           </div>
         </div>
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(0,1.2fr)_repeat(6,minmax(0,0.72fr))]">
+        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
           <FilterBox icon={<Search className="size-3.5" />} label="Search">
             <Input
               value={filters.search}
@@ -172,124 +149,148 @@ export function StudioToolbar({
               placeholder="Message, bindings, data"
             />
           </FilterBox>
-          <FilterBox icon={<SlidersHorizontal className="size-3.5" />} label="Level">
-            {disableClassificationControls ? (
-              <Input value={disabledControlText.level} readOnly disabled />
-            ) : (
-              <Select
-                value={filters.level || ALL_LEVELS_VALUE}
-                onValueChange={(value) =>
-                  onFilterChange({
-                    ...filters,
-                    level: value === ALL_LEVELS_VALUE ? "" : String(value ?? ""),
-                  })
-                }
+          <div className="flex justify-start md:justify-end">
+            <Popover>
+              <PopoverTrigger
+                className={buttonVariants({
+                  variant: "outline",
+                  size: "default",
+                  className: "w-full md:w-auto",
+                })}
               >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={ALL_LEVELS_VALUE}>All levels</SelectItem>
-                  {facets?.levels.length
-                    ? facets.levels.map((level) => (
-                        <SelectItem key={level} value={level}>
-                          {level}
+                <SlidersHorizontal />
+                Filters
+              </PopoverTrigger>
+              <PopoverContent
+                className="w-[min(94vw,56rem)] p-4"
+                align="end"
+              >
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                  <FilterBox icon={<SlidersHorizontal className="size-3.5" />} label="Level">
+                    {disableClassificationControls ? (
+                      <Input value={disabledControlText.level} readOnly disabled />
+                    ) : (
+                      <Select
+                        value={filters.level || ALL_LEVELS_VALUE}
+                        onValueChange={(value) =>
+                          onFilterChange({
+                            ...filters,
+                            level: value === ALL_LEVELS_VALUE ? "" : String(value ?? ""),
+                          })
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value={ALL_LEVELS_VALUE}>All levels</SelectItem>
+                          {facets?.levels.length
+                            ? facets.levels.map((level) => (
+                                <SelectItem key={level} value={level}>
+                                  {level}
+                                </SelectItem>
+                              ))
+                            : null}
+                        </SelectContent>
+                      </Select>
+                    )}
+                  </FilterBox>
+                  <FilterBox label="Type">
+                    {disableClassificationControls ? (
+                      <Input value={disabledControlText.type} readOnly disabled />
+                    ) : (
+                      <Select
+                        value={filters.type || ALL_TYPES_VALUE}
+                        onValueChange={(value) =>
+                          onFilterChange({
+                            ...filters,
+                            type: value === ALL_TYPES_VALUE ? "" : String(value ?? ""),
+                          })
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value={ALL_TYPES_VALUE}>All types</SelectItem>
+                          {facets?.types.map((type) => (
+                            <SelectItem key={type} value={type}>
+                              {type}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                  </FilterBox>
+                  <FilterBox label={meta?.logs.mode === "database" ? "Source" : "File"}>
+                    <Select
+                      value={filters.fileId || ALL_FILES_VALUE}
+                      onValueChange={(value) =>
+                        onFilterChange({
+                          ...filters,
+                          fileId: value === ALL_FILES_VALUE ? "" : String(value ?? ""),
+                        })
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={ALL_FILES_VALUE}>
+                          {meta?.logs.mode === "database" ? "All sources" : "All files"}
                         </SelectItem>
-                      ))
-                    : null}
-                </SelectContent>
-              </Select>
-            )}
-          </FilterBox>
-          <FilterBox label="Type">
-            {disableClassificationControls ? (
-              <Input value={disabledControlText.type} readOnly disabled />
-            ) : (
-              <Select
-                value={filters.type || ALL_TYPES_VALUE}
-                onValueChange={(value) =>
-                  onFilterChange({
-                    ...filters,
-                    type: value === ALL_TYPES_VALUE ? "" : String(value ?? ""),
-                  })
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={ALL_TYPES_VALUE}>All types</SelectItem>
-                  {facets?.types.map((type) => (
-                    <SelectItem key={type} value={type}>
-                      {type}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
-          </FilterBox>
-          <FilterBox label={meta?.logs.mode === "database" ? "Source" : "File"}>
-            <Select
-              value={filters.fileId || ALL_FILES_VALUE}
-              onValueChange={(value) =>
-                onFilterChange({
-                  ...filters,
-                  fileId: value === ALL_FILES_VALUE ? "" : String(value ?? ""),
-                })
-              }
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={ALL_FILES_VALUE}>
-                  {meta?.logs.mode === "database" ? "All sources" : "All files"}
-                </SelectItem>
-                {files.map((file) => (
-                  <SelectItem key={file.id} value={file.id}>
-                    {file.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </FilterBox>
-          <FilterBox icon={<LayoutPanelTop className="size-3.5" />} label="View">
-            {disableClassificationControls ? (
-              <Input value={disabledControlText.view} readOnly disabled />
-            ) : (
-              <Select value={grouping} onValueChange={(value) => onGroupingChange(value as StudioGroupingMode)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="grouped">Grouped</SelectItem>
-                  <SelectItem value="flat">Flat</SelectItem>
-                </SelectContent>
-              </Select>
-            )}
-          </FilterBox>
-          <FilterBox label="From">
-            <DateFilterPicker
-              label="From"
-              value={filters.from}
-              boundary="start"
-              onChange={(value) => onFilterChange({ ...filters, from: value })}
-            />
-          </FilterBox>
-          <FilterBox label="To">
-            <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
-              <DateFilterPicker
-                label="To"
-                value={filters.to}
-                boundary="end"
-                onChange={(value) => onFilterChange({ ...filters, to: value })}
-              />
-              <Button variant="outline" size="sm" onClick={onResetFilters}>
-                <RotateCcw />
-                Reset
-              </Button>
-            </div>
-          </FilterBox>
+                        {files.map((file) => (
+                          <SelectItem key={file.id} value={file.id}>
+                            {file.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </FilterBox>
+                  <FilterBox icon={<LayoutPanelTop className="size-3.5" />} label="View">
+                    {disableClassificationControls ? (
+                      <Input value={disabledControlText.view} readOnly disabled />
+                    ) : (
+                      <Select
+                        value={grouping}
+                        onValueChange={(value) => onGroupingChange(value as StudioGroupingMode)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="grouped">Grouped</SelectItem>
+                          <SelectItem value="flat">Flat</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    )}
+                  </FilterBox>
+                  <FilterBox label="From">
+                    <DateFilterPicker
+                      label="From"
+                      value={filters.from}
+                      boundary="start"
+                      onChange={(value) => onFilterChange({ ...filters, from: value })}
+                    />
+                  </FilterBox>
+                  <FilterBox label="To">
+                    <DateFilterPicker
+                      label="To"
+                      value={filters.to}
+                      boundary="end"
+                      onChange={(value) => onFilterChange({ ...filters, to: value })}
+                    />
+                  </FilterBox>
+                </div>
+                <div className="mt-4 flex justify-end">
+                  <Button variant="outline" size="sm" onClick={onResetFilters}>
+                    <RotateCcw />
+                    Reset
+                  </Button>
+                </div>
+              </PopoverContent>
+            </Popover>
+          </div>
         </div>
       </CardContent>
     </Card>
@@ -317,25 +318,6 @@ function FilterBox({
       </div>
       {children}
     </div>
-  );
-}
-
-function StatusPill({
-  label,
-  status,
-  value,
-}: {
-  label: string;
-  status: "found" | "not-found" | "error" | "valid" | "invalid";
-  value: string;
-}) {
-  return (
-    <Badge className={`max-w-full gap-2 px-2 py-1 ${getStatusClasses(status)}`}>
-      <span>{label}</span>
-      <span className="max-w-[10rem] truncate text-foreground" title={value}>
-        {value}
-      </span>
-    </Badge>
   );
 }
 

@@ -48,19 +48,6 @@ export function OverviewView({
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-3 rounded-md border border-border/70 bg-card/70 px-4 py-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
-        <div className="space-y-2">
-          <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
-            Overview
-          </div>
-          <div className="max-w-3xl text-sm leading-6 text-muted-foreground">
-            A calm live snapshot of the current Studio scope: health first, recent activity second, section drill-downs when you need them.
-          </div>
-        </div>
-        <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
-          Landing view
-        </div>
-      </div>
       <OverviewHealthBar stats={overview.stats} connectedAt={connectedAt} now={now} />
       <div className="grid gap-5 2xl:grid-cols-[minmax(0,1.7fr)_minmax(24rem,0.9fr)]">
         <OverviewLiveFeed items={overview.liveFeed} onOpen={onSelectFeedTarget} />
