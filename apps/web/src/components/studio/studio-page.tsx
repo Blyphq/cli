@@ -1,4 +1,7 @@
 import { useEffect, useState } from "react";
+import { Moon, Sun } from "lucide-react";
+import { useTheme } from "next-themes";
+import { Button } from "@/components/ui/button";
 
 import { BackgroundJobDetailPanel } from "@/components/studio/background-job-detail-panel";
 import { BackgroundJobsView } from "@/components/studio/background-jobs-view";
@@ -57,6 +60,21 @@ import {
   isPaymentsSection,
 } from "@/lib/studio";
 import { formatDurationMs } from "@/lib/studio";
+
+function ThemeToggle() {
+  const { theme, setTheme } = useTheme();
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+    >
+      <Sun className="h-4 w-4 dark:hidden" />
+      <Moon className="h-4 w-4 hidden dark:block" />
+      <span className="sr-only">Toggle theme</span>
+    </Button>
+  );
+}
 
 export interface StudioPageProps {
   navigate: (opts: { search: { project?: string } }) => void;
@@ -521,7 +539,7 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
           </div>
         </AppSidebar>
         <SidebarInset>
-          <header className="flex h-16 shrink-0 items-center gap-2 border-b border-border/60">
+          <header className="flex h-16 shrink-0 items-center justify-between gap-2 border-b border-border/60">
             <div className="flex items-center gap-2 px-4">
               <SidebarTrigger className="-ml-1" />
               <Separator
@@ -535,6 +553,9 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
                   </BreadcrumbItem>
                 </BreadcrumbList>
               </Breadcrumb>
+            </div>
+            <div className="px-4">
+              <ThemeToggle />
             </div>
           </header>
           <div className="min-h-full p-4 text-foreground xl:p-6">
