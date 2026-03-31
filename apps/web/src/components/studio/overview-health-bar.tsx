@@ -53,7 +53,7 @@ export function OverviewHealthBar({
                   {formatOverviewMetricValue(stat.label, stat.value)}
                 </div>
               </div>
-              <Badge variant="outline" className="rounded-none border-current/30 bg-transparent text-[10px] uppercase">
+              <Badge variant="outline" className="rounded-md border-current/30 bg-transparent text-[10px] uppercase">
                 {stat.status}
               </Badge>
             </div>

@@ -98,7 +98,7 @@ export function ChartTooltipContent({
   }
 
   return (
-    <div className="min-w-40 space-y-2 rounded-none border border-border/60 bg-card px-3 py-2 text-xs shadow-lg">
+    <div className="min-w-40 space-y-2 rounded-md border border-border/60 bg-card px-3 py-2 text-xs shadow-lg">
       {!hideLabel ? (
         <div className="font-medium text-foreground">
           {labelFormatter ? labelFormatter(label, payload) : String(label)}
@@ -116,7 +116,7 @@ export function ChartTooltipContent({
             <div key={key} className="flex items-center justify-between gap-4">
               <div className="flex items-center gap-2 text-muted-foreground">
                 <span
-                  className="size-2 shrink-0 rounded-none"
+                  className="size-2 shrink-0 rounded-md"
                   style={{ backgroundColor: item.color }}
                   aria-hidden
                 />

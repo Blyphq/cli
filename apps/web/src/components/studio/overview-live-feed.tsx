@@ -63,7 +63,7 @@ export function OverviewLiveFeed({ items, onOpen }: OverviewLiveFeedProps) {
             : "Newest scoped events stream here in real time."
         }
         action={
-          <Badge variant="outline" className="rounded-none">
+          <Badge variant="outline" className="rounded-md">
             {paused ? "Paused" : "Live"}
           </Badge>
         }
@@ -100,7 +100,7 @@ export function OverviewLiveFeed({ items, onOpen }: OverviewLiveFeedProps) {
                       <div className="text-[11px] text-muted-foreground">
                         {formatRelativeTime(item.timestamp, now)}
                       </div>
-                      <Badge className={cn("rounded-none", getLevelClasses(item.level))}>
+                      <Badge className={cn("rounded-md", getLevelClasses(item.level))}>
                         {item.level}
                       </Badge>
                     </div>

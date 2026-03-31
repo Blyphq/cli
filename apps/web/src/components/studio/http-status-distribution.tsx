@@ -68,7 +68,7 @@ export function HttpStatusDistribution({ buckets }: HttpStatusDistributionProps)
         title="Status code distribution"
         description="Request volume by status code group across the current HTTP scope."
       />
-      <div className="rounded-none border border-border/60 bg-card p-4">
+      <div className="rounded-md border border-border/60 bg-card p-4">
         <ChartContainer config={chartConfig} className="h-64 w-full">
           <AreaChart data={data} margin={{ left: 8, right: 8, top: 8, bottom: 8 }}>
             <CartesianGrid vertical={false} />

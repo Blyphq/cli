@@ -78,7 +78,7 @@ export function HttpLogDetail({ record }: HttpLogDetailProps) {
         </div>
         {html ? (
           <div
-            className="overflow-x-auto [&_.shiki]:min-w-max [&_.shiki]:rounded-none [&_.shiki]:bg-transparent [&_.shiki]:p-0 [&_.shiki]:font-mono [&_.shiki]:text-[11px] [&_.shiki]:leading-5"
+            className="overflow-x-auto [&_.shiki]:min-w-max [&_.shiki]:rounded-md [&_.shiki]:bg-transparent [&_.shiki]:p-0 [&_.shiki]:font-mono [&_.shiki]:text-[11px] [&_.shiki]:leading-5"
             dangerouslySetInnerHTML={{ __html: html }}
           />
         ) : (

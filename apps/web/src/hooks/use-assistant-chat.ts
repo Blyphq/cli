@@ -103,6 +103,8 @@ export function useAssistantChat({
               : undefined,
           selectedAgentTaskId:
             assistantScopeMode === "selection" && selection?.kind === "agent-task"
+              ? selection.id
+              : undefined,
           selectedPaymentTraceId:
             assistantScopeMode === "selection" && selection?.kind === "payment-trace"
               ? selection.id

@@ -20,8 +20,20 @@ import { ProjectConfigPanel } from "@/components/studio/project-config-panel";
 import { OverviewView } from "@/components/studio/overview-view";
 import { PaymentsView } from "@/components/studio/payments-view";
 import { SectionNavPanel } from "@/components/studio/section-nav-panel";
-import { StudioShell } from "@/components/studio/studio-shell";
 import { StudioToolbar } from "@/components/studio/studio-toolbar";
+import { AppSidebar } from "@/components/app-sidebar";
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbList,
+  BreadcrumbPage,
+} from "@/components/ui/breadcrumb";
+import { Separator } from "@/components/ui/separator";
+import {
+  SidebarInset,
+  SidebarProvider,
+  SidebarTrigger,
+} from "@/components/ui/sidebar";
 import { useAssistantChat } from "@/hooks/use-assistant-chat";
 import {
   useErrorSessionState,
@@ -475,28 +487,9 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
 
   return (
     <>
-      <StudioShell
-        toolbar={
-          <StudioToolbar
-            draftProjectPath={draftProjectPath}
-            facets={studioData.facetsQuery.data}
-            filters={filters}
-            grouping={grouping}
-            meta={metaQuery.data}
-            section={section}
-            files={files}
-            onDraftProjectPathChange={setDraftProjectPath}
-            onInspect={() =>
-              navigate({ search: { project: draftProjectPath || undefined } })
-            }
-            onStartStandaloneChat={assistant.createStandaloneChat}
-            onFilterChange={setFilters}
-            onGroupingChange={setGrouping}
-            onResetFilters={() => setFilters(DEFAULT_FILTERS)}
-          />
-        }
-        sidebar={
-          <>
+      <SidebarProvider>
+        <AppSidebar>
+          <div className="space-y-3 py-2">
             <SectionNavPanel
               projectPath={projectPath}
               meta={metaQuery.data}
@@ -532,9 +525,53 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
                 }
               />
             )}
-          </>
-        }
-        content={
+          </div>
+        </AppSidebar>
+        <SidebarInset>
+          <header className="flex h-16 shrink-0 items-center gap-2 border-b border-border/60">
+            <div className="flex items-center gap-2 px-4">
+              <SidebarTrigger className="-ml-1" />
+              <Separator
+                orientation="vertical"
+                className="mr-2 data-[orientation=vertical]:h-4"
+              />
+              <Breadcrumb>
+                <BreadcrumbList>
+                  <BreadcrumbItem>
+                    <BreadcrumbPage>{currentSectionLabel}</BreadcrumbPage>
+                  </BreadcrumbItem>
+                </BreadcrumbList>
+              </Breadcrumb>
+            </div>
+          </header>
+          <div className="min-h-full p-4 text-foreground xl:p-6">
+            <div className="mx-auto grid max-w-[1720px] gap-5">
+              <StudioToolbar
+                draftProjectPath={draftProjectPath}
+                facets={studioData.facetsQuery.data}
+                filters={filters}
+                grouping={grouping}
+                meta={metaQuery.data}
+                section={section}
+                files={files}
+                onDraftProjectPathChange={setDraftProjectPath}
+                onInspect={() =>
+                  navigate({ search: { project: draftProjectPath || undefined } })
+                }
+                onStartStandaloneChat={assistant.createStandaloneChat}
+                onFilterChange={setFilters}
+                onGroupingChange={setGrouping}
+                onResetFilters={() => setFilters(DEFAULT_FILTERS)}
+              />
+              <div
+                className={
+                  isOverviewSection(section)
+                    ? "grid gap-5 lg:grid-cols-[minmax(0,1fr)]"
+                    : "grid gap-5 lg:grid-cols-[minmax(0,1fr)] xl:grid-cols-[minmax(0,1fr)_minmax(21rem,25rem)]"
+                }
+              >
+                <div className="min-w-0">
+                  {
           hasBackendError ? (
             <ErrorState
               title="Studio backend failed"
@@ -757,111 +794,114 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
               onSelect={setSelection}
               onPageChange={setOffset}
             />
-          )
-        }
-        detail={
-          isOverviewSection(section) ? null :
-          selection?.kind === "group" ? (
-            <GroupDetailPanel
-              group={selectedGroup}
-              loading={groupQuery.isLoading}
-              onDescribeWithAi={() => {
-                assistant.handleDescribeSelection(
-                  "Describe the selected structured group like an observability copilot. Explain what happened, likely cause, related signals, and what to inspect next.",
-                );
-              }}
-              onSelectRecord={(recordId) => {
-                setSelection({ kind: "record", id: recordId });
-              }}
-            />
-          ) : selection?.kind === "error-group" ? (
-            <ErrorDetailPanel
-              group={selectedErrorGroup}
-              occurrence={null}
-              record={null}
-              loading={studioData.errorGroupQuery.isLoading}
-              resolvedAt={
-                errorSessionState.state.resolvedAtByFingerprint[selection.id] ?? null
-              }
-              ignored={Boolean(errorSessionState.state.ignoredByFingerprint[selection.id])}
-              onAskAi={handleAskAiToFix}
-              onMarkResolved={() => errorSessionState.markResolved(selection.id)}
-              onIgnore={() => errorSessionState.ignore(selection.id)}
-              onViewTrace={() => {
-                const traceGroupId = selectedErrorGroup?.group.relatedTraceGroupId;
-                if (!traceGroupId) {
-                  return;
-                }
-                setGrouping("grouped");
-                setSection("all-logs");
-                setSelection({ kind: "group", id: traceGroupId });
-              }}
-            />
-          ) : (
-            selection?.kind === "agent-task" ? (
-              <AgentTaskDetailPanel
-                detail={selectedAgentTask}
-                loading={studioData.agentTaskQuery.isLoading}
-                onAskAi={handleAskAiOnAgentTask}
-              />
-            ) : selection?.kind === "background-run" ? (
-              <BackgroundJobDetailPanel
-                detail={selectedBackgroundRun}
-                loading={studioData.backgroundJobRunQuery.isLoading}
-                onAskAi={handleAskAiOnBackgroundRun}
-              />
-            ) : selection?.kind === "payment-trace" ? (
-              <div className="space-y-4">
-                <EmptyState
-                  title={selectedPaymentTrace?.trace.correlationLabel ?? "Select a payment trace"}
-                  description={
-                    selectedPaymentTrace
-                      ? `Status ${selectedPaymentTrace.trace.status}. Expand the trace in the Payments view to inspect the full timeline or ask AI for diagnosis.`
-                      : "Choose a payment trace to inspect its lifecycle."
-                  }
-                  size="compact"
-                  action={
-                    selectedPaymentTrace &&
-                    (selectedPaymentTrace.trace.status === "DECLINED" ||
-                      selectedPaymentTrace.trace.status === "ERROR") ? (
-                      <button
-                        type="button"
-                        className="text-xs font-medium text-primary"
-                        onClick={() => handleAskAiOnPaymentTrace(selectedPaymentTrace.trace)}
-                      >
-                        Ask AI
-                      </button>
-                    ) : undefined
-                  }
-                />
+          )}
+                  </div>
+                {!isOverviewSection(section) ? (
+                  <div className="min-w-0 xl:sticky xl:top-4 xl:self-start">
+                    {selection?.kind === "group" ? (
+                      <GroupDetailPanel
+                        group={selectedGroup}
+                        loading={groupQuery.isLoading}
+                        onDescribeWithAi={() => {
+                          assistant.handleDescribeSelection(
+                            "Describe the selected structured group like an observability copilot. Explain what happened, likely cause, related signals, and what to inspect next.",
+                          );
+                        }}
+                        onSelectRecord={(recordId) => {
+                          setSelection({ kind: "record", id: recordId });
+                        }}
+                      />
+                    ) : selection?.kind === "error-group" ? (
+                      <ErrorDetailPanel
+                        group={selectedErrorGroup}
+                        occurrence={null}
+                        record={null}
+                        loading={studioData.errorGroupQuery.isLoading}
+                        resolvedAt={
+                          errorSessionState.state.resolvedAtByFingerprint[selection.id] ?? null
+                        }
+                        ignored={Boolean(errorSessionState.state.ignoredByFingerprint[selection.id])}
+                        onAskAi={handleAskAiToFix}
+                        onMarkResolved={() => errorSessionState.markResolved(selection.id)}
+                        onIgnore={() => errorSessionState.ignore(selection.id)}
+                        onViewTrace={() => {
+                          const traceGroupId = selectedErrorGroup?.group.relatedTraceGroupId;
+                          if (!traceGroupId) {
+                            return;
+                          }
+                          setGrouping("grouped");
+                          setSection("all-logs");
+                          setSelection({ kind: "group", id: traceGroupId });
+                        }}
+                      />
+                    ) : selection?.kind === "agent-task" ? (
+                      <AgentTaskDetailPanel
+                        detail={selectedAgentTask}
+                        loading={studioData.agentTaskQuery.isLoading}
+                        onAskAi={handleAskAiOnAgentTask}
+                      />
+                    ) : selection?.kind === "background-run" ? (
+                      <BackgroundJobDetailPanel
+                        detail={selectedBackgroundRun}
+                        loading={studioData.backgroundJobRunQuery.isLoading}
+                        onAskAi={handleAskAiOnBackgroundRun}
+                      />
+                    ) : selection?.kind === "payment-trace" ? (
+                      <div className="space-y-4">
+                        <EmptyState
+                          title={selectedPaymentTrace?.trace.correlationLabel ?? "Select a payment trace"}
+                          description={
+                            selectedPaymentTrace
+                              ? `Status ${selectedPaymentTrace.trace.status}. Expand the trace in the Payments view to inspect the full timeline or ask AI for diagnosis.`
+                              : "Choose a payment trace to inspect its lifecycle."
+                          }
+                          size="compact"
+                          action={
+                            selectedPaymentTrace &&
+                            (selectedPaymentTrace.trace.status === "DECLINED" ||
+                              selectedPaymentTrace.trace.status === "ERROR") ? (
+                              <button
+                                type="button"
+                                className="text-xs font-medium text-primary"
+                                onClick={() => handleAskAiOnPaymentTrace(selectedPaymentTrace.trace)}
+                              >
+                                Ask AI
+                              </button>
+                            ) : undefined
+                          }
+                        />
+                      </div>
+                    ) : selection?.kind === "error-occurrence" ? (
+                      <ErrorDetailPanel
+                        group={null}
+                        occurrence={
+                          studioData.errorsQuery.data?.occurrences.find(
+                            (item) => item.id === selection.id,
+                          ) ?? null
+                        }
+                        record={selectedRecord}
+                        recordSource={recordSourceQuery.data ?? null}
+                        recordSourceLoading={recordSourceQuery.isLoading}
+                      />
+                    ) : (
+                      <LogDetailPanel
+                        record={selectedRecord}
+                        source={recordSourceQuery.data ?? null}
+                        sourceLoading={recordSourceQuery.isLoading}
+                        onDescribeWithAi={() => {
+                          assistant.handleDescribeSelection(
+                            "Describe the selected log like an observability copilot. Explain what happened, likely cause, related signals, and what to inspect next.",
+                          );
+                        }}
+                      />
+                    )}
+                  </div>
+                ) : null}
               </div>
-            ) : selection?.kind === "error-occurrence" ? (
-              <ErrorDetailPanel
-                group={null}
-                occurrence={
-                  studioData.errorsQuery.data?.occurrences.find(
-                    (item) => item.id === selection.id,
-                  ) ?? null
-                }
-                record={selectedRecord}
-                recordSource={recordSourceQuery.data ?? null}
-                recordSourceLoading={recordSourceQuery.isLoading}
-              />
-            ) : (
-              <LogDetailPanel
-                record={selectedRecord}
-                source={recordSourceQuery.data ?? null}
-                sourceLoading={recordSourceQuery.isLoading}
-                onDescribeWithAi={() => {
-                  assistant.handleDescribeSelection(
-                    "Describe the selected log like an observability copilot. Explain what happened, likely cause, related signals, and what to inspect next.",
-                  );
-                }}
-              />
-            )
-          )
-        }
-      />
+            </div>
+          </div>
+        </SidebarInset>
+      </SidebarProvider>
       {!hasBackendError && !isProjectInvalid && !isLoadingMeta && (
         <AssistantSheet
           open={assistant.assistantOpen}

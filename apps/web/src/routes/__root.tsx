@@ -9,7 +9,6 @@ import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 import { Toaster } from "@/components/ui/sonner";
 
 import { RootErrorBoundary } from "../components/root-error-boundary";
-import { Header } from "../components/header";
 import appCss from "../index.css?url";
 
 export interface RouterAppContext {
@@ -50,10 +49,7 @@ function RootDocument() {
         <HeadContent />
       </head>
       <body>
-        <div className="grid h-svh grid-rows-[auto_1fr]">
-          <Header />
-          <Outlet />
-        </div>
+        <Outlet />
         <Toaster richColors />
 
         {import.meta.env.DEV && (

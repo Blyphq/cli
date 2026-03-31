@@ -234,7 +234,7 @@ export function AssistantPanel({
           onChange={(event) => onDraftChange(event.currentTarget.value)}
           placeholder="Ask about these logs, recurring patterns, or what to inspect next."
           className={cn(
-            "border-input bg-background min-h-24 w-full resize-y rounded-none border px-3 py-2 text-sm outline-none focus-visible:border-ring",
+            "border-input bg-background min-h-24 w-full resize-y rounded-md border px-3 py-2 text-sm outline-none focus-visible:border-ring",
             "placeholder:text-muted-foreground",
           )}
         />

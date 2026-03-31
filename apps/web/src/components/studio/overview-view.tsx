@@ -48,7 +48,7 @@ export function OverviewView({
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-3 rounded-none border border-border/70 bg-card/70 px-4 py-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+      <div className="grid gap-3 rounded-md border border-border/70 bg-card/70 px-4 py-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
         <div className="space-y-2">
           <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
             Overview

@@ -409,7 +409,6 @@ export function useStudioData({
     selectedAgentTask:
       selection?.kind === "agent-task" ? agentTaskQuery.data ?? null : null,
     selectedPaymentTrace,
-    selectedPaymentTrace,
     selectedErrorGroup,
     isLoadingMeta,
     isProjectInvalid,

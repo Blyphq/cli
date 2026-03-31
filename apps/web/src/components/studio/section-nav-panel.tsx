@@ -4,9 +4,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -14,10 +12,18 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import {
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarMenu,
+  SidebarMenuBadge,
+  SidebarMenuButton,
+  SidebarMenuItem,
+} from "@/components/ui/sidebar";
+import { cn } from "@/lib/utils";
 import type { StudioDetectedSection, StudioMeta, StudioSectionId } from "@/lib/studio";
 import { useTRPC } from "@/utils/trpc";
-
-import { PanelHeader } from "./panel-header";
 
 interface SectionNavPanelProps {
   projectPath: string;
@@ -75,51 +81,49 @@ export function SectionNavPanel({
 
   return (
     <>
-      <Card size="sm">
-        <PanelHeader
-          title="Sections"
-          description="Adaptive views based on the current session."
-        />
-        <CardContent className="space-y-2">
-          {pinnedTop.map((item) => (
-            <SectionButton
-              key={item.id}
-              active={section === item.id}
-              icon={item.icon}
-              label={item.label}
-              unread={false}
-              onClick={() => onSelect(item.id)}
-            />
-          ))}
-          {errors ? <div className="border-t border-border/60 pt-2" /> : null}
-          <AnimatePresence initial={false}>
-            {errors ? (
-              <AnimatedSectionRow key={errors.id}>
-                <SectionButton
-                  active={section === errors.id}
-                  icon={errors.icon}
-                  label={errors.label}
-                  count={errors.count}
-                  unread={hasUnread(errors, visitedAtBySection)}
-                  destructive
-                  onClick={() => onSelect(errors.id)}
-                />
-              </AnimatedSectionRow>
-            ) : null}
-            {rest.map((item) => (
-              <AnimatedSectionRow key={item.id}>
-                <SectionButton
-                  active={section === item.id}
-                  icon={item.icon}
-                  label={item.label}
-                  count={item.count}
-                  unread={hasUnread(item, visitedAtBySection)}
-                  onClick={() => onSelect(item.id)}
-                />
-              </AnimatedSectionRow>
+      <SidebarGroup>
+        <SidebarGroupLabel>Sections</SidebarGroupLabel>
+        <SidebarGroupContent>
+          <SidebarMenu>
+            {pinnedTop.map((item) => (
+              <SectionButton
+                key={item.id}
+                active={section === item.id}
+                icon={item.icon}
+                label={item.label}
+                unread={false}
+                onClick={() => onSelect(item.id)}
+              />
             ))}
-          </AnimatePresence>
-          <div className="border-t border-border/60 pt-2">
+            {errors ? (
+              <AnimatePresence initial={false}>
+                <AnimatedSectionRow key={errors.id}>
+                  <SectionButton
+                    active={section === errors.id}
+                    icon={errors.icon}
+                    label={errors.label}
+                    count={errors.count}
+                    unread={hasUnread(errors, visitedAtBySection)}
+                    destructive
+                    onClick={() => onSelect(errors.id)}
+                  />
+                </AnimatedSectionRow>
+              </AnimatePresence>
+            ) : null}
+            <AnimatePresence initial={false}>
+              {rest.map((item) => (
+                <AnimatedSectionRow key={item.id}>
+                  <SectionButton
+                    active={section === item.id}
+                    icon={item.icon}
+                    label={item.label}
+                    count={item.count}
+                    unread={hasUnread(item, visitedAtBySection)}
+                    onClick={() => onSelect(item.id)}
+                  />
+                </AnimatedSectionRow>
+              ))}
+            </AnimatePresence>
             {pinnedBottom.map((item) => (
               <SectionButton
                 key={item.id}
@@ -130,13 +134,15 @@ export function SectionNavPanel({
                 onClick={() => onSelect(item.id)}
               />
             ))}
-          </div>
-          <Button variant="outline" className="w-full justify-start" onClick={() => setDialogOpen(true)}>
-            <Plus />
-            Add section
-          </Button>
-        </CardContent>
-      </Card>
+            <SidebarMenuItem>
+              <SidebarMenuButton onClick={() => setDialogOpen(true)}>
+                <Plus />
+                <span>Add section</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        </SidebarGroupContent>
+      </SidebarGroup>
       <Dialog open={dialogOpen} onOpenChange={handleDialogOpenChange}>
         <DialogContent className="max-w-xl p-0">
           <div className="border-b border-border/60 px-4 py-4">
@@ -187,22 +193,33 @@ function SectionButton(props: {
   onClick(): void;
 }) {
   return (
-    <Button
-      variant={props.active ? "secondary" : "outline"}
-      className="w-full justify-between"
-      onClick={props.onClick}
-    >
-      <span className="flex items-center gap-2">
+    <SidebarMenuItem className="group/section-item">
+      <SidebarMenuButton
+        isActive={props.active}
+        onClick={props.onClick}
+        className={cn(
+          "transition-colors duration-150",
+          !props.active ? "hover:bg-primary/20 hover:text-sidebar-accent-foreground" : "!bg-primary/70"
+        )}
+      >
         <span>{props.icon}</span>
         <span>{props.label}</span>
-        {props.unread ? <span className="size-2 rounded-full bg-destructive" aria-hidden /> : null}
-      </span>
+        {props.unread ? (
+          <span className="ml-1 size-2 rounded-full bg-destructive" aria-hidden />
+        ) : null}
+      </SidebarMenuButton>
       {typeof props.count === "number" ? (
-        <Badge variant={props.destructive ? "destructive" : props.active ? "default" : "muted"}>
+        <SidebarMenuBadge
+          className={cn(
+            "transition-colors duration-150 group-hover/section-item:text-sidebar-accent-foreground",
+            props.destructive && "text-destructive group-hover/section-item:text-destructive",
+            props.active && !props.destructive && "text-sidebar-accent-foreground",
+          )}
+        >
           {props.count}
-        </Badge>
+        </SidebarMenuBadge>
       ) : null}
-    </Button>
+    </SidebarMenuItem>
   );
 }
 

@@ -10,7 +10,7 @@ import { Shimmer } from "@/components/ai-elements/shimmer";
 export function AssistantShimmer() {
   return (
     <Message from="assistant">
-      <MessageContent className="w-full max-w-full rounded-none border border-dashed px-4 py-3">
+      <MessageContent className="w-full max-w-full rounded-md border border-dashed px-4 py-3">
         <div className="space-y-3">
           <Shimmer className="text-sm">Scanning the selected logs and nearby matches...</Shimmer>
           <ChainOfThought defaultOpen>
