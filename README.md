@@ -37,7 +37,7 @@ The `blyp` CLI is the local entrypoint for Blyp workflows. It currently supports
 - launching Studio for a project
 - printing runtime and workspace diagnostics
 - installing Blyp skills into a project-local `.agents/skills` directory
-- guiding Prisma or Drizzle database logging setup for `blyp-js`
+- scaffolding the Blyp database schema contract for database mode
 - showing help and version information
 
 The CLI package in this repo is published as `@blyp/cli`, while the executable command remains `blyp`.
@@ -74,12 +74,13 @@ The available commands are:
   Prints runtime details such as the current directory, runtime versions, detected workspace root, and Studio web app path.
 - **`blyp skills install [source-or-skill-name|claude] [--force]`**
   Installs a skill from `https://github.com/Blyphq/skills` by name, opens an interactive picker for skills from that repo, or generates a project `CLAUDE.md` with the reserved `claude` target.
-- **`blyp db:init`**
-  Walks through Blyp database logging setup, scaffolds schema, applies migrations, and writes `blyp.config.ts`.
-- **`blyp db:migrate`**
+- **`blyp db init`**
+  Walks through Blyp database schema setup, scaffolds or repairs the schema contract, applies migrations, and writes `blyp.config.ts` when it is safely Blyp-owned.
+- **`blyp db migrate`**
   Runs the configured Prisma or Drizzle migration workflow.
-- **`blyp db:generate`**
+- **`blyp db generate`**
   Runs Prisma client generation for configured Prisma projects.
+- Legacy aliases: `blyp db:init`, `blyp db:migrate`, `blyp db:generate`
 - **`blyp help`**, **`blyp -h`**, **`blyp --help`**
   Shows command usage.
 - **`blyp --version`**, **`blyp -V`**
@@ -163,7 +164,7 @@ bun /absolute/path/to/blyp-cli/packages/cli/src/index.ts skills install
 
 ### Database commands
 
-Use these when a project is enabling `blyp-js` database logging with Prisma or Drizzle. `db:init` is the guided setup command; once the project is configured, `db:migrate` and `db:generate` are the shorter follow-up commands.
+Use these when a project is enabling Blyp database mode with Prisma or Drizzle. `db init` is the guided setup command; once the project is configured, `db migrate` and `db generate` are the shorter follow-up commands. The legacy `db:init`, `db:migrate`, and `db:generate` aliases still work.
 
 Supported combinations:
 
@@ -175,15 +176,15 @@ Supported combinations:
 Examples:
 
 ```bash
-bun run cli -- db:init
+bun run cli -- db init
 ```
 
 ```bash
-bun run cli -- db:migrate
+bun run cli -- db migrate
 ```
 
 ```bash
-bun run cli -- db:generate
+bun run cli -- db generate
 ```
 
 Runtime config belongs in:
@@ -192,7 +193,7 @@ Runtime config belongs in:
 ./blyp.config.ts
 ```
 
-These commands do not do runtime table auto-creation. They only create and apply migrations through the project’s Prisma or Drizzle tooling.
+These commands enforce the published Blyp schema contract, including the required `trace_id` column and the required indexes. They do not do runtime table auto-creation. They only create and apply migrations through the project’s Prisma or Drizzle tooling.
 
 ## Publishing
 

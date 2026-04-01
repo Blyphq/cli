@@ -1,4 +1,5 @@
 import {
+  dbCommand,
   dbGenerateCommand,
   dbInitCommand,
   dbMigrateCommand,
@@ -14,6 +15,7 @@ const baseCommands = [
   studioCommand,
   healthCommand,
   skillsCommand,
+  dbCommand,
   dbInitCommand,
   dbMigrateCommand,
   dbGenerateCommand,
