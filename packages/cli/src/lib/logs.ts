@@ -40,7 +40,7 @@ export interface InitializeLogsProjectOptions {
 }
 
 export interface LogsInitializationResult {
-  readonly status: "initialized" | "already_initialized";
+  readonly status: "initialized" | "repaired" | "already_initialized";
   readonly adapter: LogsAdapter;
   readonly dialect: LogsDialect;
   readonly detected: string[];
@@ -98,7 +98,7 @@ interface DrizzleProject {
 type DetectedProject = PrismaProject | DrizzleProject;
 
 interface SchemaUpdateResult {
-  readonly changed: boolean;
+  readonly status: "created" | "repaired" | "unchanged";
   readonly filePath: string;
 }
 
@@ -144,7 +144,7 @@ export function getLogsInitUsage(): string {
 
 export function buildLogsHelpText(): string {
   return [
-    "Bootstrap Blyp database logging schema and migrations.",
+    "Bootstrap the Blyp database schema contract and migrations.",
     "",
     LOGS_INIT_USAGE,
     "Examples:",
@@ -155,7 +155,7 @@ export function buildLogsHelpText(): string {
     "",
     "Supported adapters: prisma, drizzle",
     "Supported dialects: postgres, mysql",
-    "This command scaffolds the Blyp log table for blyp-js database logging,",
+    "This command scaffolds the Blyp database schema contract for database mode,",
     "creates and applies migrations, and prints the runtime snippet for blyp.config.ts.",
     "It does not create database tables at runtime.",
   ].join("\n");
@@ -239,7 +239,7 @@ export async function initializeLogsProject(
       ? await ensurePrismaSchema(project)
       : await ensureDrizzleSchema(project);
 
-  if (!schemaUpdate.changed) {
+  if (schemaUpdate.status === "unchanged") {
     return {
       status: "already_initialized",
       adapter: project.adapter,
@@ -252,7 +252,7 @@ export async function initializeLogsProject(
       migrationApplied: false,
       snippet: project.snippet,
       followUp: [
-        "Add the snippet below to blyp.config.ts if the project is not already configured for database logging.",
+        "Add the snippet below to blyp.config.ts if the project is not already configured for Blyp database mode.",
       ],
     };
   }
@@ -272,7 +272,7 @@ export async function initializeLogsProject(
     .map((entry) => path.join(migrationRoot, entry));
 
   return {
-    status: "initialized",
+    status: schemaUpdate.status === "repaired" ? "repaired" : "initialized",
     adapter: project.adapter,
     dialect: project.dialect,
     detected: project.detected,
@@ -285,7 +285,7 @@ export async function initializeLogsProject(
     migrationApplied: project.migrationPlan.length > 0,
     snippet: project.snippet,
     followUp: [
-      "Add the snippet below to blyp.config.ts before using blyp-js database logging.",
+      "Add the snippet below to blyp.config.ts before using Blyp database mode.",
     ],
   };
 }
@@ -294,6 +294,7 @@ export function formatLogsInitializationResult(
   result: LogsInitializationResult,
 ): string {
   const lines = [
+    `Status: ${result.status.replaceAll("_", " ")}`,
     `Detected: ${result.detected.join(" ")}`,
   ];
 
@@ -352,7 +353,7 @@ export async function writeBlypConfigFile(input: {
       };
     }
 
-    if (!input.overwrite) {
+    if (!input.overwrite || !isSafeOwnedBlypConfig(existingContents, input.snippet)) {
       return {
         path: targetPath,
         status: "skipped",
@@ -401,7 +402,7 @@ export async function detectConfiguredDatabaseAdapter(
   }
 
   throw new CliError(
-    "Could not determine the database adapter. Run blyp db:init first or add a Blyp database config.",
+    "Could not determine the database adapter. Run blyp db init first or add a Blyp database config.",
   );
 }
 
@@ -660,16 +661,34 @@ async function detectDrizzleProject(input: {
 async function ensurePrismaSchema(project: PrismaProject): Promise<SchemaUpdateResult> {
   const contents = await readFile(project.schemaPath, "utf8");
   const existingModel = findPrismaModelBlock(contents, "BlypLog");
+  const newline = detectNewline(contents);
 
   if (existingModel) {
-    validateExistingPrismaModel(existingModel, project);
+    if (validateExistingPrismaModel(existingModel, project)) {
+      return {
+        status: "unchanged",
+        filePath: project.schemaPath,
+      };
+    }
+
+    if (!isManagedBlypPrismaModel(existingModel)) {
+      throw new CliError(
+        `Found existing BlypLog model in ${project.schemaPath} but it does not match the Blyp schema contract. Reconcile it manually or remove it before rerunning.`,
+      );
+    }
+
+    const updatedContents = contents.replace(
+      existingModel,
+      buildPrismaModel(project.dialect, newline),
+    );
+    await writeFile(project.schemaPath, updatedContents, "utf8");
+
     return {
-      changed: false,
+      status: "repaired",
       filePath: project.schemaPath,
     };
   }
 
-  const newline = detectNewline(contents);
   const updatedContents =
     contents.replace(/\s*$/, "") +
     `${newline}${newline}${buildPrismaModel(project.dialect, newline)}${newline}`;
@@ -677,7 +696,7 @@ async function ensurePrismaSchema(project: PrismaProject): Promise<SchemaUpdateR
   await writeFile(project.schemaPath, updatedContents, "utf8");
 
   return {
-    changed: true,
+    status: "created",
     filePath: project.schemaPath,
   };
 }
@@ -688,9 +707,29 @@ async function ensureDrizzleSchema(project: DrizzleProject): Promise<SchemaUpdat
 
     if (await pathExists(schemaFilePath)) {
       const contents = await readFile(schemaFilePath, "utf8");
-      validateExistingDrizzleSchema(contents, project);
+      if (validateExistingDrizzleSchema(contents, project)) {
+        return {
+          status: "unchanged",
+          filePath: schemaFilePath,
+        };
+      }
+
+      if (!isManagedBlypDrizzleSchema(contents)) {
+        throw new CliError(
+          `Found existing blypLogs schema in ${project.schemaFilePath} but it does not match the Blyp schema contract. Reconcile it manually or remove it before rerunning.`,
+        );
+      }
+
+      const newline = detectNewline(contents);
+      const withImports = upsertDrizzleImport(contents, project.dialect);
+      const updatedContents = replaceDrizzleTableBlock(
+        withImports,
+        buildEmbeddedDrizzleSchema(project.dialect, newline),
+      );
+      await writeFile(schemaFilePath, updatedContents, "utf8");
+
       return {
-        changed: false,
+        status: "repaired",
         filePath: schemaFilePath,
       };
     }
@@ -703,7 +742,7 @@ async function ensureDrizzleSchema(project: DrizzleProject): Promise<SchemaUpdat
     );
 
     return {
-      changed: true,
+      status: "created",
       filePath: schemaFilePath,
     };
   }
@@ -714,9 +753,29 @@ async function ensureDrizzleSchema(project: DrizzleProject): Promise<SchemaUpdat
     : "";
 
   if (existingContents.includes("export const blypLogs")) {
-    validateExistingDrizzleSchema(existingContents, project);
+    if (validateExistingDrizzleSchema(existingContents, project)) {
+      return {
+        status: "unchanged",
+        filePath: schemaFilePath,
+      };
+    }
+
+    if (!isManagedBlypDrizzleSchema(existingContents)) {
+      throw new CliError(
+        `Found existing blypLogs schema in ${project.schemaFilePath} but it does not match the Blyp schema contract. Reconcile it manually or remove it before rerunning.`,
+      );
+    }
+
+    const newline = detectNewline(existingContents);
+    const withImports = upsertDrizzleImport(existingContents, project.dialect);
+    const updatedContents = replaceDrizzleTableBlock(
+      withImports,
+      buildEmbeddedDrizzleSchema(project.dialect, newline),
+    );
+    await writeFile(schemaFilePath, updatedContents, "utf8");
+
     return {
-      changed: false,
+      status: "repaired",
       filePath: schemaFilePath,
     };
   }
@@ -733,7 +792,7 @@ async function ensureDrizzleSchema(project: DrizzleProject): Promise<SchemaUpdat
   await writeFile(schemaFilePath, appendedTable, "utf8");
 
   return {
-    changed: true,
+    status: "created",
     filePath: schemaFilePath,
   };
 }
@@ -755,6 +814,7 @@ function buildPrismaModel(dialect: LogsDialect, newline: string): string {
           "  status    Int?",
           "  duration  Float?   @db.DoublePrecision",
           '  hasError  Boolean  @map("has_error")',
+          '  traceId   String?  @map("trace_id") @db.VarChar(191)',
           "  data      Json?    @db.JsonB",
           "  bindings  Json?    @db.JsonB",
           "  error     Json?    @db.JsonB",
@@ -783,6 +843,7 @@ function buildPrismaModel(dialect: LogsDialect, newline: string): string {
           "  status    Int?",
           "  duration  Float?   @db.Double",
           '  hasError  Boolean  @map("has_error")',
+          '  traceId   String?  @map("trace_id") @db.VarChar(191)',
           "  data      Json?",
           "  bindings  Json?",
           "  error     Json?",
@@ -801,7 +862,10 @@ function buildPrismaModel(dialect: LogsDialect, newline: string): string {
   return lines.join(newline);
 }
 
-function validateExistingPrismaModel(block: string, project: PrismaProject): void {
+function validateExistingPrismaModel(
+  block: string,
+  project: PrismaProject,
+): boolean {
   const requiredTokens = [
     '@@map("blyp_logs")',
     '@@index([timestamp], map: "blyp_logs_timestamp_idx")',
@@ -810,6 +874,7 @@ function validateExistingPrismaModel(block: string, project: PrismaProject): voi
     '@@index([groupId, timestamp], map: "blyp_logs_group_id_timestamp_idx")',
     '@map("group_id")',
     '@map("has_error")',
+    '@map("trace_id")',
     '@map("created_at")',
   ];
 
@@ -822,11 +887,7 @@ function validateExistingPrismaModel(block: string, project: PrismaProject): voi
     (token) => !block.includes(token),
   );
 
-  if (missingTokens.length > 0) {
-    throw new CliError(
-      `Found existing BlypLog model in ${project.schemaPath} but it does not match the Blyp schema contract. Reconcile it manually or remove it before rerunning.`,
-    );
-  }
+  return missingTokens.length === 0;
 }
 
 function buildStandaloneDrizzleSchema(
@@ -860,6 +921,7 @@ function buildEmbeddedDrizzleSchema(
           '    status: integer("status"),',
           '    duration: doublePrecision("duration"),',
           '    hasError: boolean("has_error").notNull(),',
+          '    traceId: varchar("trace_id", { length: 191 }),',
           '    data: jsonb("data"),',
           '    bindings: jsonb("bindings"),',
           '    error: jsonb("error"),',
@@ -893,6 +955,7 @@ function buildEmbeddedDrizzleSchema(
           '    status: int("status"),',
           '    duration: double("duration"),',
           '    hasError: boolean("has_error").notNull(),',
+          '    traceId: varchar("trace_id", { length: 191 }),',
           '    data: json("data"),',
           '    bindings: json("bindings"),',
           '    error: json("error"),',
@@ -946,7 +1009,7 @@ function buildDrizzleImportBlock(dialect: LogsDialect, newline: string): string 
 function validateExistingDrizzleSchema(
   contents: string,
   project: DrizzleProject,
-): void {
+): boolean {
   const requiredTokens = [
     "export const blypLogs",
     '"blyp_logs"',
@@ -956,6 +1019,7 @@ function validateExistingDrizzleSchema(
     "blyp_logs_group_id_timestamp_idx",
     'groupId: ',
     'hasError: ',
+    'traceId: ',
     'createdAt: ',
   ];
   const dialectTokens =
@@ -967,11 +1031,7 @@ function validateExistingDrizzleSchema(
     (token) => !contents.includes(token),
   );
 
-  if (missingTokens.length > 0) {
-    throw new CliError(
-      `Found existing blypLogs schema in ${project.schemaFilePath} but it does not match the Blyp schema contract. Reconcile it manually or remove it before rerunning.`,
-    );
-  }
+  return missingTokens.length === 0;
 }
 
 function buildPrismaSnippet(dialect: LogsDialect): string {
@@ -1019,6 +1079,35 @@ function buildDrizzleSnippet(input: {
     "  },",
     "};",
   ].join("\n");
+}
+
+function isSafeOwnedBlypConfig(
+  existingContents: string,
+  _nextSnippet: string,
+): boolean {
+  const normalized = existingContents.trim();
+  const hasDatabaseExport =
+    normalized.includes("export default {") &&
+    normalized.includes("destination: 'database'");
+
+  if (!hasDatabaseExport) {
+    return false;
+  }
+
+  return (
+    (
+      normalized.includes("import { PrismaClient } from '@prisma/client';") &&
+      normalized.includes("createPrismaDatabaseAdapter") &&
+      normalized.includes("const prisma = new PrismaClient();") &&
+      normalized.includes("model: 'blypLog'")
+    ) ||
+    (
+      normalized.includes("createDrizzleDatabaseAdapter") &&
+      normalized.includes("import { db } from '") &&
+      normalized.includes("import { blypLogs } from '") &&
+      normalized.includes("table: blypLogs")
+    )
+  );
 }
 
 function upsertDrizzleImport(contents: string, dialect: LogsDialect): string {
@@ -1397,6 +1486,17 @@ function getDrizzleModule(dialect: LogsDialect): string {
     : "drizzle-orm/mysql-core";
 }
 
+function isManagedBlypPrismaModel(block: string): boolean {
+  return block.includes('@@map("blyp_logs")');
+}
+
+function isManagedBlypDrizzleSchema(contents: string): boolean {
+  return (
+    contents.includes("export const blypLogs") &&
+    contents.includes('"blyp_logs"')
+  );
+}
+
 function findPrismaModelBlock(
   contents: string,
   modelName: string,
@@ -1406,6 +1506,19 @@ function findPrismaModelBlock(
   );
 
   return match?.[0] ?? null;
+}
+
+function replaceDrizzleTableBlock(contents: string, block: string): string {
+  const pattern =
+    /export const blypLogs\s*=\s*(?:pgTable|mysqlTable)\([\s\S]*?\n\);/m;
+
+  if (!pattern.test(contents)) {
+    throw new CliError(
+      "Could not safely repair the existing blypLogs schema block. Reconcile it manually or remove it before rerunning.",
+    );
+  }
+
+  return contents.replace(pattern, block);
 }
 
 function detectNewline(contents: string): string {

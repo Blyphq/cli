@@ -117,6 +117,7 @@ describe("prisma database logging bootstrap", () => {
     expect(schemaContents).toContain('@@map("blyp_logs")');
     expect(schemaContents).toContain("@db.Timestamptz(6)");
     expect(schemaContents).toContain('@map("group_id")');
+    expect(schemaContents).toContain('@map("trace_id")');
     expect(result.status).toBe("initialized");
     expect(result.migrationGeneratedPaths).toEqual([
       path.join(
@@ -216,8 +217,95 @@ describe("prisma database logging bootstrap", () => {
 
     expect(commands).toHaveLength(1);
     expect(schemaContents.match(/model BlypLog/g)).toHaveLength(1);
+    expect(schemaContents).toContain('@map("trace_id")');
     expect(rerun.status).toBe("already_initialized");
     expect(rerun.migrationCommands).toEqual([]);
+  });
+
+  it("repairs an older Blyp prisma model that is missing traceId", async () => {
+    const cwd = await createTempDir();
+    await createPackageManifest(cwd, {
+      dependencies: {
+        "@prisma/client": "^6.0.0",
+      },
+      devDependencies: {
+        prisma: "^6.0.0",
+      },
+    });
+    await mkdir(path.join(cwd, "prisma"), { recursive: true });
+    await writeFile(
+      path.join(cwd, "prisma", "schema.prisma"),
+      [
+        'generator client {',
+        '  provider = "prisma-client-js"',
+        '}',
+        '',
+        'datasource db {',
+        '  provider = "postgresql"',
+        '  url      = env("DATABASE_URL")',
+        '}',
+        '',
+        'model BlypLog {',
+        '  id        String   @id @db.Uuid',
+        '  timestamp DateTime @db.Timestamptz(6)',
+        '  level     String   @db.VarChar(32)',
+        '  message   String   @db.Text',
+        '  caller    String?  @db.Text',
+        '  type      String?  @db.VarChar(64)',
+        '  groupId   String?  @map("group_id") @db.VarChar(191)',
+        '  method    String?  @db.VarChar(16)',
+        '  path      String?  @db.Text',
+        '  status    Int?',
+        '  duration  Float?   @db.DoublePrecision',
+        '  hasError  Boolean  @map("has_error")',
+        '  data      Json?    @db.JsonB',
+        '  bindings  Json?    @db.JsonB',
+        '  error     Json?    @db.JsonB',
+        '  events    Json?    @db.JsonB',
+        '  record    Json     @db.JsonB',
+        '  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)',
+        '',
+        '  @@index([timestamp], map: "blyp_logs_timestamp_idx")',
+        '  @@index([level, timestamp], map: "blyp_logs_level_timestamp_idx")',
+        '  @@index([type, timestamp], map: "blyp_logs_type_timestamp_idx")',
+        '  @@index([groupId, timestamp], map: "blyp_logs_group_id_timestamp_idx")',
+        '  @@map("blyp_logs")',
+        '}',
+      ].join("\n"),
+      "utf8",
+    );
+
+    const commands: string[] = [];
+    const result = await initializeLogsProject(
+      {
+        cwd,
+        adapter: "prisma",
+        dialect: "postgres",
+      },
+      {
+        runCommand: async (input) => {
+          commands.push(input.command.join(" "));
+          const migrationFile = path.join(
+            cwd,
+            "prisma",
+            "migrations",
+            "20260316000002_blyp_logs_init",
+            "migration.sql",
+          );
+          await mkdir(path.dirname(migrationFile), { recursive: true });
+          await writeFile(migrationFile, "-- prisma migration", "utf8");
+        },
+      },
+    );
+
+    const schemaContents = await readFile(
+      path.join(cwd, "prisma", "schema.prisma"),
+      "utf8",
+    );
+
+    expect(result.status).toBe("repaired");
+    expect(commands).toHaveLength(1);
+    expect(schemaContents).toContain('@map("trace_id")');
   });
 
   it("fails clearly when prisma setup is missing or incompatible", async () => {
@@ -302,6 +390,7 @@ describe("drizzle database logging bootstrap", () => {
     expect(schemaContents).toContain("pgTable(");
     expect(schemaContents).toContain('jsonb("record").notNull()');
     expect(schemaContents).toContain('index("blyp_logs_group_id_timestamp_idx")');
+    expect(schemaContents).toContain('varchar("trace_id", { length: 191 })');
     expect(result.snippet).toBe(
       [
         "import { db } from './src/db';",
@@ -404,8 +493,112 @@ describe("drizzle database logging bootstrap", () => {
     expect(schemaContents.match(/export const blypLogs/g)).toHaveLength(1);
     expect(schemaContents).toContain("mysqlTable(");
     expect(schemaContents).toContain('datetime("timestamp", { fsp: 6, mode: "date" })');
+    expect(schemaContents).toContain('varchar("trace_id", { length: 191 })');
     expect(commands).toHaveLength(2);
     expect(rerun.status).toBe("already_initialized");
+  });
+
+  it("repairs an older Blyp drizzle schema that is missing traceId", async () => {
+    const cwd = await createTempDir();
+    await createPackageManifest(cwd, {
+      dependencies: {
+        "drizzle-orm": "^0.0.0",
+      },
+      devDependencies: {
+        "drizzle-kit": "^0.0.0",
+      },
+    });
+    await writeFile(
+      path.join(cwd, "drizzle.config.ts"),
+      [
+        'export default {',
+        "  schema: './src/db/schema/*.ts',",
+        "  out: './drizzle',",
+        "  dialect: 'postgresql',",
+        "};",
+      ].join("\n"),
+      "utf8",
+    );
+    await mkdir(path.join(cwd, "src", "db", "schema"), { recursive: true });
+    await writeFile(path.join(cwd, "src", "db.ts"), "export const db = {};\n", "utf8");
+    await writeFile(
+      path.join(cwd, "src", "db", "schema", "blyp.ts"),
+      [
+        'import {',
+        '  boolean,',
+        '  doublePrecision,',
+        '  index,',
+        '  integer,',
+        '  jsonb,',
+        '  pgTable,',
+        '  text,',
+        '  timestamp,',
+        '  uuid,',
+        '  varchar,',
+        '} from "drizzle-orm/pg-core";',
+        '',
+        'export const blypLogs = pgTable(',
+        '  "blyp_logs",',
+        '  {',
+        '    id: uuid("id").primaryKey(),',
+        '    timestamp: timestamp("timestamp", { withTimezone: true, precision: 6 }).notNull(),',
+        '    level: varchar("level", { length: 32 }).notNull(),',
+        '    message: text("message").notNull(),',
+        '    caller: text("caller"),',
+        '    type: varchar("type", { length: 64 }),',
+        '    groupId: varchar("group_id", { length: 191 }),',
+        '    method: varchar("method", { length: 16 }),',
+        '    path: text("path"),',
+        '    status: integer("status"),',
+        '    duration: doublePrecision("duration"),',
+        '    hasError: boolean("has_error").notNull(),',
+        '    data: jsonb("data"),',
+        '    bindings: jsonb("bindings"),',
+        '    error: jsonb("error"),',
+        '    events: jsonb("events"),',
+        '    record: jsonb("record").notNull(),',
+        '    createdAt: timestamp("created_at", { withTimezone: true, precision: 6 })',
+        '      .defaultNow()',
+        '      .notNull(),',
+        '  },',
+        '  (table) => [',
+        '    index("blyp_logs_timestamp_idx").on(table.timestamp),',
+        '    index("blyp_logs_level_timestamp_idx").on(table.level, table.timestamp),',
+        '    index("blyp_logs_type_timestamp_idx").on(table.type, table.timestamp),',
+        '    index("blyp_logs_group_id_timestamp_idx").on(table.groupId, table.timestamp),',
+        '  ],',
+        ');',
+      ].join("\n"),
+      "utf8",
+    );
+
+    const commands: string[] = [];
+    const result = await initializeLogsProject(
+      {
+        cwd,
+        adapter: "drizzle",
+        dialect: "postgres",
+      },
+      {
+        runCommand: async (input) => {
+          commands.push(input.command.join(" "));
+          if (input.command.includes("generate")) {
+            const sqlPath = path.join(cwd, "drizzle", "0002_blyp_logs.sql");
+            await mkdir(path.dirname(sqlPath), { recursive: true });
+            await writeFile(sqlPath, "-- drizzle migration", "utf8");
+          }
+        },
+      },
+    );
+
+    const schemaContents = await readFile(
+      path.join(cwd, "src", "db", "schema", "blyp.ts"),
+      "utf8",
+    );
+
+    expect(result.status).toBe("repaired");
+    expect(commands).toHaveLength(2);
+    expect(schemaContents).toContain('varchar("trace_id", { length: 191 })');
   });
 
   it("fails clearly when drizzle setup is missing", async () => {
@@ -446,6 +639,78 @@ describe("database workflow helpers", () => {
     expect(result.status).toBe("created");
     await expect(readFile(path.join(cwd, "blyp.config.ts"), "utf8")).resolves.toContain(
       "export default {};",
+    );
+  });
+
+  it("updates a Blyp-owned config when overwrite is enabled", async () => {
+    const cwd = await createTempDir();
+    await writeFile(
+      path.join(cwd, "blyp.config.ts"),
+      [
+        "import { PrismaClient } from '@prisma/client';",
+        "import { createPrismaDatabaseAdapter } from 'blyp-js/database';",
+        "",
+        "const prisma = new PrismaClient();",
+        "",
+        "export default {",
+        "  destination: 'database',",
+        "  database: {",
+        "    dialect: 'postgres',",
+        "    adapter: createPrismaDatabaseAdapter({",
+        "      client: prisma,",
+        "      model: 'blypLog',",
+        "    }),",
+        "  },",
+        "};",
+      ].join("\n"),
+      "utf8",
+    );
+
+    const result = await writeBlypConfigFile({
+      cwd,
+      snippet: [
+        "import { PrismaClient } from '@prisma/client';",
+        "import { createPrismaDatabaseAdapter } from 'blyp-js/database';",
+        "",
+        "const prisma = new PrismaClient();",
+        "",
+        "export default {",
+        "  destination: 'database',",
+        "  database: {",
+        "    dialect: 'mysql',",
+        "    adapter: createPrismaDatabaseAdapter({",
+        "      client: prisma,",
+        "      model: 'blypLog',",
+        "    }),",
+        "  },",
+        "};",
+      ].join("\n"),
+      overwrite: true,
+    });
+
+    expect(result.status).toBe("updated");
+    await expect(readFile(path.join(cwd, "blyp.config.ts"), "utf8")).resolves.toContain(
+      "dialect: 'mysql'",
+    );
+  });
+
+  it("skips overwriting a non-Blyp config even when overwrite is enabled", async () => {
+    const cwd = await createTempDir();
+    await writeFile(
+      path.join(cwd, "blyp.config.ts"),
+      "export default { projectName: 'custom-app' };\n",
+      "utf8",
+    );
+
+    const result = await writeBlypConfigFile({
+      cwd,
+      snippet: "export default {};",
+      overwrite: true,
+    });
+
+    expect(result.status).toBe("skipped");
+    await expect(readFile(path.join(cwd, "blyp.config.ts"), "utf8")).resolves.toContain(
+      "projectName",
     );
   });
 

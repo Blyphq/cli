@@ -15,10 +15,11 @@ export function createHelpCommand(
 }
 
 export function buildHelpText(commands: readonly CommandDefinition[]): string {
+  const nameWidth = Math.max(...commands.map((command) => command.name.length));
   const commandLines = commands
     .map((command) => {
       const usageSuffix = command.usage ? `\n    ${command.usage}` : "";
-      return `  ${command.name.padEnd(8)} ${command.description}${usageSuffix}`;
+      return `  ${command.name.padEnd(nameWidth)} ${command.description}${usageSuffix}`;
     })
     .join("\n");
 
