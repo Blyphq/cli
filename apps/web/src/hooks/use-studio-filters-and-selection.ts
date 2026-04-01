@@ -129,7 +129,11 @@ function writeSidebarState(projectPath: string, value: StudioSidebarState) {
     return;
   }
 
-  window.localStorage.setItem(getSidebarStorageKey(projectPath), JSON.stringify(value));
+  try {
+    window.localStorage.setItem(getSidebarStorageKey(projectPath), JSON.stringify(value));
+  } catch {
+    // Silently ignore storage errors (e.g. QuotaExceededError)
+  }
 }
 
 function parseSidebarState(value: unknown): StudioSidebarState {
