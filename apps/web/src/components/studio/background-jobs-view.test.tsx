@@ -156,4 +156,19 @@ describe("BackgroundJobDetailPanel", () => {
     expect(screen.queryByText("Failure detail")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /ask ai/i })).not.toBeInTheDocument();
   });
+
+  it("shows an empty timeline message when detail has no events", () => {
+    render(
+      <BackgroundJobDetailPanel
+        detail={{
+          ...detail,
+          timeline: [],
+        } as never}
+        loading={false}
+        onAskAi={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("No timeline events found for this run.")).toBeInTheDocument();
+  });
 });

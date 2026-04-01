@@ -8,6 +8,7 @@ import { Card, CardContent } from "../ui/card";
 import {
   Pagination,
   PaginationContent,
+  PaginationEllipsis,
   PaginationItem,
   PaginationLink,
   PaginationNext,
@@ -29,6 +30,7 @@ export function PaymentWebhookPanel({
   onPageChange,
 }: PaymentWebhookPanelProps) {
   const [openId, setOpenId] = useState<string | null>(null);
+  const pages = getVisiblePages(currentPage, totalPages);
 
   return (
     <Card size="sm">
@@ -76,16 +78,22 @@ export function PaymentWebhookPanel({
                       onClick={() => onPageChange(Math.max(1, currentPage - 1))}
                     />
                   </PaginationItem>
-                  {Array.from({ length: totalPages }, (_, index) => index + 1).map((page) => (
-                    <PaginationItem key={page}>
-                      <PaginationLink
-                        isActive={page === currentPage}
-                        onClick={() => onPageChange(page)}
-                      >
-                        {page}
-                      </PaginationLink>
-                    </PaginationItem>
-                  ))}
+                  {pages.map((page, index) =>
+                    page === "ellipsis" ? (
+                      <PaginationItem key={`ellipsis-${index}`}>
+                        <PaginationEllipsis />
+                      </PaginationItem>
+                    ) : (
+                      <PaginationItem key={page}>
+                        <PaginationLink
+                          isActive={page === currentPage}
+                          onClick={() => onPageChange(page)}
+                        >
+                          {page}
+                        </PaginationLink>
+                      </PaginationItem>
+                    ),
+                  )}
                   <PaginationItem>
                     <PaginationNext
                       disabled={currentPage === totalPages}
@@ -100,4 +108,26 @@ export function PaymentWebhookPanel({
       </CardContent>
     </Card>
   );
+}
+
+function getVisiblePages(currentPage: number, totalPages: number): Array<number | "ellipsis"> {
+  if (totalPages <= 7) {
+    return Array.from({ length: totalPages }, (_, index) => index + 1);
+  }
+
+  const pages = new Set([1, totalPages, currentPage - 1, currentPage, currentPage + 1]);
+  const sortedPages = Array.from(pages)
+    .filter((page) => page >= 1 && page <= totalPages)
+    .sort((left, right) => left - right);
+  const visiblePages: Array<number | "ellipsis"> = [];
+
+  for (const page of sortedPages) {
+    const previousPage = visiblePages[visiblePages.length - 1];
+    if (typeof previousPage === "number" && page - previousPage > 1) {
+      visiblePages.push("ellipsis");
+    }
+    visiblePages.push(page);
+  }
+
+  return visiblePages;
 }

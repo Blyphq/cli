@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
 
-import { render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AgentTaskDetailPanel } from "./agent-task-detail-panel";
 
@@ -105,6 +105,10 @@ const detail = {
   },
 } as const;
 
+afterEach(() => {
+  cleanup();
+});
+
 describe("AgentTaskDetailPanel", () => {
   it("renders task detail, expandable step details, and Ask AI for failed tasks", async () => {
     const user = userEvent.setup();
@@ -129,5 +133,26 @@ describe("AgentTaskDetailPanel", () => {
     expect(screen.getByText(/prompt preview/i)).toBeInTheDocument();
     expect(screen.getByText(/output preview/i)).toBeInTheDocument();
     expect(screen.getByText(/database unavailable/i)).toBeInTheDocument();
+  });
+
+  it("hides raw details when a step has null rawDetails", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <AgentTaskDetailPanel
+        detail={{
+          ...detail,
+          steps: [{ ...detail.steps[0], rawDetails: null }],
+        } as never}
+        loading={false}
+        onAskAi={vi.fn()}
+      />,
+    );
+
+    await user.click(screen.getAllByRole("button", { name: /^details$/i })[0]!);
+
+    expect(screen.getByText(/^Input: Summarise feedback$/i)).toBeInTheDocument();
+    expect(screen.queryByText(/^null$/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/"input":/i)).not.toBeInTheDocument();
   });
 });

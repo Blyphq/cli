@@ -1,5 +1,5 @@
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   Collapsible,
@@ -100,10 +100,10 @@ export function AgentTaskDetailPanel({
                 </div>
                 <div className="flex flex-col items-end gap-2">
                   <Badge variant="secondary">{formatDurationMs(step.durationMs)}</Badge>
-                  <CollapsibleTrigger asChild>
-                    <Button variant="outline" size="xs">
-                      Details
-                    </Button>
+                  <CollapsibleTrigger
+                    className={buttonVariants({ variant: "outline", size: "xs" })}
+                  >
+                    Details
                   </CollapsibleTrigger>
                 </div>
               </div>
@@ -123,9 +123,11 @@ export function AgentTaskDetailPanel({
                   {step.errorMessage ? (
                     <div className="text-destructive">{step.errorMessage}</div>
                   ) : null}
-                  <pre className="max-h-72 overflow-auto whitespace-pre-wrap break-words rounded border border-border/60 bg-muted/20 p-3 font-mono text-[11px] leading-5">
-                    {JSON.stringify(step.rawDetails, null, 2)}
-                  </pre>
+                  {step.rawDetails != null ? (
+                    <pre className="max-h-72 overflow-auto whitespace-pre-wrap break-words rounded border border-border/60 bg-muted/20 p-3 font-mono text-[11px] leading-5">
+                      {JSON.stringify(step.rawDetails, null, 2)}
+                    </pre>
+                  ) : null}
                 </div>
               </CollapsibleContent>
             </Collapsible>

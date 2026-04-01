@@ -94,25 +94,29 @@ export function BackgroundJobDetailPanel({
         />
         <CardContent className="space-y-3">
           {loading && detail.timeline.length === 0 ? <TimelineSkeleton rows={5} /> : null}
-          {detail.timeline.map((event) => (
-            <div key={event.id} className="border border-border/60 bg-background/40 p-3">
-              <div className="flex flex-wrap gap-2 text-sm font-medium">
-                <span>{event.message}</span>
-                <span className="text-xs text-muted-foreground">
-                  {formatCompactDateTime(event.timestamp)}
-                </span>
-              </div>
-              <div className="mt-2 flex flex-wrap gap-3 text-xs text-muted-foreground">
-                {event.step ? <span>Step: {event.step}</span> : null}
-                {event.status ? <span>Status: {event.status}</span> : null}
-                {event.structuredFields.map((field) => (
-                  <span key={`${event.id}:${field.key}`}>
-                    {field.key}: {field.value}
+          {detail.timeline.length > 0 ? (
+            detail.timeline.map((event) => (
+              <div key={event.id} className="border border-border/60 bg-background/40 p-3">
+                <div className="flex flex-wrap gap-2 text-sm font-medium">
+                  <span>{event.message}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {formatCompactDateTime(event.timestamp)}
                   </span>
-                ))}
+                </div>
+                <div className="mt-2 flex flex-wrap gap-3 text-xs text-muted-foreground">
+                  {event.step ? <span>Step: {event.step}</span> : null}
+                  {event.status ? <span>Status: {event.status}</span> : null}
+                  {event.structuredFields.map((field) => (
+                    <span key={`${event.id}:${field.key}`}>
+                      {field.key}: {field.value}
+                    </span>
+                  ))}
+                </div>
               </div>
-            </div>
-          ))}
+            ))
+          ) : loading ? null : (
+            <div className="text-sm text-muted-foreground">No timeline events found for this run.</div>
+          )}
         </CardContent>
       </Card>
     </div>

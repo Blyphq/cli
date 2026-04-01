@@ -77,7 +77,9 @@ export function SectionNavPanel({
   const addSection = useMutation({
     ...trpc.studio.addCustomSection.mutationOptions({
       onSuccess: async () => {
-        await queryClient.invalidateQueries();
+        await queryClient.invalidateQueries(
+          trpc.studio.meta.queryFilter({ projectPath }),
+        );
         handleDialogOpenChange(false);
       },
     }),

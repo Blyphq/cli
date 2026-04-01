@@ -126,4 +126,29 @@ describe("HttpView", () => {
     await user.click(screen.getAllByRole("button", { name: /get \/api\/users\/:id/i })[0]!);
     expect(onSelectRecord).toHaveBeenCalledWith("record-1");
   });
+
+  it("applies keyboard focus styles to the mobile request row", () => {
+    render(
+      <HttpView
+        page={page as never}
+        loading={false}
+        selectedRecordId={null}
+        httpUi={{ method: "", statusGroup: "", route: "", minDurationMs: "" }}
+        onHttpUiChange={vi.fn()}
+        onResetHttpFilters={vi.fn()}
+        onSelectRecord={vi.fn()}
+        onPageChange={vi.fn()}
+        onSelectRoute={vi.fn()}
+        onViewTrace={vi.fn()}
+      />,
+    );
+
+    const mobileRow = screen
+      .getAllByRole("button", { name: /get \/api\/users\/:id/i })
+      .find((element) => element.tagName === "DIV");
+
+    expect(mobileRow).toHaveClass("cursor-pointer");
+    expect(mobileRow).toHaveClass("outline-none");
+    expect(mobileRow).toHaveClass("focus-visible:bg-muted/40");
+  });
 });

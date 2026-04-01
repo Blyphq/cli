@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
 
-import { render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AgentsView } from "./agents-view";
 
@@ -85,6 +85,10 @@ const agentsData = {
   ],
 } as const;
 
+afterEach(() => {
+  cleanup();
+});
+
 describe("AgentsView", () => {
   it("renders stats, task list, breakdowns, and failure Ask AI", async () => {
     const user = userEvent.setup();
@@ -104,7 +108,7 @@ describe("AgentsView", () => {
     expect(screen.getByText("Agent tasks")).toBeInTheDocument();
     expect(screen.getByText("LLM call breakdown")).toBeInTheDocument();
     expect(screen.getByText("Tool call breakdown")).toBeInTheDocument();
-    expect(screen.getByText("Summarise user feedback")).toBeInTheDocument();
+    expect(screen.getAllByText("Summarise user feedback").length).toBeGreaterThan(0);
     expect(screen.getByText("FAILED")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /ask ai/i }));
@@ -112,5 +116,31 @@ describe("AgentsView", () => {
 
     await user.click(screen.getByRole("button", { name: /summarise user feedback/i }));
     expect(onSelectTask).toHaveBeenCalledWith("agent:task:task-1");
+  });
+
+  it("uses singular preview labels for counts of one", () => {
+    render(
+      <AgentsView
+        agents={{
+          ...agentsData,
+          tasks: [
+            {
+              ...agentsData.tasks[0],
+              stepCount: 1,
+              toolCallCount: 1,
+              retrievalCount: 1,
+            },
+          ],
+        } as never}
+        loading={false}
+        selectedTaskId={null}
+        onSelectTask={vi.fn()}
+        onAskAi={vi.fn()}
+      />,
+    );
+
+    expect(screen.getAllByText("1 step").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("1 tool").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("1 retrieval").length).toBeGreaterThan(0);
   });
 });
