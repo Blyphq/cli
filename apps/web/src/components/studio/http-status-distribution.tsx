@@ -13,7 +13,7 @@ import {
   ChartTooltipContent,
   type ChartConfig,
 } from "@/components/ui/chart";
-import type { StudioHttpStatusTimeseriesBucket } from "@/lib/studio";
+import { formatDateTime, type StudioHttpStatusTimeseriesBucket } from "@/lib/studio";
 
 import { EmptyState } from "./empty-state";
 import { PanelHeader } from "./panel-header";
@@ -96,7 +96,7 @@ export function HttpStatusDistribution({ buckets }: HttpStatusDistributionProps)
                       return "Request volume";
                     }
 
-                    return `${new Date(item.start).toLocaleString()} to ${new Date(item.end).toLocaleTimeString()}`;
+                    return `${formatDateTime(item.start)} to ${formatDateTime(item.end)}`;
                   }}
                 />
               }

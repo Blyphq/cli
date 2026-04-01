@@ -49,6 +49,7 @@ describe("assistant prompt", () => {
         steps: [],
         failure: null,
       },
+      selectedPaymentTrace: null,
       records: [],
       references: [],
       userQuestion: "What failed?",

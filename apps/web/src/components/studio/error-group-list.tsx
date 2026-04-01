@@ -38,6 +38,9 @@ export function ErrorGroupList({
   onIgnore,
   onPageChange,
 }: ErrorGroupListProps) {
+  const showingStart = groups.length === 0 ? 0 : offset + 1;
+  const showingEnd = groups.length === 0 ? 0 : Math.min(offset + groups.length, totalGroups);
+
   if (groups.length === 0 && resolvedGroups.length === 0) {
     return (
       <EmptyState
@@ -95,7 +98,7 @@ export function ErrorGroupList({
         ) : null}
         <div className="flex flex-col gap-3 border-t border-border/60 pt-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="text-xs text-muted-foreground">
-            Showing {groups.length === 0 ? 0 : offset + 1}-{Math.min(offset + groups.length, totalGroups)} of {totalGroups}
+            Showing {showingStart}-{showingEnd} of {totalGroups}
           </div>
           <div className="flex gap-2">
             <Button

@@ -183,4 +183,38 @@ describe("PaymentsView", () => {
 
     expect(screen.getByText(/No payment activity matched this scope/)).toBeInTheDocument();
   });
+
+  it("windows webhook pagination for large page counts", () => {
+    render(
+      <PaymentsView
+        page={{
+          ...paymentsData,
+          webhooks: Array.from({ length: 40 }, (_, index) => ({
+            id: `webhook-${index + 1}`,
+            recordId: `record-webhook-${index + 1}`,
+            timestamp: "2026-03-13T12:00:01.000Z",
+            eventType: `payment_intent.${index + 1}`,
+            route: "/webhook/stripe",
+            result: "success" as const,
+            traceId: null,
+            payloadPreview: null,
+          })),
+        } as never}
+        loading={false}
+        selectedTraceId={null}
+        expandedTraceId={null}
+        expandedTraceDetail={null}
+        expandedTraceLoading={false}
+        onSelectTrace={vi.fn()}
+        onToggleExpand={vi.fn()}
+        onAskAi={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "1" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "2" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "8" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "4" })).not.toBeInTheDocument();
+    expect(screen.getAllByText("More pages").length).toBeGreaterThan(0);
+  });
 });

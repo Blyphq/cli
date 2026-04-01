@@ -63,7 +63,11 @@ export function ErrorGroupRow({
             <span>{source}</span>
             {group.http?.method || group.http?.path || typeof group.http?.statusCode === "number" ? (
               <span>
-                {[group.http?.method, group.http?.path ?? group.http?.url, group.http?.statusCode]
+                {[
+                  group.http?.method,
+                  group.http?.path ?? group.http?.url,
+                  typeof group.http?.statusCode === "number" ? String(group.http.statusCode) : null,
+                ]
                   .filter(Boolean)
                   .join(" ")}
               </span>

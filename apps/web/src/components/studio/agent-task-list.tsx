@@ -74,10 +74,10 @@ function TaskMeta({
   sessionStart: string | null;
 }) {
   const previews = [
-    `${task.stepCount} steps`,
+    `${task.stepCount} step${task.stepCount === 1 ? "" : "s"}`,
     `${task.llmCallCount} LLM`,
-    `${task.toolCallCount} tools`,
-    `${task.retrievalCount} retrieval`,
+    `${task.toolCallCount} tool${task.toolCallCount === 1 ? "" : "s"}`,
+    `${task.retrievalCount} retrieval${task.retrievalCount === 1 ? "" : "s"}`,
   ];
 
   return (

@@ -71,7 +71,7 @@ export function BackgroundJobRunCard({
           <div className="space-y-2 border-t border-border/60 pt-3">
             {loading && !detail ? (
               <TimelineSkeleton rows={4} />
-            ) : detail ? (
+            ) : detail && detail.timeline.length > 0 ? (
               detail.timeline.map((event) => (
                 <div key={event.id} className="border border-border/60 bg-background/40 p-3">
                   <div className="flex flex-wrap items-center gap-2 text-sm font-medium">

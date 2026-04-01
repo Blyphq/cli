@@ -214,7 +214,6 @@ export async function buildAssistantContext(
     selectedBackgroundRun,
     selectedAgentTask,
     selectedPaymentTrace,
-    selectedPaymentTrace,
     allGroups: groups,
   });
   const selectedRecordSource = selectedRecord
@@ -228,7 +227,6 @@ export async function buildAssistantContext(
     selectedBackgroundRun,
     selectedAgentTask,
     selectedPaymentTrace,
-    selectedPaymentTrace,
     evidenceRecords,
     references,
   };
@@ -240,7 +238,6 @@ function buildReferences(input: {
   selectedRecord: StudioNormalizedRecord | null;
   selectedBackgroundRun: StudioBackgroundJobRunDetail | null;
   selectedAgentTask: StudioAgentTaskDetail | null;
-  selectedPaymentTrace: StudioPaymentTraceDetail | null;
   selectedPaymentTrace: StudioPaymentTraceDetail | null;
   allGroups: Map<string, StudioStructuredGroupDetail>;
 }): StudioAssistantReference[] {

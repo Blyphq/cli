@@ -42,7 +42,13 @@ export function ErrorRawRow({
         </span>
         {occurrence.http?.method || occurrence.http?.path || typeof occurrence.http?.statusCode === "number" ? (
           <span>
-            {[occurrence.http?.method, occurrence.http?.path ?? occurrence.http?.url, occurrence.http?.statusCode]
+            {[
+              occurrence.http?.method,
+              occurrence.http?.path ?? occurrence.http?.url,
+              typeof occurrence.http?.statusCode === "number"
+                ? String(occurrence.http.statusCode)
+                : null,
+            ]
               .filter(Boolean)
               .join(" ")}
           </span>

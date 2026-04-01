@@ -125,7 +125,7 @@ export function HttpRequestTable({
                 }
               }}
               className={cn(
-                "flex w-full flex-col gap-3 px-3 py-3 text-left hover:bg-muted/30",
+                "flex w-full cursor-pointer flex-col gap-3 px-3 py-3 text-left outline-none hover:bg-muted/30 focus-visible:bg-muted/40",
                 selectedRecordId === row.recordId && "bg-primary/10",
               )}
             >
