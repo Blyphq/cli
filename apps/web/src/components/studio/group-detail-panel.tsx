@@ -22,6 +22,7 @@ import {
 import { EmptyState } from "./empty-state";
 import { MetaList } from "./meta-list";
 import { PanelHeader } from "./panel-header";
+import { DetailPanelSkeleton } from "./studio-skeletons";
 import { TruncatedPath } from "./truncated-path";
 
 interface GroupDetailPanelProps {
@@ -38,12 +39,7 @@ export function GroupDetailPanel({
   onSelectRecord,
 }: GroupDetailPanelProps) {
   if (loading && !group) {
-    return (
-      <EmptyState
-        title="Loading group"
-        description="Resolving the selected structured log group."
-      />
-    );
+    return <DetailPanelSkeleton />;
   }
 
   if (!group) {

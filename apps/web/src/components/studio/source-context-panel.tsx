@@ -4,6 +4,7 @@ import type { StudioRecordSourceContext } from "@/lib/studio";
 
 import { EmptyState } from "./empty-state";
 import { PanelHeader } from "./panel-header";
+import { CodeContextSkeleton } from "./studio-skeletons";
 
 interface SourceContextPanelProps {
   source: StudioRecordSourceContext | null | undefined;
@@ -16,12 +17,7 @@ export function SourceContextPanel({
 }: SourceContextPanelProps) {
   if (loading) {
     return (
-      <Card>
-        <PanelHeader
-          title="Source Context"
-          description="Resolving the in-project source location for this record."
-        />
-      </Card>
+      <CodeContextSkeleton />
     );
   }
 

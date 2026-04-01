@@ -4,9 +4,10 @@ import { filterRecords } from "./query";
 
 export function getLogFacets(
   records: StudioNormalizedRecord[],
-  input: Pick<StudioLogsQueryInput, "fileId" | "from" | "to" | "level" | "search">,
+  input: Pick<StudioLogsQueryInput, "fileId" | "from" | "to" | "level" | "search" | "sectionId">,
+  customSections: import("./types").StudioCustomSectionDefinition[] = [],
 ): StudioLogFacets {
-  const filtered = filterRecords(records, input);
+  const filtered = filterRecords(records, input, customSections);
   const types = Array.from(
     new Set(
       filtered

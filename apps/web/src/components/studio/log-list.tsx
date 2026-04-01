@@ -9,6 +9,7 @@ import { EmptyState } from "./empty-state";
 import { GroupSummaryRow } from "./group-summary-row";
 import { LogRow } from "./log-row";
 import { PanelHeader } from "./panel-header";
+import { ListRowsSkeleton } from "./studio-skeletons";
 
 interface LogListProps {
   entries: StudioLogEntry[];
@@ -19,6 +20,9 @@ interface LogListProps {
   totalMatched: number;
   truncated: boolean;
   loading: boolean;
+  title?: string;
+  emptyTitle?: string;
+  emptyDescription?: string;
   onSelect(selection: StudioSelection): void;
   onPageChange(nextOffset: number): void;
 }
@@ -32,24 +36,32 @@ export function LogList({
   totalMatched,
   truncated,
   loading,
+  title = "Log Viewer",
+  emptyTitle = "No log records matched",
+  emptyDescription = "Try a different file, type, level, or search term.",
   onSelect,
   onPageChange,
 }: LogListProps) {
-  const summary = `${loading ? "Loading logs..." : `${totalEntries} visible entries from ${totalMatched} matching logs`}${truncated ? " (scan limit reached)" : ""}`;
+  const summary = `${totalEntries} visible entries from ${totalMatched} matching logs${truncated ? " (scan limit reached)" : ""}`;
 
   if (!loading && entries.length === 0) {
     return (
       <EmptyState
-        title="No log records matched"
-        description="Try a different file, type, level, or search term."
+        title={emptyTitle}
+        description={emptyDescription}
       />
     );
   }
 
   return (
     <Card className="min-h-[36rem] min-w-0">
-      <PanelHeader title="Log Viewer" description={summary} />
+      <PanelHeader title={title} description={summary} />
       <CardContent className="min-w-0 p-0">
+        {loading && entries.length === 0 ? (
+          <div className="p-4">
+            <ListRowsSkeleton rows={8} />
+          </div>
+        ) : null}
         <div className="hidden min-w-0 overflow-x-auto lg:block">
           <table className="w-full table-fixed text-left text-sm">
             <thead className="border-b border-border/60 bg-background/60 text-xs uppercase tracking-[0.18em] text-muted-foreground">

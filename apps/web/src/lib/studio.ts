@@ -8,19 +8,64 @@ export type StudioConfig = RouterOutputs["studio"]["config"];
 export type StudioFiles = RouterOutputs["studio"]["files"];
 export type StudioFile = StudioFiles["files"][number];
 export type StudioLogsPage = RouterOutputs["studio"]["logs"];
+export type StudioErrorsPage = RouterOutputs["studio"]["errors"];
+export type StudioAuthOverview = RouterOutputs["studio"]["auth"];
+export type StudioBackgroundJobsOverview = RouterOutputs["studio"]["backgroundJobs"];
+export type StudioBackgroundJobRunDetail = NonNullable<RouterOutputs["studio"]["backgroundJobRun"]>;
+export type StudioDatabaseOverview = RouterOutputs["studio"]["database"];
+export type StudioAgentsOverview = RouterOutputs["studio"]["agents"];
+export type StudioHttpOverview = RouterOutputs["studio"]["http"];
+export type StudioOverview = RouterOutputs["studio"]["overview"];
+export type StudioPaymentsOverview = RouterOutputs["studio"]["payments"];
+export type StudioPaymentTraceDetail = NonNullable<RouterOutputs["studio"]["paymentTrace"]>;
+export type StudioAuthEvent = StudioAuthOverview["timeline"][number];
+export type StudioAuthSuspiciousPattern = StudioAuthOverview["suspiciousPatterns"][number];
+export type StudioAuthUserSummary = StudioAuthOverview["users"][number];
+export type StudioBackgroundJobRun = StudioBackgroundJobsOverview["runs"][number];
+export type StudioBackgroundJobPerformanceRow = StudioBackgroundJobsOverview["performance"][number];
+export type StudioBackgroundJobTimelineEvent = StudioBackgroundJobRunDetail["timeline"][number];
+export type StudioDatabaseQueryEvent = StudioDatabaseOverview["queries"][number];
+export type StudioAgentTask = StudioAgentsOverview["tasks"][number];
+export type StudioAgentTaskDetail = NonNullable<RouterOutputs["studio"]["agentTask"]>;
+export type StudioAgentTaskStep = StudioAgentTaskDetail["steps"][number];
+export type StudioAgentLlmCallRow = StudioAgentsOverview["llmCalls"][number];
+export type StudioAgentToolCallRow = StudioAgentsOverview["toolCalls"][number];
+export type StudioDatabaseTransactionSummary = StudioDatabaseOverview["transactions"][number];
+export type StudioDatabaseMigrationEvent = StudioDatabaseOverview["migrationEvents"][number];
+export type StudioHttpRequestRow = StudioHttpOverview["requests"][number];
+export type StudioHttpEndpointPerformanceRow = StudioHttpOverview["performance"][number];
+export type StudioHttpStatusTimeseriesBucket = StudioHttpOverview["timeseries"][number];
+export type StudioHttpStats = StudioHttpOverview["stats"];
+export type StudioHttpStatusGroup = keyof StudioHttpStats["statusGroups"];
 export type StudioRecord = StudioLogsPage["records"][number];
 export type StudioRecordSourceContext = RouterOutputs["studio"]["recordSource"];
 export type StudioLogEntry = StudioLogsPage["entries"][number];
 export type StudioGroupDetail = NonNullable<RouterOutputs["studio"]["group"]>;
+export type StudioErrorGroupDetail = NonNullable<RouterOutputs["studio"]["errorGroup"]>;
+export type StudioErrorGroup = StudioErrorsPage["groups"][number];
+export type StudioErrorOccurrence = StudioErrorsPage["occurrences"][number];
+export type StudioErrorStats = StudioErrorsPage["stats"];
+export type StudioOverviewStatus = StudioOverview["stats"]["totalEvents"]["status"];
+export type StudioOverviewTrend = StudioOverview["stats"]["errorRate"]["trend"];
+export type StudioOverviewTarget = StudioOverview["liveFeed"][number]["target"];
+export type StudioOverviewRecentErrorItem = StudioOverview["recentErrors"][number];
 export type StudioFacets = RouterOutputs["studio"]["facets"];
 export type StudioAssistantStatus = RouterOutputs["studio"]["assistantStatus"];
 export type StudioAssistantMessage = RouterOutputs["studio"]["assistantReply"];
 export type StudioAssistantReference = StudioAssistantMessage["references"][number];
-export type StudioDeliveryStatus = RouterOutputs["studio"]["deliveryStatus"];
-export type StudioConnectorDeliveryStatus = StudioDeliveryStatus["connectors"][number];
-export type StudioDeadLetterPage = StudioDeliveryStatus["deadLetters"];
-export type StudioDeadLetterRecord = StudioDeadLetterPage["items"][number];
+export type StudioPaymentTrace = StudioPaymentsOverview["traces"][number];
+export type StudioPaymentTraceEvent = StudioPaymentTraceDetail["timeline"][number];
+export type StudioPaymentWebhookEvent = StudioPaymentsOverview["webhooks"][number];
+export type StudioPaymentFailureBreakdownRow = StudioPaymentsOverview["failures"][number];
 export type StudioGroupingMode = "grouped" | "flat";
+export type StudioErrorViewMode = "grouped" | "raw";
+export type StudioErrorSort = "most-recent" | "most-frequent" | "first-seen";
+export type StudioDetectedSection = StudioMeta["sections"][number];
+export type StudioSectionId =
+  | StudioDetectedSection["id"]
+  | "overview"
+  | "all-logs"
+  | "project-config";
 export type StudioChatStatus = "submitted" | "streaming" | "ready" | "error";
 export type StudioBadgeVariant =
   | "default"
@@ -39,7 +84,11 @@ export type StudioChatMessage = UIMessage<StudioAssistantMessageMetadata>;
 export type StudioSelection =
   | { kind: "record"; id: string }
   | { kind: "group"; id: string }
-  | { kind: "delivery"; connectorKey?: string }
+  | { kind: "background-run"; id: string }
+  | { kind: "agent-task"; id: string }
+  | { kind: "payment-trace"; id: string }
+  | { kind: "error-group"; id: string }
+  | { kind: "error-occurrence"; id: string }
   | null;
 
 export interface StudioFilters {
@@ -49,6 +98,33 @@ export interface StudioFilters {
   fileId: string;
   from: string;
   to: string;
+}
+
+export interface StudioAuthUiState {
+  selectedUserId: string | null;
+  selectedPatternId: string | null;
+}
+
+export interface StudioErrorUiState {
+  view: StudioErrorViewMode;
+  sort: StudioErrorSort;
+  type: string;
+  sourceFile: string;
+  sectionTag: string;
+  showResolved: boolean;
+  showIgnored: boolean;
+}
+
+export interface StudioHttpUiState {
+  method: string;
+  statusGroup: "" | StudioHttpStatusGroup;
+  route: string;
+  minDurationMs: string;
+}
+
+export interface StudioSidebarState {
+  selectedSection: StudioSectionId;
+  visitedAtBySection: Record<string, string>;
 }
 
 export const LEVEL_OPTIONS = [
@@ -109,6 +185,68 @@ export function formatDateTime(value: string | null | undefined): string {
   }
 
   return parsed.toLocaleString();
+}
+
+export function formatRelativeTime(
+  value: string | null | undefined,
+  now = Date.now(),
+): string {
+  if (!value) {
+    return "Unknown";
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return value;
+  }
+
+  const diffMs = parsed.getTime() - now;
+  const formatter = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
+  const divisions: Array<[Intl.RelativeTimeFormatUnit, number]> = [
+    ["day", 1000 * 60 * 60 * 24],
+    ["hour", 1000 * 60 * 60],
+    ["minute", 1000 * 60],
+    ["second", 1000],
+  ];
+
+  for (const [unit, size] of divisions) {
+    if (Math.abs(diffMs) >= size || unit === "second") {
+      return formatter.format(Math.round(diffMs / size), unit);
+    }
+  }
+
+  return value;
+}
+
+export function formatDurationMs(value: number | null | undefined): string {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return "n/a";
+  }
+
+  return value >= 1000 ? `${(value / 1000).toFixed(2)}s` : `${Math.round(value)}ms`;
+}
+
+export function formatDuration(value: number | null | undefined): string {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return "Unknown";
+  }
+
+  if (value < 1_000) {
+    return `${Math.round(value)} ms`;
+  }
+
+  if (value < 60_000) {
+    return `${(value / 1_000).toFixed(1)} s`;
+  }
+
+  const totalSeconds = Math.round(value / 1_000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}m ${seconds}s`;
+}
+
+export function formatPercent(value: number): string {
+  return `${Math.round(value * 100)}%`;
 }
 
 export function formatCalendarDate(value: Date | null | undefined): string {
@@ -191,36 +329,6 @@ export function getStatusClasses(
   }
 }
 
-export function getDeliveryHealthClasses(
-  health: StudioConnectorDeliveryStatus["health"],
-): string {
-  switch (health) {
-    case "healthy":
-      return "border-primary/30 bg-primary/10 text-primary";
-    case "retrying":
-      return "border-secondary bg-secondary text-secondary-foreground";
-    case "dead-lettered":
-      return "border-destructive/30 bg-destructive/10 text-destructive";
-    default:
-      return "border-border bg-muted text-muted-foreground";
-  }
-}
-
-export function getDeliveryHealthLabel(
-  health: StudioConnectorDeliveryStatus["health"],
-): string {
-  switch (health) {
-    case "healthy":
-      return "healthy";
-    case "retrying":
-      return "retrying";
-    case "dead-lettered":
-      return "dead-lettered";
-    default:
-      return "inactive";
-  }
-}
-
 export function getFileKindBadgeVariant(
   kind: StudioFile["kind"],
 ): StudioBadgeVariant {
@@ -254,6 +362,120 @@ export function getSourceBadgeVariant(
       return "muted";
     default:
       return "muted";
+  }
+}
+
+export function getDurationClasses(value: number | null | undefined): string {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return "text-muted-foreground";
+  }
+
+  if (value > 500) {
+    return "text-destructive";
+  }
+
+  if (value > 100) {
+    return "text-amber-600";
+  }
+
+  return "text-foreground";
+}
+
+export function getHttpStatusBadgeVariant(
+  statusGroup: StudioHttpStatusGroup,
+): StudioBadgeVariant {
+  switch (statusGroup) {
+    case "5xx":
+      return "destructive";
+    case "4xx":
+      return "secondary";
+    case "3xx":
+      return "outline";
+    default:
+      return "default";
+  }
+}
+
+export function getHttpStatusClasses(statusGroup: StudioHttpStatusGroup): string {
+  switch (statusGroup) {
+    case "5xx":
+      return "border-destructive/30 bg-destructive/10 text-destructive";
+    case "4xx":
+      return "border-amber-500/30 bg-amber-500/10 text-amber-700";
+    case "3xx":
+      return "border-border bg-muted text-muted-foreground";
+    default:
+      return "border-primary/30 bg-primary/10 text-primary";
+  }
+}
+
+export function getHttpPerformanceRowClasses(
+  highlight: StudioHttpEndpointPerformanceRow["highlight"],
+): string {
+  switch (highlight) {
+    case "error":
+      return "bg-destructive/5";
+    case "slow":
+      return "bg-amber-500/5";
+    default:
+      return "";
+  }
+}
+
+export function formatRequestsPerMinute(value: number): string {
+  if (!Number.isFinite(value)) {
+    return "0/min";
+  }
+
+  return `${value >= 10 ? Math.round(value) : value.toFixed(1)}/min`;
+}
+
+export function getBackgroundJobStatusBadgeVariant(
+  status: StudioBackgroundJobRun["status"],
+): StudioBadgeVariant {
+  switch (status) {
+    case "COMPLETED":
+      return "default";
+    case "FAILED":
+    case "TIMEOUT":
+      return "destructive";
+    default:
+      return "secondary";
+  }
+}
+
+export function getBackgroundJobTrendLabel(
+  trend: StudioBackgroundJobPerformanceRow["trend"],
+): string {
+  switch (trend) {
+    case "slower":
+      return "Slower";
+    case "faster":
+      return "Faster";
+    case "stable":
+      return "Stable";
+    default:
+      return "Insufficient data";
+  }
+}
+
+export function formatPaymentAmount(
+  amount: StudioPaymentTrace["amount"] | StudioPaymentsOverview["stats"]["revenueProcessed"],
+): string {
+  return amount?.display ?? "n/a";
+}
+
+export function getPaymentTraceStatusBadgeVariant(
+  status: StudioPaymentTrace["status"],
+): StudioBadgeVariant {
+  switch (status) {
+    case "COMPLETED":
+      return "default";
+    case "DECLINED":
+    case "ERROR":
+      return "destructive";
+    default:
+      return "secondary";
   }
 }
 
@@ -416,6 +638,204 @@ export function getStructuredEvents(record: StudioRecord): unknown[] {
   }
 
   return readStructuredEvents(raw);
+}
+
+export function getAuthEventKindLabel(kind: StudioAuthEvent["kind"]): string {
+  switch (kind) {
+    case "login":
+      return "Login";
+    case "session":
+      return "Session";
+    case "token":
+      return "Token";
+    case "permission":
+      return "Permission";
+    case "oauth":
+      return "OAuth";
+    default:
+      return "Auth";
+  }
+}
+
+export function getAuthOutcomeBadgeVariant(
+  outcome: StudioAuthEvent["outcome"],
+): StudioBadgeVariant {
+  switch (outcome) {
+    case "success":
+      return "default";
+    case "failure":
+      return "destructive";
+    default:
+      return "muted";
+  }
+}
+
+export function isOverviewSection(section: StudioSectionId): boolean {
+  return section === "overview";
+}
+
+export function isAllLogsSection(section: StudioSectionId): boolean {
+  return section === "all-logs";
+}
+
+export function isProjectConfigSection(section: StudioSectionId): boolean {
+  return section === "project-config";
+}
+
+export function isAuthSection(section: StudioSectionId): boolean {
+  return section === "auth";
+}
+
+export function isDatabaseSection(section: StudioSectionId): boolean {
+  return section === "database";
+}
+
+export function isAgentsSection(section: StudioSectionId): boolean {
+  return section === "agents";
+}
+
+export function isBackgroundSection(section: StudioSectionId): boolean {
+  return section === "background";
+}
+
+export function isPaymentsSection(section: StudioSectionId): boolean {
+  return section === "payments";
+}
+
+export function isHttpSection(section: StudioSectionId): boolean {
+  return section === "http";
+}
+
+export function isErrorsSection(section: StudioSectionId): boolean {
+  return section === "errors";
+}
+
+export function formatOverviewMetricValue(
+  label: string,
+  value: number | null,
+): string {
+  if (label === "Error rate") {
+    return typeof value === "number" ? `${value.toFixed(1)}%` : "0.0%";
+  }
+
+  if (label === "Avg response time") {
+    return typeof value === "number" ? formatDurationMs(value) : "n/a";
+  }
+
+  if (label === "Uptime") {
+    return typeof value === "number" ? formatDuration(value) : "0s";
+  }
+
+  return typeof value === "number" ? new Intl.NumberFormat().format(value) : "n/a";
+}
+
+export function formatOverviewTrend(
+  trend: StudioOverviewTrend,
+  deltaPercent: number | null,
+): string {
+  if (trend === "flat" || deltaPercent === null || !Number.isFinite(deltaPercent)) {
+    return "No change";
+  }
+
+  return `${Math.abs(deltaPercent).toFixed(1)}% ${trend}`;
+}
+
+export function getOverviewStatusClasses(status: StudioOverviewStatus): string {
+  switch (status) {
+    case "critical":
+      return "border-destructive/40 bg-destructive/8 text-destructive";
+    case "warning":
+      return "border-amber-500/30 bg-amber-500/8 text-amber-200 dark:text-amber-300";
+    case "healthy":
+    default:
+      return "border-primary/30 bg-primary/8 text-primary";
+  }
+}
+export function formatRelativeToSessionStart(
+  value: string | null | undefined,
+  sessionStart: string | null | undefined,
+): string {
+  if (!value || !sessionStart) {
+    return formatDateTime(value);
+  }
+
+  const valueTime = Date.parse(value);
+  const sessionTime = Date.parse(sessionStart);
+  if (!Number.isFinite(valueTime) || !Number.isFinite(sessionTime)) {
+    return formatDateTime(value);
+  }
+
+  const diffMs = Math.max(0, valueTime - sessionTime);
+  const totalSeconds = Math.floor(diffMs / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  if (hours > 0) {
+    return `+${hours}h ${minutes}m`;
+  }
+  if (minutes > 0) {
+    return `+${minutes}m ${seconds}s`;
+  }
+
+  return `+${seconds}s`;
+}
+
+export function getAgentTaskStatusBadgeVariant(
+  status: StudioAgentTask["status"],
+): StudioBadgeVariant {
+  switch (status) {
+    case "FAILED":
+      return "destructive";
+    case "COMPLETED":
+      return "default";
+    case "TIMEOUT":
+      return "secondary";
+    default:
+      return "outline";
+  }
+}
+
+export function formatTokenCount(value: number | null | undefined): string {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return "n/a";
+  }
+
+  if (value >= 1000) {
+    return `${(value / 1000).toFixed(1)}k`;
+  }
+
+  return `${Math.round(value)}`;
+}
+
+export function formatApproxUsd(value: number | null | undefined): string {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return "n/a";
+  }
+
+  return `Approx. $${value.toFixed(value < 0.01 ? 4 : 2)}`;
+}
+
+export function getErrorGroupStatusLabel(
+  group: Pick<StudioErrorGroup, "occurrenceCount" | "lastSeenAt">,
+  sessionState: {
+    resolvedAt?: string | null;
+    ignored?: boolean;
+  },
+): "Ignored" | "Resolved" | "Recurring" | "New" {
+  if (sessionState.ignored) {
+    return "Ignored";
+  }
+
+  if (sessionState.resolvedAt) {
+    const resolvedTime = Date.parse(sessionState.resolvedAt);
+    const lastSeenTime = group.lastSeenAt ? Date.parse(group.lastSeenAt) : Number.NaN;
+    if (Number.isFinite(resolvedTime) && (!Number.isFinite(lastSeenTime) || resolvedTime >= lastSeenTime)) {
+      return "Resolved";
+    }
+  }
+
+  return group.occurrenceCount > 1 ? "Recurring" : "New";
 }
 
 function readStructuredEvents(value: Record<string, unknown>): unknown[] {

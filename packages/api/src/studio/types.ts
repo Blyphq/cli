@@ -3,6 +3,20 @@ export type StudioLogFileKind = "active" | "archive";
 export type StudioLogStream = "combined" | "error" | "unknown";
 export type StudioRecordSource = "server" | "client" | "structured" | "http" | "unknown";
 export type StudioGroupingMode = "flat" | "grouped";
+export type StudioErrorSort = "most-recent" | "most-frequent" | "first-seen";
+export type StudioErrorViewMode = "grouped" | "raw";
+export type StudioErrorStatus = "active" | "resolved" | "ignored";
+export type StudioBuiltinSectionId =
+  | "overview"
+  | "errors"
+  | "auth"
+  | "payments"
+  | "http"
+  | "agents"
+  | "background"
+  | "database"
+  | "all-logs";
+export type StudioSectionId = StudioBuiltinSectionId | `custom:${string}`;
 export type StudioGroupingReason =
   | "explicit-group-id"
   | "request-id"
@@ -83,24 +97,6 @@ export interface StudioResolvedPostHogConnectorSummary {
   errorTracking: StudioResolvedPostHogErrorTrackingSummary;
 }
 
-export interface StudioResolvedBetterStackConnectorSummary {
-  enabled: boolean;
-  mode: string;
-  sourceToken?: string;
-  ingestingHost?: string;
-  ready: boolean;
-  status: "enabled" | "missing";
-}
-
-export interface StudioResolvedDatabuddyConnectorSummary {
-  enabled: boolean;
-  mode: string;
-  apiKey?: string;
-  websiteId?: string;
-  ready: boolean;
-  status: "enabled" | "missing";
-}
-
 export interface StudioResolvedSentryConnectorSummary {
   enabled: boolean;
   mode: string;
@@ -124,59 +120,22 @@ export interface StudioResolvedOtlpConnectorSummary {
 }
 
 export interface StudioResolvedConnectorsSummary {
-  betterstack: StudioResolvedBetterStackConnectorSummary;
-  databuddy: StudioResolvedDatabuddyConnectorSummary;
   posthog: StudioResolvedPostHogConnectorSummary;
   sentry: StudioResolvedSentryConnectorSummary;
   otlp: StudioResolvedOtlpConnectorSummary[];
 }
 
-export type StudioConnectorHealth =
-  | "healthy"
-  | "retrying"
-  | "dead-lettered"
-  | "inactive";
-
-export interface StudioConnectorDeliveryStatus {
-  key: string;
-  connectorType: string;
-  connectorTarget: string | null;
-  label: string;
-  enabled: boolean;
-  health: StudioConnectorHealth;
-  pendingCount: number;
-  deadLetterCount: number;
-  lastSuccessAt: string | null;
-  lastFailureAt: string | null;
-  lastError: string | null;
+export interface StudioCustomSectionMatch {
+  fields: string[];
+  routes: string[];
+  messages: string[];
 }
 
-export interface StudioDeadLetterRecord {
-  id: string;
-  timestamp: string;
-  connectorKey: string;
-  connectorLabel: string;
-  connectorType: string;
-  connectorTarget: string | null;
-  payloadPreview: string;
-  lastError: string | null;
-  attemptCount: number;
-  maxAttempts: number;
-}
-
-export interface StudioDeadLetterPage {
-  items: StudioDeadLetterRecord[];
-  total: number;
-  offset: number;
-  limit: number;
-}
-
-export interface StudioDeliveryStatus {
-  connectors: StudioConnectorDeliveryStatus[];
-  deadLetters: StudioDeadLetterPage;
-  queuePath: string;
-  available: boolean;
-  unavailableReason: "queue_missing" | "sqlite_unavailable" | "delivery_disabled" | null;
+export interface StudioCustomSectionDefinition {
+  id: StudioSectionId;
+  name: string;
+  icon: string;
+  match: StudioCustomSectionMatch;
 }
 
 export interface StudioResolvedConfigSummary {
@@ -187,6 +146,9 @@ export interface StudioResolvedConfigSummary {
   clientLogging: StudioClientLoggingSummary;
   ai: StudioAiSummary;
   connectors: StudioResolvedConnectorsSummary;
+  studio: {
+    sections: StudioCustomSectionDefinition[];
+  };
   destination: "file" | "database";
   database: StudioDatabaseConfigSummary;
 }
@@ -222,6 +184,18 @@ export interface StudioLogDiscovery {
   database: StudioDatabaseConfigSummary | null;
 }
 
+export interface StudioDetectedSection {
+  id: StudioSectionId;
+  label: string;
+  count: number;
+  icon: string;
+  kind: "builtin" | "custom";
+  highlighted: boolean;
+  unreadErrorCount: number;
+  lastMatchedAt: string | null;
+  lastErrorAt: string | null;
+}
+
 export interface StudioHttpDetails {
   kind: "framework-http" | "structured-http";
   method: string | null;
@@ -229,10 +203,17 @@ export interface StudioHttpDetails {
   statusCode: number | null;
   durationMs: number | null;
   url: string | null;
+  routeTemplate: string | null;
   type: string | null;
   hostname: string | null;
   ip: string | null;
   userAgent: string | null;
+  requestHeaders: Record<string, unknown> | null;
+  responseHeaders: Record<string, unknown> | null;
+  requestBody: unknown;
+  responseBody: unknown;
+  requestId: string | null;
+  traceId: string | null;
   error: unknown;
 }
 
@@ -318,6 +299,114 @@ export interface StudioStructuredGroupDetail {
 
 export type StudioLogListEntry = StudioNormalizedRecordListItem | StudioStructuredGroupSummary;
 
+export type StudioBackgroundJobStatus =
+  | "COMPLETED"
+  | "FAILED"
+  | "IN_PROGRESS"
+  | "TIMEOUT";
+
+export type StudioAgentTaskStatus =
+  | "COMPLETED"
+  | "FAILED"
+  | "IN_PROGRESS"
+  | "TIMEOUT";
+export type StudioAgentStepType = "AGENT" | "LLM" | "TOOL" | "RETRIEVAL";
+export type StudioAgentDurationSource =
+  | "explicit"
+  | "inferred-next-step"
+  | "paired-terminal"
+  | "task-boundary"
+  | "unknown";
+export type StudioAgentErrorKind = "llm" | "tool" | "agent" | "unknown";
+
+export type StudioBackgroundJobTrend =
+  | "slower"
+  | "stable"
+  | "faster"
+  | "insufficient_data";
+
+export interface StudioErrorFingerprintSource {
+  key: string;
+  kind: "source-location" | "stack-frame" | "caller" | "unknown";
+  relativePath: string | null;
+  line: number | null;
+  column: number | null;
+}
+
+export interface StudioErrorStackFrame {
+  raw: string;
+  relativePath: string | null;
+  absolutePath: string | null;
+  line: number | null;
+  column: number | null;
+  inProject: boolean;
+}
+
+export interface StudioErrorOccurrence {
+  kind: "occurrence";
+  id: string;
+  fingerprint: string;
+  timestamp: string | null;
+  level: string;
+  type: string;
+  message: string;
+  messageFirstLine: string;
+  fileId: string;
+  fileName: string;
+  filePath: string;
+  lineNumber: number;
+  caller: string | null;
+  stack: string | null;
+  stackFrames: StudioErrorStackFrame[];
+  http: StudioHttpDetails | null;
+  sourceLocation: StudioResolvedSourceLocation | null;
+  fingerprintSource: StudioErrorFingerprintSource;
+  sectionTags: string[];
+  relatedTraceGroupId: string | null;
+  structuredFields: Record<string, unknown>;
+  raw: unknown;
+}
+
+export interface StudioErrorGroupSummary {
+  kind: "error-group";
+  fingerprint: string;
+  errorType: string;
+  message: string;
+  messageFirstLine: string;
+  occurrenceCount: number;
+  firstSeenAt: string | null;
+  lastSeenAt: string | null;
+  sourceLocation: StudioResolvedSourceLocation | null;
+  fingerprintSource: StudioErrorFingerprintSource;
+  http: Pick<StudioHttpDetails, "method" | "path" | "statusCode" | "url"> | null;
+  sectionTags: string[];
+  sparklineBuckets: number[];
+  representativeOccurrenceId: string;
+  relatedTraceGroupId: string | null;
+}
+
+export interface StudioErrorGroupDetail {
+  group: StudioErrorGroupSummary;
+  occurrences: StudioErrorOccurrence[];
+}
+
+export interface StudioErrorStats {
+  uniqueErrorTypes: number;
+  totalOccurrences: number;
+  mostFrequentError:
+    | {
+        fingerprint: string;
+        type: string;
+        messageFirstLine: string;
+        count: number;
+      }
+    | null;
+  newErrorsComparedToPreviousSessions: {
+    available: boolean;
+    count: number | null;
+  };
+}
+
 export interface StudioLogsQueryInput {
   projectPath?: string;
   limit?: number;
@@ -329,6 +418,121 @@ export interface StudioLogsQueryInput {
   from?: string;
   to?: string;
   grouping?: StudioGroupingMode;
+  sectionId?: string;
+}
+
+export interface StudioErrorsQueryInput {
+  projectPath?: string;
+  limit?: number;
+  offset?: number;
+  view?: StudioErrorViewMode;
+  sort?: StudioErrorSort;
+  type?: string;
+  sourceFile?: string;
+  search?: string;
+  fileId?: string;
+  from?: string;
+  to?: string;
+  sectionId?: string;
+}
+
+export interface StudioBackgroundJobsQueryInput {
+  projectPath?: string;
+  fileId?: string;
+  from?: string;
+  to?: string;
+  search?: string;
+  offset?: number;
+  limit?: number;
+}
+
+export interface StudioAgentsQueryInput {
+  projectPath?: string;
+  fileId?: string;
+  from?: string;
+  to?: string;
+  search?: string;
+  offset?: number;
+  limit?: number;
+}
+
+export type StudioHttpStatusGroup = "2xx" | "3xx" | "4xx" | "5xx";
+export type StudioHttpPerformanceHighlight = "none" | "slow" | "error";
+
+export interface StudioHttpQueryInput {
+  projectPath?: string;
+  fileId?: string;
+  from?: string;
+  to?: string;
+  search?: string;
+  offset?: number;
+  limit?: number;
+  method?: string;
+  statusGroup?: StudioHttpStatusGroup;
+  route?: string;
+  minDurationMs?: number;
+}
+
+export interface StudioHttpStats {
+  totalRequests: number;
+  errorRate: number;
+  p50DurationMs: number | null;
+  p95DurationMs: number | null;
+  requestsPerMinute: number;
+  statusGroups: Record<StudioHttpStatusGroup, number>;
+}
+
+export interface StudioHttpRequestRow {
+  id: string;
+  recordId: string;
+  timestamp: string | null;
+  method: string;
+  route: string;
+  rawPath: string;
+  statusCode: number;
+  statusGroup: StudioHttpStatusGroup;
+  durationMs: number | null;
+  traceGroupId: string | null;
+  traceId: string | null;
+  requestId: string | null;
+}
+
+export interface StudioHttpEndpointPerformanceRow {
+  route: string;
+  requests: number;
+  p50DurationMs: number | null;
+  p95DurationMs: number | null;
+  errorRate: number;
+  lastSeenAt: string | null;
+  highlight: StudioHttpPerformanceHighlight;
+}
+
+export interface StudioHttpStatusTimeseriesBucket {
+  start: string;
+  end: string;
+  counts: Record<StudioHttpStatusGroup, number>;
+}
+
+export interface StudioHttpUiFacets {
+  methods: string[];
+  routes: string[];
+  statusGroups: StudioHttpStatusGroup[];
+  durationRange: {
+    min: number | null;
+    max: number | null;
+  };
+}
+
+export interface StudioHttpOverview {
+  stats: StudioHttpStats;
+  requests: StudioHttpRequestRow[];
+  totalRequests: number;
+  offset: number;
+  limit: number;
+  truncated: boolean;
+  performance: StudioHttpEndpointPerformanceRow[];
+  timeseries: StudioHttpStatusTimeseriesBucket[];
+  facets: StudioHttpUiFacets;
 }
 
 export interface StudioLogsPage {
@@ -343,6 +547,563 @@ export interface StudioLogsPage {
   truncated: boolean;
 }
 
+export type StudioDatabaseQueryStatus = "success" | "error" | "slow";
+export type StudioDatabaseEventKind =
+  | "query"
+  | "transaction-start"
+  | "transaction-commit"
+  | "transaction-rollback"
+  | "migration"
+  | "connection"
+  | "unknown";
+
+export interface StudioDatabaseStats {
+  totalQueries: number;
+  slowQueries: number;
+  failedQueries: number;
+  avgQueryTimeMs: number | null;
+  activeTransactions: number;
+}
+
+export interface StudioDatabaseQueryEvent {
+  id: string;
+  recordId: string;
+  timestamp: string | null;
+  operation: string;
+  modelOrTable: string | null;
+  durationMs: number | null;
+  status: StudioDatabaseQueryStatus;
+  transactionId: string | null;
+  requestId: string | null;
+  traceId: string | null;
+  queryText: string | null;
+  params: unknown;
+  errorMessage: string | null;
+  durationBreakdown: Record<string, number> | null;
+  adapter: "prisma" | "drizzle" | null;
+}
+
+export interface StudioDatabaseTransactionSummary {
+  id: string;
+  startRecordId: string;
+  timestampStart: string | null;
+  timestampEnd: string | null;
+  durationMs: number | null;
+  result: "committed" | "rolled_back" | "open";
+  requestId: string | null;
+  traceId: string | null;
+  queries: StudioDatabaseQueryEvent[];
+}
+
+export interface StudioDatabaseMigrationEvent {
+  id: string;
+  recordId: string;
+  timestamp: string | null;
+  name: string | null;
+  version: string | null;
+  durationMs: number | null;
+  success: boolean;
+  errorMessage: string | null;
+}
+
+export interface StudioDatabaseOverview {
+  stats: StudioDatabaseStats;
+  queries: StudioDatabaseQueryEvent[];
+  totalQueries: number;
+  slowQueries: StudioDatabaseQueryEvent[];
+  transactions: StudioDatabaseTransactionSummary[];
+  migrationEvents: StudioDatabaseMigrationEvent[];
+}
+
+export interface StudioDatabaseQueryInput {
+  projectPath?: string;
+  fileId?: string;
+  from?: string;
+  to?: string;
+  search?: string;
+  offset?: number;
+  limit?: number;
+}
+
+export interface StudioBackgroundJobOutputField {
+  key: string;
+  value: string;
+}
+
+export interface StudioBackgroundJobFailure {
+  message: string;
+  reasonKey: string;
+  step: string | null;
+  stack: string | null;
+}
+
+export interface StudioBackgroundJobTimelineEvent {
+  id: string;
+  recordId: string;
+  timestamp: string | null;
+  level: string;
+  message: string;
+  status: StudioBackgroundJobStatus | null;
+  step: string | null;
+  structuredFields: StudioBackgroundJobOutputField[];
+}
+
+export interface StudioBackgroundJobRunSummary {
+  id: string;
+  jobName: string;
+  runId: string | null;
+  status: StudioBackgroundJobStatus;
+  startedAt: string | null;
+  finishedAt: string | null;
+  durationMs: number | null;
+  outputFields: StudioBackgroundJobOutputField[];
+  failure: StudioBackgroundJobFailure | null;
+  recordCount: number;
+}
+
+export interface StudioBackgroundJobRunDetail {
+  run: StudioBackgroundJobRunSummary;
+  timeline: StudioBackgroundJobTimelineEvent[];
+}
+
+export interface StudioBackgroundJobPerformanceRow {
+  jobName: string;
+  totalRuns: number;
+  successRate: number;
+  avgDurationMs: number | null;
+  p95DurationMs: number | null;
+  lastRunTimestamp: string | null;
+  trend: StudioBackgroundJobTrend;
+}
+
+export interface StudioBackgroundJobsStats {
+  jobsDetected: number;
+  totalRuns: number;
+  successRate: number;
+  failedRuns: number;
+  mostCommonFailureReason: string | null;
+  avgDurationMs: number | null;
+}
+
+export interface StudioBackgroundJobsOverview {
+  stats: StudioBackgroundJobsStats;
+  runs: StudioBackgroundJobRunSummary[];
+  performance: StudioBackgroundJobPerformanceRow[];
+  totalRuns: number;
+  offset: number;
+  limit: number;
+  truncated: boolean;
+}
+
+export interface StudioAgentPricingEstimate {
+  amountUsd: number | null;
+  label: string;
+}
+
+export interface StudioAgentsStats {
+  agentTasks: number;
+  llmCalls: number;
+  avgTaskDurationMs: number | null;
+  toolCalls: number;
+  failedTasks: number;
+  totalTokens: number;
+}
+
+export interface StudioAgentTaskStep {
+  id: string;
+  recordId: string;
+  timestamp: string | null;
+  offsetMs: number | null;
+  type: StudioAgentStepType;
+  name: string;
+  summary: string;
+  durationMs: number | null;
+  durationSource: StudioAgentDurationSource;
+  status: string | null;
+  model: string | null;
+  toolName: string | null;
+  promptTokens: number | null;
+  completionTokens: number | null;
+  totalTokens: number | null;
+  resultCount: number | null;
+  inputPreview: string | null;
+  outputPreview: string | null;
+  errorMessage: string | null;
+  rawDetails: unknown;
+}
+
+export interface StudioAgentTaskSummary {
+  id: string;
+  title: string;
+  status: StudioAgentTaskStatus;
+  startedAt: string | null;
+  finishedAt: string | null;
+  durationMs: number | null;
+  stepCount: number;
+  llmCallCount: number;
+  toolCallCount: number;
+  retrievalCount: number;
+  totalTokens: number;
+  failureKind: StudioAgentErrorKind | null;
+  failureMessage: string | null;
+  recordIds: string[];
+  correlationSource: "task_id" | "trace_id" | "session_proximity";
+}
+
+export interface StudioAgentLlmCallRow {
+  id: string;
+  taskId: string;
+  taskTitle: string;
+  recordId: string;
+  timestamp: string | null;
+  model: string | null;
+  promptTokens: number | null;
+  completionTokens: number | null;
+  totalTokens: number | null;
+  durationMs: number | null;
+  approxCostUsd: number | null;
+}
+
+export interface StudioAgentToolCallRow {
+  id: string;
+  taskId: string;
+  taskTitle: string;
+  recordId: string;
+  timestamp: string | null;
+  name: string;
+  durationMs: number | null;
+  outcome: "success" | "failure" | "unknown";
+  errorMessage: string | null;
+}
+
+export interface StudioAgentFailureItem {
+  taskId: string;
+  taskTitle: string;
+  status: StudioAgentTaskStatus;
+  errorKind: StudioAgentErrorKind;
+  errorMessage: string | null;
+  failedStepId: string | null;
+  failedStepName: string | null;
+  failedAt: string | null;
+}
+
+export interface StudioAgentTaskDetail {
+  task: StudioAgentTaskSummary;
+  steps: StudioAgentTaskStep[];
+  failure: StudioAgentFailureItem | null;
+}
+
+export interface StudioAgentsOverview {
+  stats: StudioAgentsStats;
+  tasks: StudioAgentTaskSummary[];
+  totalTasks: number;
+  offset: number;
+  limit: number;
+  truncated: boolean;
+  llmCalls: StudioAgentLlmCallRow[];
+  toolCalls: StudioAgentToolCallRow[];
+  toolSummary: {
+    mostFrequentlyCalled: Array<{ name: string; count: number }>;
+    slowestByP95: Array<{ name: string; p95DurationMs: number | null; sampleCount: number }>;
+  };
+  failures: StudioAgentFailureItem[];
+}
+
+export type StudioPaymentTraceStatus =
+  | "COMPLETED"
+  | "DECLINED"
+  | "PENDING"
+  | "ERROR";
+
+export type StudioPaymentTraceEventKind =
+  | "INFO"
+  | "HTTP"
+  | "STRUCT"
+  | "ERROR"
+  | "WEBHOOK";
+
+export type StudioPaymentWebhookResult = "success" | "error";
+
+export interface StudioPaymentAmount {
+  value: number;
+  currency: string | null;
+  display: string;
+  inferredMinorUnits: boolean;
+}
+
+export interface StudioPaymentTraceField {
+  key: string;
+  value: string;
+}
+
+export interface StudioPaymentTraceEvent {
+  id: string;
+  recordId: string;
+  timestamp: string | null;
+  offsetMs: number | null;
+  level: string;
+  message: string;
+  kind: StudioPaymentTraceEventKind;
+  status: StudioPaymentTraceStatus | null;
+  route: string | null;
+  durationMs: number | null;
+  fields: StudioPaymentTraceField[];
+}
+
+export interface StudioPaymentWebhookEvent {
+  id: string;
+  recordId: string;
+  timestamp: string | null;
+  eventType: string | null;
+  route: string | null;
+  result: StudioPaymentWebhookResult;
+  traceId: string | null;
+  payloadPreview: string | null;
+}
+
+export interface StudioPaymentTraceSummary {
+  id: string;
+  correlationLabel: string;
+  userId: string | null;
+  amount: StudioPaymentAmount | null;
+  durationMs: number | null;
+  status: StudioPaymentTraceStatus;
+  startedAt: string | null;
+  finishedAt: string | null;
+  recordCount: number;
+  failureReason: string | null;
+  webhookEventCount: number;
+  representativeRecordId: string | null;
+}
+
+export interface StudioPaymentTraceDetail {
+  trace: StudioPaymentTraceSummary;
+  timeline: StudioPaymentTraceEvent[];
+  webhooks: StudioPaymentWebhookEvent[];
+  correlationSignals: StudioPaymentTraceField[];
+}
+
+export interface StudioPaymentFailureBreakdownRow {
+  reason: string;
+  count: number;
+  mostRecentAt: string | null;
+  affectedUserIds: string[];
+}
+
+export interface StudioPaymentsStats {
+  checkoutAttempts: number;
+  successRate: number;
+  successRateTrend: StudioOverviewTrend;
+  successRateDeltaPercent: number | null;
+  successRateComparisonWindowLabel: string;
+  failedPayments: number;
+  mostCommonFailureReason: string | null;
+  revenueProcessed: StudioPaymentAmount | null;
+  currency: string | null;
+  webhookEvents: number;
+}
+
+export interface StudioPaymentsOverview {
+  stats: StudioPaymentsStats;
+  traces: StudioPaymentTraceSummary[];
+  failures: StudioPaymentFailureBreakdownRow[];
+  webhooks: StudioPaymentWebhookEvent[];
+  totalTraces: number;
+  offset: number;
+  limit: number;
+  truncated: boolean;
+}
+export interface StudioErrorsPage {
+  entries: Array<StudioErrorGroupSummary | StudioErrorOccurrence>;
+  groups: StudioErrorGroupSummary[];
+  occurrences: StudioErrorOccurrence[];
+  stats: StudioErrorStats;
+  totalMatched: number;
+  totalEntries: number;
+  scannedRecords: number;
+  returnedCount: number;
+  offset: number;
+  limit: number;
+  truncated: boolean;
+  earliestTimestamp: string | null;
+  latestTimestamp: string | null;
+  availableTypes: string[];
+  availableSourceFiles: string[];
+  availableSectionTags: string[];
+}
+
+export type StudioOverviewStatus = "healthy" | "warning" | "critical";
+export type StudioOverviewTrend = "up" | "down" | "flat";
+
+export interface StudioOverviewQueryInput {
+  projectPath?: string;
+  fileId?: string;
+  from?: string;
+  to?: string;
+  search?: string;
+}
+
+export interface StudioOverviewStat<T> {
+  value: T;
+  label: string;
+  status: StudioOverviewStatus;
+  helperText: string;
+}
+
+export interface StudioOverviewTrendStat<T> extends StudioOverviewStat<T> {
+  trend: StudioOverviewTrend;
+  deltaPercent: number | null;
+  comparisonWindowLabel: string;
+}
+
+export interface StudioOverviewFeedField {
+  key: string;
+  value: string;
+}
+
+export type StudioOverviewTarget = {
+  sectionId: StudioSectionId | "all-logs";
+  selection:
+    | { kind: "record"; id: string }
+    | { kind: "group"; id: string }
+    | { kind: "payment-trace"; id: string };
+};
+
+export interface StudioOverviewFeedItem {
+  recordId: string;
+  timestamp: string | null;
+  level: string;
+  message: string;
+  summaryFields: StudioOverviewFeedField[];
+  target: StudioOverviewTarget | null;
+}
+
+export interface StudioOverviewSectionCard {
+  id: StudioSectionId;
+  label: string;
+  icon: string;
+  eventCount: number;
+  errorCount: number;
+  lastEventAt: string | null;
+  status: StudioOverviewStatus;
+}
+
+export interface StudioOverviewRecentErrorItem {
+  groupId: string;
+  recordId: string;
+  message: string;
+  timestamp: string | null;
+  sourceFile: string | null;
+  sourceLine: number | null;
+  traceReference: StudioOverviewTarget | null;
+}
+
+export interface StudioOverview {
+  connectedAt: string;
+  generatedAt: string;
+  stats: {
+    totalEvents: StudioOverviewStat<number>;
+    errorRate: StudioOverviewTrendStat<number>;
+    activeTraces: StudioOverviewStat<number>;
+    warnings: StudioOverviewStat<number>;
+    avgResponseTime: StudioOverviewStat<number | null>;
+    uptime: StudioOverviewStat<number>;
+  };
+  liveFeed: StudioOverviewFeedItem[];
+  sections: StudioOverviewSectionCard[];
+  recentErrors: StudioOverviewRecentErrorItem[];
+}
+
+export interface StudioAuthQueryInput {
+  projectPath?: string;
+  fileId?: string;
+  from?: string;
+  to?: string;
+  search?: string;
+  offset?: number;
+  limit?: number;
+  userId?: string;
+  sectionId?: string;
+}
+
+export type StudioAuthEventKind =
+  | "login"
+  | "session"
+  | "token"
+  | "permission"
+  | "oauth"
+  | "other";
+
+export type StudioAuthOutcome = "success" | "failure" | "unknown";
+
+export interface StudioAuthEvent {
+  id: string;
+  recordId: string;
+  timestamp: string | null;
+  kind: StudioAuthEventKind;
+  action: string;
+  outcome: StudioAuthOutcome;
+  userId: string | null;
+  userEmail: string | null;
+  ip: string | null;
+  route: string | null;
+  method: string | null;
+  provider: string | null;
+  scope: string | null;
+  requiredPermission: string | null;
+  statusCode: number | null;
+  durationMs: number | null;
+  sessionId: string | null;
+  summary: string;
+}
+
+export interface StudioAuthStats {
+  loginAttemptsTotal: number;
+  loginSuccessCount: number;
+  loginFailureCount: number;
+  activeSessionCount: number;
+  authErrorCount: number;
+  suspiciousActivityCount: number;
+}
+
+export interface StudioAuthSuspiciousPattern {
+  id: string;
+  kind: "brute-force" | "invalid-token-spike" | "concurrent-sessions";
+  title: string;
+  description: string;
+  affectedUserId: string | null;
+  affectedIp: string | null;
+  eventCount: number;
+  timestampStart: string | null;
+  timestampEnd: string | null;
+  recordIds: string[];
+}
+
+export interface StudioAuthUserSummary {
+  userId: string;
+  loginCount: number;
+  lastSeen: string | null;
+  errorCount: number;
+}
+
+export interface StudioAuthOverview {
+  stats: StudioAuthStats;
+  timeline: StudioAuthEvent[];
+  totalTimelineEvents: number;
+  suspiciousPatterns: StudioAuthSuspiciousPattern[];
+  users: StudioAuthUserSummary[];
+}
+
+export interface StudioPaymentsQueryInput {
+  projectPath?: string;
+  fileId?: string;
+  from?: string;
+  to?: string;
+  search?: string;
+  offset?: number;
+  limit?: number;
+}
+
 export interface StudioLogFacets {
   types: string[];
   sources: StudioRecordSource[];
@@ -355,7 +1116,7 @@ export interface StudioAssistantHistoryItem {
 }
 
 export interface StudioAssistantReference {
-  kind: "record" | "group";
+  kind: "record" | "group" | "background-run" | "agent-task" | "payment-trace";
   id: string;
   label: string;
   fileName: string | null;
@@ -393,11 +1154,15 @@ export interface StudioAssistantReplyInput {
   >;
   selectedRecordId?: string;
   selectedGroupId?: string;
+  selectedBackgroundRunId?: string;
+  selectedAgentTaskId?: string;
+  selectedPaymentTraceId?: string;
 }
 
 export interface StudioMeta {
   project: StudioProjectResolution;
   config: StudioConfigDiscovery;
+  sections: StudioDetectedSection[];
   logs: {
     mode: StudioLogMode;
     database: StudioDatabaseConfigSummary | null;

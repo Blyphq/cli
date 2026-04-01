@@ -6,37 +6,65 @@ import {
   streamAssistant,
   type StudioAssistantStreamResult,
 } from "./assistant";
+import { analyzeAgentRecords, getAgentTaskDetail } from "./agents";
 import { generateAssistantText, getAssistantStatus } from "./assistant-provider";
-import { discoverStudioConfig, resolveStudioAiCredentials } from "./config";
+import { analyzeAuthRecords } from "./auth";
+import { buildBackgroundJobRunDetail, buildBackgroundJobsOverview } from "./background-jobs";
+import { analyzeDatabaseRecords } from "./database-section";
 import {
-  clearStudioDeadLetters,
-  getStudioDeliveryStatus,
-  retryStudioDeadLetters,
-} from "./delivery";
+  discoverStudioConfig,
+  resolveStudioAiCredentials,
+  saveStudioCustomSection,
+} from "./config";
 import {
   buildSyntheticDatabaseFile,
   loadDatabaseRecords,
 } from "./database";
+import { buildErrorGroupDetail, buildErrorsPage } from "./errors";
 import { getLogFacets } from "./facets";
 import { buildGroupDetails } from "./grouping";
+import { analyzeHttpRecords } from "./http-section";
 import { discoverLogFiles } from "./logs";
+import { buildStudioOverview } from "./overview";
+import { buildPaymentTraceDetail, buildPaymentsOverview } from "./payments";
 import { loadProjectClaudeMd } from "./project-context";
 import { resolveStudioProject } from "./project";
-import { loadNormalizedRecords, queryLogs } from "./query";
+import { filterRecords, loadNormalizedRecords, queryLogs } from "./query";
+import { buildDetectedSections } from "./sections";
 import { createUnavailableSourceContext, resolveRecordSourceContext } from "./source";
 
 import type {
   StudioAssistantMessage,
   StudioAssistantReplyInput,
   StudioAssistantStatus,
+  StudioAgentTaskDetail,
+  StudioAgentsOverview,
+  StudioAgentsQueryInput,
+  StudioAuthOverview,
+  StudioAuthQueryInput,
+  StudioBackgroundJobRunDetail,
+  StudioBackgroundJobsOverview,
+  StudioBackgroundJobsQueryInput,
   StudioConfigDiscovery,
-  StudioDeliveryStatus,
+  StudioDatabaseOverview,
+  StudioDatabaseQueryInput,
+  StudioDetectedSection,
+  StudioErrorGroupDetail,
+  StudioHttpOverview,
+  StudioHttpQueryInput,
   StudioLogDiscovery,
   StudioLogFacets,
+  StudioErrorsPage,
   StudioLogsPage,
+  StudioErrorsQueryInput,
   StudioLogsQueryInput,
   StudioMeta,
   StudioNormalizedRecord,
+  StudioOverview,
+  StudioOverviewQueryInput,
+  StudioPaymentTraceDetail,
+  StudioPaymentsOverview,
+  StudioPaymentsQueryInput,
   StudioSourceContext,
   StudioStructuredGroupDetail,
 } from "./types";
@@ -85,10 +113,15 @@ export async function getStudioMeta(projectPath?: string): Promise<StudioMeta> {
   const logs = project.valid
     ? await discoverLogSource(project.absolutePath, config)
     : emptyLogDiscovery(config);
+  const sections =
+    project.valid
+      ? await getStudioSections(project.absolutePath)
+      : [];
 
   return {
     project,
     config: stripParsedConfig(config),
+    sections,
     logs: {
       mode: logs.mode,
       database: logs.database,
@@ -120,26 +153,6 @@ export async function getStudioFiles(projectPath?: string): Promise<StudioLogDis
   return discoverLogSource(project.absolutePath, config);
 }
 
-export async function getStudioDeliveryStatusPanel(input: {
-  projectPath?: string;
-  limit?: number;
-  offset?: number;
-  connectorKey?: string;
-}): Promise<StudioDeliveryStatus> {
-  const project = await resolveStudioProject(input.projectPath);
-  const config = await discoverStudioConfig(project);
-
-  return getStudioDeliveryStatus(config, input);
-}
-
-export async function retryStudioDeliveryDeadLetters(input: { ids: string[] }) {
-  return retryStudioDeadLetters(input.ids);
-}
-
-export async function clearStudioDeliveryDeadLetters(input: { ids: string[] }) {
-  return clearStudioDeadLetters(input.ids);
-}
-
 export async function getStudioLogs(input: StudioLogsQueryInput): Promise<StudioLogsPage> {
   const { files, project, config } = await getStudioProjectFiles(input.projectPath);
 
@@ -154,6 +167,7 @@ export async function getStudioLogs(input: StudioLogsQueryInput): Promise<Studio
       files: files.files,
       input,
       projectPath: project.absolutePath,
+      customSections: config.resolved.studio.sections,
       preloaded: dbLoaded,
     });
   }
@@ -162,19 +176,513 @@ export async function getStudioLogs(input: StudioLogsQueryInput): Promise<Studio
     files: files.files,
     input,
     projectPath: project.absolutePath,
+    customSections: config.resolved.studio.sections,
   });
+}
+
+export async function getStudioErrors(
+  input: StudioErrorsQueryInput,
+): Promise<StudioErrorsPage> {
+  const { files, project, config } = await getStudioProjectFiles(input.projectPath);
+  const candidateFiles = input.fileId
+    ? files.files.filter((file) => file.id === input.fileId)
+    : files.files;
+
+  const loaded =
+    files.mode === "database"
+      ? await loadDatabaseRecords({
+          projectPath: project.absolutePath,
+          config,
+          input,
+        })
+      : await loadProjectRecords(
+          project.absolutePath,
+          config,
+          { ...files, files: candidateFiles },
+          input,
+        );
+
+  return buildErrorsPage({
+    records: loaded.records,
+    query: input,
+    customSections: config.resolved.studio.sections,
+    scannedRecords: loaded.scannedRecords,
+    truncated: loaded.truncated,
+    projectPath: project.absolutePath,
+  });
+}
+
+export async function getStudioSections(projectPath?: string): Promise<StudioDetectedSection[]> {
+  const { files, project, config } = await getStudioProjectFiles(projectPath);
+  if (!project.valid) {
+    return [];
+  }
+
+  const loaded = await loadProjectRecords(project.absolutePath, config, files);
+  return buildDetectedSections(loaded.records, config.resolved.studio.sections);
+}
+
+export async function getStudioOverview(
+  input: StudioOverviewQueryInput,
+): Promise<StudioOverview> {
+  const { files, project, config } = await getStudioProjectFiles(input.projectPath);
+  const candidateFiles = input.fileId
+    ? files.files.filter((file) => file.id === input.fileId)
+    : files.files;
+
+  const loaded =
+    files.mode === "database"
+      ? await loadDatabaseRecords({
+          projectPath: project.absolutePath,
+          config,
+          input,
+        })
+      : await loadProjectRecords(
+          project.absolutePath,
+          config,
+          { ...files, files: candidateFiles },
+          input,
+        );
+
+  const filtered = filterRecords(
+    loaded.records,
+    {
+      fileId: input.fileId,
+      from: input.from,
+      to: input.to,
+      search: input.search,
+    },
+    config.resolved.studio.sections,
+  );
+  const sections = buildDetectedSections(filtered, config.resolved.studio.sections);
+
+  return buildStudioOverview({
+    records: filtered,
+    projectPath: project.absolutePath,
+    generatedAt: new Date().toISOString(),
+    sections,
+    customSections: config.resolved.studio.sections,
+  });
+}
+
+export async function getStudioAuth(input: StudioAuthQueryInput): Promise<StudioAuthOverview> {
+  const { files, project, config } = await getStudioProjectFiles(input.projectPath);
+  if (!project.valid) {
+    return {
+      stats: {
+        loginAttemptsTotal: 0,
+        loginSuccessCount: 0,
+        loginFailureCount: 0,
+        activeSessionCount: 0,
+        authErrorCount: 0,
+        suspiciousActivityCount: 0,
+      },
+      timeline: [],
+      totalTimelineEvents: 0,
+      suspiciousPatterns: [],
+      users: [],
+    };
+  }
+
+  const loaded = await loadProjectRecords(project.absolutePath, config, files, {
+    from: input.from,
+    to: input.to,
+    search: input.search,
+  });
+  const filtered = filterRecords(
+    loaded.records,
+    {
+      fileId: input.fileId,
+      from: input.from,
+      to: input.to,
+      search: input.search,
+      sectionId: input.sectionId,
+    },
+    config.resolved.studio.sections,
+  );
+
+  return analyzeAuthRecords(filtered, input);
+}
+
+export async function getStudioHttp(input: StudioHttpQueryInput): Promise<StudioHttpOverview> {
+  const { files, project, config } = await getStudioProjectFiles(input.projectPath);
+  const candidateFiles = input.fileId
+    ? files.files.filter((file) => file.id === input.fileId)
+    : files.files;
+
+  const loaded =
+    files.mode === "database"
+      ? await loadDatabaseRecords({
+          projectPath: project.absolutePath,
+          config,
+          input,
+        })
+      : await loadProjectRecords(
+          project.absolutePath,
+          config,
+          { ...files, files: candidateFiles },
+          input,
+        );
+
+  const filtered = filterRecords(
+    loaded.records,
+    {
+      fileId: input.fileId,
+      from: input.from,
+      to: input.to,
+      search: input.search,
+    },
+    config.resolved.studio.sections,
+  );
+
+  return {
+    ...analyzeHttpRecords(filtered, input),
+    truncated: loaded.truncated,
+  };
+}
+
+export async function getStudioDatabase(
+  input: StudioDatabaseQueryInput,
+): Promise<StudioDatabaseOverview> {
+  const { files, project, config } = await getStudioProjectFiles(input.projectPath);
+  if (!project.valid) {
+    return {
+      stats: {
+        totalQueries: 0,
+        slowQueries: 0,
+        failedQueries: 0,
+        avgQueryTimeMs: null,
+        activeTransactions: 0,
+      },
+      queries: [],
+      totalQueries: 0,
+      slowQueries: [],
+      transactions: [],
+      migrationEvents: [],
+    };
+  }
+
+  const loaded = await loadProjectRecords(project.absolutePath, config, files, {
+    from: input.from,
+    to: input.to,
+    search: input.search,
+  });
+  const filtered = filterRecords(
+    loaded.records,
+    {
+      fileId: input.fileId,
+      from: input.from,
+      to: input.to,
+      search: input.search,
+      sectionId: "database",
+    },
+    config.resolved.studio.sections,
+  );
+
+  return analyzeDatabaseRecords(filtered, input);
+}
+
+export async function getStudioAgents(
+  input: StudioAgentsQueryInput,
+): Promise<StudioAgentsOverview> {
+  const { files, project, config } = await getStudioProjectFiles(input.projectPath);
+  if (!project.valid) {
+    return {
+      stats: {
+        agentTasks: 0,
+        llmCalls: 0,
+        avgTaskDurationMs: null,
+        toolCalls: 0,
+        failedTasks: 0,
+        totalTokens: 0,
+      },
+      tasks: [],
+      totalTasks: 0,
+      offset: input.offset ?? 0,
+      limit: input.limit ?? 100,
+      truncated: false,
+      llmCalls: [],
+      toolCalls: [],
+      toolSummary: {
+        mostFrequentlyCalled: [],
+        slowestByP95: [],
+      },
+      failures: [],
+    };
+  }
+
+  const loaded = await loadProjectRecords(project.absolutePath, config, files, {
+    from: input.from,
+    to: input.to,
+    search: input.search,
+  });
+  const filtered = filterRecords(
+    loaded.records,
+    {
+      fileId: input.fileId,
+      from: input.from,
+      to: input.to,
+      search: input.search,
+      sectionId: "agents",
+    },
+    config.resolved.studio.sections,
+  );
+
+  return analyzeAgentRecords({
+    records: filtered,
+    query: input,
+    truncated: loaded.truncated,
+  });
+}
+
+export async function getStudioAgentTask(input: {
+  projectPath?: string;
+  taskId: string;
+  fileId?: string;
+  from?: string;
+  to?: string;
+  search?: string;
+}): Promise<StudioAgentTaskDetail | null> {
+  const { files, project, config } = await getStudioProjectFiles(input.projectPath);
+  if (!project.valid) {
+    return null;
+  }
+
+  const loaded = await loadProjectRecords(project.absolutePath, config, files, {
+    from: input.from,
+    to: input.to,
+    search: input.search,
+  });
+  const filtered = filterRecords(
+    loaded.records,
+    {
+      fileId: input.fileId,
+      from: input.from,
+      to: input.to,
+      search: input.search,
+      sectionId: "agents",
+    },
+    config.resolved.studio.sections,
+  );
+
+  return getAgentTaskDetail({
+    records: filtered,
+    taskId: input.taskId,
+  });
+}
+
+export async function getStudioBackgroundJobs(
+  input: StudioBackgroundJobsQueryInput,
+): Promise<StudioBackgroundJobsOverview> {
+  const { files, project, config } = await getStudioProjectFiles(input.projectPath);
+  if (!project.valid) {
+    return {
+      stats: {
+        jobsDetected: 0,
+        totalRuns: 0,
+        successRate: 0,
+        failedRuns: 0,
+        mostCommonFailureReason: null,
+        avgDurationMs: null,
+      },
+      runs: [],
+      performance: [],
+      totalRuns: 0,
+      offset: input.offset ?? 0,
+      limit: input.limit ?? 100,
+      truncated: false,
+    };
+  }
+
+  const loaded = await loadProjectRecords(project.absolutePath, config, files, {
+    from: input.from,
+    to: input.to,
+    search: input.search,
+  });
+  const filtered = filterRecords(
+    loaded.records,
+    {
+      fileId: input.fileId,
+      from: input.from,
+      to: input.to,
+      search: input.search,
+      sectionId: "background",
+    },
+    config.resolved.studio.sections,
+  );
+
+  return buildBackgroundJobsOverview({
+    records: filtered,
+    query: input,
+    customSections: config.resolved.studio.sections,
+    truncated: loaded.truncated,
+  });
+}
+
+export async function getStudioBackgroundJobRun(input: {
+  projectPath?: string;
+  runId: string;
+  fileId?: string;
+  from?: string;
+  to?: string;
+  search?: string;
+}): Promise<StudioBackgroundJobRunDetail | null> {
+  const { files, project, config } = await getStudioProjectFiles(input.projectPath);
+  if (!project.valid) {
+    return null;
+  }
+
+  const loaded = await loadProjectRecords(project.absolutePath, config, files, {
+    from: input.from,
+    to: input.to,
+    search: input.search,
+  });
+  const filtered = filterRecords(
+    loaded.records,
+    {
+      fileId: input.fileId,
+      from: input.from,
+      to: input.to,
+      search: input.search,
+      sectionId: "background",
+    },
+    config.resolved.studio.sections,
+  );
+
+  return buildBackgroundJobRunDetail({
+    runId: input.runId,
+    records: filtered,
+    customSections: config.resolved.studio.sections,
+  });
+}
+
+export async function getStudioPayments(
+  input: StudioPaymentsQueryInput,
+): Promise<StudioPaymentsOverview> {
+  const { files, project, config } = await getStudioProjectFiles(input.projectPath);
+  if (!project.valid) {
+    return {
+      stats: {
+        checkoutAttempts: 0,
+        successRate: 0,
+        successRateTrend: "flat",
+        successRateDeltaPercent: null,
+        successRateComparisonWindowLabel: "vs previous session window",
+        failedPayments: 0,
+        mostCommonFailureReason: null,
+        revenueProcessed: null,
+        currency: null,
+        webhookEvents: 0,
+      },
+      traces: [],
+      failures: [],
+      webhooks: [],
+      totalTraces: 0,
+      offset: input.offset ?? 0,
+      limit: input.limit ?? 100,
+      truncated: false,
+    };
+  }
+
+  const loaded = await loadProjectRecords(project.absolutePath, config, files, {
+    from: input.from,
+    to: input.to,
+    search: input.search,
+  });
+  const filtered = filterRecords(
+    loaded.records,
+    {
+      fileId: input.fileId,
+      from: input.from,
+      to: input.to,
+      search: input.search,
+      sectionId: "payments",
+    },
+    config.resolved.studio.sections,
+  );
+
+  return buildPaymentsOverview({
+    records: filtered,
+    query: input,
+    customSections: config.resolved.studio.sections,
+    truncated: loaded.truncated,
+  });
+}
+
+export async function getStudioPaymentTrace(input: {
+  projectPath?: string;
+  traceId: string;
+  fileId?: string;
+  from?: string;
+  to?: string;
+  search?: string;
+}): Promise<StudioPaymentTraceDetail | null> {
+  const { files, project, config } = await getStudioProjectFiles(input.projectPath);
+  if (!project.valid) {
+    return null;
+  }
+
+  const loaded = await loadProjectRecords(project.absolutePath, config, files, {
+    from: input.from,
+    to: input.to,
+    search: input.search,
+  });
+  const filtered = filterRecords(
+    loaded.records,
+    {
+      fileId: input.fileId,
+      from: input.from,
+      to: input.to,
+      search: input.search,
+      sectionId: "payments",
+    },
+    config.resolved.studio.sections,
+  );
+
+  return buildPaymentTraceDetail({
+    traceId: input.traceId,
+    records: filtered,
+    customSections: config.resolved.studio.sections,
+  });
+}
+
+export async function addStudioCustomSection(input: {
+  projectPath?: string;
+  name: string;
+  icon: string;
+  match: {
+    fields?: string[];
+    routes?: string[];
+    messages?: string[];
+  };
+}): Promise<{ sections: StudioDetectedSection[] }> {
+  const project = await resolveStudioProject(input.projectPath);
+  if (!project.valid) {
+    return { sections: [] };
+  }
+
+  await saveStudioCustomSection({
+    projectPath: project.absolutePath,
+    name: input.name,
+    icon: input.icon,
+    match: input.match,
+  });
+
+  return {
+    sections: await getStudioSections(project.absolutePath),
+  };
 }
 
 export async function getStudioFacets(
   input: Pick<
     StudioLogsQueryInput,
-    "projectPath" | "level" | "search" | "fileId" | "from" | "to"
+    "projectPath" | "level" | "search" | "fileId" | "from" | "to" | "sectionId"
   >,
 ): Promise<StudioLogFacets> {
   const { files, project, config } = await getStudioProjectFiles(input.projectPath);
   const loaded = await loadProjectRecords(project.absolutePath, config, files, input);
 
-  return getLogFacets(loaded.records, input);
+  return getLogFacets(loaded.records, input, config.resolved.studio.sections);
 }
 
 export async function getStudioGroup(input: {
@@ -186,6 +694,21 @@ export async function getStudioGroup(input: {
   const groups = buildGroupDetails(loaded.records);
 
   return groups.get(input.groupId) ?? null;
+}
+
+export async function getStudioErrorGroup(input: {
+  projectPath?: string;
+  fingerprint: string;
+}): Promise<StudioErrorGroupDetail | null> {
+  const { files, project, config } = await getStudioProjectFiles(input.projectPath);
+  const loaded = await loadProjectRecords(project.absolutePath, config, files);
+
+  return buildErrorGroupDetail({
+    records: loaded.records,
+    fingerprint: input.fingerprint,
+    customSections: config.resolved.studio.sections,
+    projectPath: project.absolutePath,
+  });
 }
 
 export async function getStudioRecord(input: {
@@ -309,6 +832,9 @@ export async function streamStudioAssistant(input: {
   filters: StudioAssistantReplyInput["filters"];
   selectedRecordId?: string;
   selectedGroupId?: string;
+  selectedBackgroundRunId?: string;
+  selectedAgentTaskId?: string;
+  selectedPaymentTraceId?: string;
   messages: import("ai").UIMessage[];
   mode?: "chat" | "describe-selection";
   model?: string;
@@ -335,6 +861,9 @@ export async function streamStudioAssistant(input: {
     filters: input.filters,
     selectedRecordId: input.selectedRecordId,
     selectedGroupId: input.selectedGroupId,
+    selectedBackgroundRunId: input.selectedBackgroundRunId,
+    selectedAgentTaskId: input.selectedAgentTaskId,
+    selectedPaymentTraceId: input.selectedPaymentTraceId,
     messages: input.messages,
     mode: input.mode,
     preloadedRecords,

@@ -55,6 +55,9 @@ export interface StreamAssistantInput {
   filters: StudioAssistantReplyInput["filters"];
   selectedRecordId?: string;
   selectedGroupId?: string;
+  selectedBackgroundRunId?: string;
+  selectedAgentTaskId?: string;
+  selectedPaymentTraceId?: string;
   messages: UIMessage[];
   mode?: "chat" | "describe-selection";
   ai: {
@@ -87,6 +90,9 @@ export async function replyWithAssistant(
     filters: input.filters,
     selectedRecordId: input.selectedRecordId,
     selectedGroupId: input.selectedGroupId,
+    selectedBackgroundRunId: input.selectedBackgroundRunId,
+    selectedAgentTaskId: input.selectedAgentTaskId,
+    selectedPaymentTraceId: input.selectedPaymentTraceId,
     projectPath: input.projectPath,
     userQuestion: latestUserMessage,
   });
@@ -100,6 +106,9 @@ export async function replyWithAssistant(
       selectedRecord: context.selectedRecord,
       selectedRecordSource: context.selectedRecordSource,
       selectedGroup: context.selectedGroup,
+      selectedBackgroundRun: context.selectedBackgroundRun,
+      selectedAgentTask: context.selectedAgentTask,
+      selectedPaymentTrace: context.selectedPaymentTrace,
       records: context.evidenceRecords,
       references: context.references,
       userQuestion: latestUserMessage,
@@ -127,6 +136,9 @@ export async function describeSelectionWithAssistant(
     filters: input.filters,
     selectedRecordId: input.selectedRecordId,
     selectedGroupId: input.selectedGroupId,
+    selectedBackgroundRunId: input.selectedBackgroundRunId,
+    selectedAgentTaskId: input.selectedAgentTaskId,
+    selectedPaymentTraceId: input.selectedPaymentTraceId,
     projectPath: input.projectPath,
     userQuestion: "Describe this selection.",
   });
@@ -140,6 +152,9 @@ export async function describeSelectionWithAssistant(
       selectedRecord: context.selectedRecord,
       selectedRecordSource: context.selectedRecordSource,
       selectedGroup: context.selectedGroup,
+      selectedBackgroundRun: context.selectedBackgroundRun,
+      selectedAgentTask: context.selectedAgentTask,
+      selectedPaymentTrace: context.selectedPaymentTrace,
       records: context.evidenceRecords,
       references: context.references,
       userQuestion: "Describe this selection.",
@@ -173,6 +188,9 @@ export async function streamAssistant(
     filters: input.filters,
     selectedRecordId: input.selectedRecordId,
     selectedGroupId: input.selectedGroupId,
+    selectedBackgroundRunId: input.selectedBackgroundRunId,
+    selectedAgentTaskId: input.selectedAgentTaskId,
+    selectedPaymentTraceId: input.selectedPaymentTraceId,
     projectPath: input.projectPath,
     userQuestion: latestUserMessage,
   });
@@ -184,6 +202,9 @@ export async function streamAssistant(
           selectedRecord: context.selectedRecord,
           selectedRecordSource: context.selectedRecordSource,
           selectedGroup: context.selectedGroup,
+          selectedBackgroundRun: context.selectedBackgroundRun,
+          selectedAgentTask: context.selectedAgentTask,
+          selectedPaymentTrace: context.selectedPaymentTrace,
           records: context.evidenceRecords,
           references: context.references,
           userQuestion: latestUserMessage,
@@ -196,6 +217,9 @@ export async function streamAssistant(
           selectedRecord: context.selectedRecord,
           selectedRecordSource: context.selectedRecordSource,
           selectedGroup: context.selectedGroup,
+          selectedBackgroundRun: context.selectedBackgroundRun,
+          selectedAgentTask: context.selectedAgentTask,
+          selectedPaymentTrace: context.selectedPaymentTrace,
           records: context.evidenceRecords,
           references: context.references,
           userQuestion: latestUserMessage,

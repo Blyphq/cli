@@ -7,9 +7,9 @@ import { HeadContent, Outlet, Scripts, createRootRouteWithContext } from "@tanst
 import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 
 import { Toaster } from "@/components/ui/sonner";
+import { ThemeProvider } from "next-themes";
 
 import { RootErrorBoundary } from "../components/root-error-boundary";
-import { Header } from "../components/header";
 import appCss from "../index.css?url";
 
 export interface RouterAppContext {
@@ -45,16 +45,20 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
 
 function RootDocument() {
   return (
-    <html lang="en" className="dark">
+    <html lang="en" suppressHydrationWarning>
       <head>
         <HeadContent />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var t=localStorage.getItem("theme");if(t==="light"||t==="dark"){document.documentElement.classList.add(t)}else{document.documentElement.classList.add("dark")}}catch(e){document.documentElement.classList.add("dark")}})()`,
+          }}
+        />
       </head>
       <body>
-        <div className="grid h-svh grid-rows-[auto_1fr]">
-          <Header />
+        <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false} disableTransitionOnChange>
           <Outlet />
-        </div>
-        <Toaster richColors />
+          <Toaster richColors />
+        </ThemeProvider>
 
         {import.meta.env.DEV && (
           <>

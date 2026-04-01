@@ -9,13 +9,11 @@ import { __setDatabaseQueryForTests } from "../studio/database";
 import { appRouter } from "../routers/index";
 
 const tempDirs: string[] = [];
-const originalHome = process.env.HOME;
 
 afterEach(async () => {
   delete process.env.OPENROUTER_API_KEY;
   delete process.env.OPENROUTER_MODEL;
   delete process.env.DATABASE_URL;
-  process.env.HOME = originalHome;
   __setGenerateTextForTests(null);
   __setDatabaseQueryForTests(null);
 
@@ -48,11 +46,13 @@ describe("studio router", () => {
     const meta = await caller.studio.meta({ projectPath: projectDir });
     const files = await caller.studio.files({ projectPath: projectDir });
     const logs = await caller.studio.logs({ projectPath: projectDir, limit: 10 });
+    const overview = await caller.studio.overview({ projectPath: projectDir });
     const facets = await caller.studio.facets({ projectPath: projectDir });
 
     expect(meta.project.valid).toBe(true);
     expect(files.files[0]?.name).toBe("log.ndjson");
     expect(logs.records[0]?.message).toBe("hello from caller");
+    expect(overview.stats.totalEvents.value).toBe(1);
     expect(facets.levels).toContain("info");
   });
 
@@ -148,6 +148,59 @@ describe("studio router", () => {
     expect(description.references.length).toBeGreaterThan(0);
   });
 
+  it("serves error grouping routes through tRPC callers", async () => {
+    const projectDir = await createProject();
+    const logDir = path.join(projectDir, "logs");
+
+    await mkdir(logDir, { recursive: true });
+    await writeFile(
+      path.join(logDir, "log.ndjson"),
+      [
+        JSON.stringify({
+          timestamp: "2026-03-13T12:00:00.000Z",
+          level: "error",
+          message: "checkout failed",
+          error: { name: "CheckoutError", message: "checkout failed" },
+          stack: "CheckoutError: checkout failed\n    at checkout (/tmp/project/src/routes/checkout.ts:4:1)",
+          groupId: "checkout-1",
+          path: "/checkout",
+          method: "POST",
+          statusCode: 500,
+        }),
+        JSON.stringify({
+          timestamp: "2026-03-13T12:00:01.000Z",
+          level: "error",
+          message: "checkout failed",
+          error: { name: "CheckoutError", message: "checkout failed" },
+          stack: "CheckoutError: checkout failed\n    at checkout (/tmp/project/src/routes/checkout.ts:4:1)",
+          groupId: "checkout-1",
+          path: "/checkout",
+          method: "POST",
+          statusCode: 500,
+        }),
+      ].join("\n") + "\n",
+    );
+
+    const caller = appRouter.createCaller({ session: null });
+    const errors = await caller.studio.errors({
+      projectPath: projectDir,
+      view: "grouped",
+      limit: 10,
+    });
+
+    expect(errors.groups[0]).toMatchObject({
+      errorType: "CheckoutError",
+      occurrenceCount: 2,
+    });
+
+    const detail = await caller.studio.errorGroup({
+      projectPath: projectDir,
+      fingerprint: errors.groups[0]!.fingerprint,
+    });
+
+    expect(detail?.occurrences).toHaveLength(2);
+  });
+
   it("serves DB-backed Studio routes through tRPC callers", async () => {
     const projectDir = await createProject();
     process.env.DATABASE_URL = "postgresql://user:pass@localhost:5432/test";
@@ -166,11 +219,15 @@ describe("studio router", () => {
         record: {
           timestamp: "2026-03-13T12:00:00.000Z",
           level: "error",
-          message: "hello from db caller",
-          type: "checkout_flow",
+          message: "query executed",
+          type: "prisma_query",
           caller: "src/routes/db.ts:4",
-          groupId: "checkout-1",
-          events: ["error"],
+          query: {
+            operation: "select",
+            model: "Order",
+            durationMs: 120,
+            sql: "SELECT * FROM orders WHERE id = $1",
+          },
         },
       },
     ]);
@@ -201,6 +258,10 @@ describe("studio router", () => {
       grouping: "flat",
       limit: 10,
     });
+    const database = await caller.studio.database({
+      projectPath: projectDir,
+      limit: 10,
+    });
 
     expect(meta.logs.mode).toBe("database");
     expect(meta.logs.database).toMatchObject({
@@ -214,74 +275,203 @@ describe("studio router", () => {
       filePath: "database://blyp_logs",
       lineNumber: 0,
     });
+    expect(database.totalQueries).toBe(1);
+    expect(database.queries[0]).toMatchObject({
+      operation: "SELECT",
+      modelOrTable: "Order",
+      durationMs: 120,
+      status: "slow",
+    });
   });
 
-  it("serves delivery status and dead-letter mutations through tRPC callers", async () => {
+  it("serves background job routes and accepts background-run assistant selections", async () => {
     const projectDir = await createProject();
-    process.env.HOME = projectDir;
+    const logDir = path.join(projectDir, "logs");
 
+    await mkdir(logDir, { recursive: true });
     await writeFile(
-      path.join(projectDir, "blyp.config.json"),
-      JSON.stringify({
-        connectors: {
-          betterstack: {
-            enabled: true,
-            sourceToken: "token",
-            ingestingHost: "https://in.logs.betterstack.com",
+      path.join(logDir, "log.ndjson"),
+      [
+        JSON.stringify({
+          timestamp: "2026-03-13T14:00:00.000Z",
+          level: "info",
+          message: "queue rebuild job started",
+          queue: { name: "Queue Rebuild", runId: "rebuild-1", status: "started" },
+        }),
+        JSON.stringify({
+          timestamp: "2026-03-13T14:00:15.000Z",
+          level: "error",
+          message: "queue rebuild job failed",
+          queue: {
+            name: "Queue Rebuild",
+            runId: "rebuild-1",
+            step: "publish",
+            status: "failed",
           },
-          otlp: [
-            {
-              name: "billing",
-              enabled: true,
-              endpoint: "https://otel.example.com",
-            },
-          ],
-        },
-      }, null, 2),
+          error: { message: "publish rejected" },
+        }),
+      ].join("\n") + "\n",
     );
 
-    await seedQueueDb(path.join(projectDir, ".blyp", "queue.db"));
+    process.env.OPENROUTER_API_KEY = "test-key";
+    process.env.OPENROUTER_MODEL = "openai/gpt-5.4";
+    __setGenerateTextForTests(async () => ({ text: "Use the failed run timeline." }));
 
     const caller = appRouter.createCaller({ session: null });
-
-    const status = await caller.studio.deliveryStatus({ projectPath: projectDir });
-    expect(status.available).toBe(true);
-    expect(status.connectors).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          key: "betterstack",
-          deadLetterCount: 1,
-          health: "dead-lettered",
-          lastError: "temporary outage",
-        }),
-        expect.objectContaining({
-          key: "otlp:billing",
-          pendingCount: 1,
-        }),
-      ]),
-    );
-    expect(status.deadLetters.items[0]).toMatchObject({
-      connectorKey: "betterstack",
-      payloadPreview: "failed delivery",
-      lastError: "temporary outage",
+    const overview = await caller.studio.backgroundJobs({
+      projectPath: projectDir,
+      limit: 10,
+    });
+    const detail = await caller.studio.backgroundJobRun({
+      projectPath: projectDir,
+      runId: overview.runs[0]?.id ?? "",
+    });
+    const description = await caller.studio.describeSelection({
+      projectPath: projectDir,
+      history: [],
+      filters: {},
+      selectedBackgroundRunId: overview.runs[0]?.id,
     });
 
-    const retried = await caller.studio.retryDeadLetters({ ids: ["dead-1"] });
-    expect(retried.retriedCount).toBe(1);
-
-    const afterRetry = await caller.studio.deliveryStatus({ projectPath: projectDir });
-    expect(afterRetry.deadLetters.total).toBe(0);
-    expect(afterRetry.connectors).toEqual(
+    expect(overview.runs[0]).toMatchObject({
+      jobName: "Queue Rebuild",
+      status: "FAILED",
+    });
+    expect(detail?.run.failure).toMatchObject({
+      message: "publish rejected",
+      step: "publish",
+    });
+    expect(description.references).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          key: "betterstack",
-          pendingCount: 1,
+          kind: "background-run",
+          label: "Queue Rebuild",
         }),
       ]),
     );
+  });
 
-    const cleared = await caller.studio.clearDeadLetters({ ids: ["missing"] });
-    expect(cleared.clearedCount).toBe(0);
+  it("serves agents routes and accepts agent-task assistant selections", async () => {
+    const projectDir = await createProject();
+    const logDir = path.join(projectDir, "logs");
+
+    await mkdir(logDir, { recursive: true });
+    await writeFile(
+      path.join(logDir, "log.ndjson"),
+      [
+        JSON.stringify({
+          timestamp: "2026-03-13T18:00:00.000Z",
+          level: "info",
+          message: "agent task started",
+          agent: { task_id: "task-router", taskName: "Summarise run", status: "started" },
+        }),
+        JSON.stringify({
+          timestamp: "2026-03-13T18:00:00.300Z",
+          level: "error",
+          message: "tool call failed",
+          agent: { task_id: "task-router" },
+          tool: { name: "search_database", durationMs: 300, status: "failed" },
+          error: { message: "db unavailable" },
+        }),
+      ].join("\n") + "\n",
+    );
+
+    process.env.OPENROUTER_API_KEY = "test-key";
+    process.env.OPENROUTER_MODEL = "openai/gpt-5.4";
+    __setGenerateTextForTests(async () => ({ text: "Use the failed task timeline." }));
+
+    const caller = appRouter.createCaller({ session: null });
+    const agents = await caller.studio.agents({ projectPath: projectDir, limit: 10 });
+    const detail = await caller.studio.agentTask({
+      projectPath: projectDir,
+      taskId: agents.tasks[0]!.id,
+    });
+    const description = await caller.studio.describeSelection({
+      projectPath: projectDir,
+      history: [],
+      filters: {},
+      selectedAgentTaskId: agents.tasks[0]!.id,
+    });
+
+    expect(agents.tasks[0]).toMatchObject({
+      title: "Summarise run",
+      status: "FAILED",
+    });
+    expect(detail?.failure).toMatchObject({
+      errorKind: "tool",
+    });
+    expect(description.references).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "agent-task",
+          label: "Summarise run",
+        }),
+      ]),
+    );
+  });
+
+  it("serves payments routes and accepts payment-trace assistant selections", async () => {
+    const projectDir = await createProject();
+    const logDir = path.join(projectDir, "logs");
+
+    await mkdir(logDir, { recursive: true });
+    await writeFile(
+      path.join(logDir, "log.ndjson"),
+      [
+        JSON.stringify({
+          timestamp: "2026-03-13T15:00:00.000Z",
+          level: "info",
+          message: "checkout started",
+          traceId: "trace-pay-1",
+          path: "/checkout/start",
+          cart: { total: 2599, currency: "usd" },
+          user: { id: "55" },
+        }),
+        JSON.stringify({
+          timestamp: "2026-03-13T15:00:00.200Z",
+          level: "error",
+          message: "payment declined",
+          traceId: "trace-pay-1",
+          path: "/payment/confirm",
+          statusCode: 402,
+          payment: { status: "declined", amount: 2599, currency: "usd" },
+          stripe: { error: { code: "card_declined" } },
+          error: { message: "card declined" },
+        }),
+      ].join("\n") + "\n",
+    );
+
+    process.env.OPENROUTER_API_KEY = "test-key";
+    process.env.OPENROUTER_MODEL = "openai/gpt-5.4";
+    __setGenerateTextForTests(async () => ({ text: "Inspect the failed payment trace." }));
+
+    const caller = appRouter.createCaller({ session: null });
+    const payments = await caller.studio.payments({ projectPath: projectDir, limit: 10 });
+    const traceId = payments.traces[0]?.id ?? "";
+    const detail = await caller.studio.paymentTrace({
+      projectPath: projectDir,
+      traceId,
+    });
+    const description = await caller.studio.describeSelection({
+      projectPath: projectDir,
+      history: [],
+      filters: {},
+      selectedPaymentTraceId: traceId,
+    });
+
+    expect(payments.traces[0]).toMatchObject({
+      status: "DECLINED",
+      webhookEventCount: 0,
+    });
+    expect(detail?.trace.failureReason).toBe("Card declined");
+    expect(description.references).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "payment-trace",
+          id: traceId,
+        }),
+      ]),
+    );
   });
 });
 
@@ -293,93 +483,4 @@ async function createProject(): Promise<string> {
     JSON.stringify({ name: "fixture-project" }, null, 2),
   );
   return directory;
-}
-
-async function seedQueueDb(queuePath: string): Promise<void> {
-  await mkdir(path.dirname(queuePath), { recursive: true });
-  const sqlite = await import("node:sqlite");
-  const database = new sqlite.DatabaseSync(queuePath);
-
-  try {
-    database.exec([
-      "CREATE TABLE connector_jobs (",
-      "  id TEXT PRIMARY KEY,",
-      "  connector_type TEXT NOT NULL,",
-      "  connector_target TEXT NULL,",
-      "  operation TEXT NOT NULL,",
-      "  payload_json TEXT NOT NULL,",
-      "  attempt_count INTEGER NOT NULL,",
-      "  max_attempts INTEGER NOT NULL,",
-      "  next_attempt_at INTEGER NOT NULL,",
-      "  state TEXT NOT NULL,",
-      "  last_error TEXT NULL,",
-      "  created_at INTEGER NOT NULL,",
-      "  updated_at INTEGER NOT NULL,",
-      "  claimed_at INTEGER NULL",
-      ");",
-      "CREATE TABLE connector_dead_letters (",
-      "  id TEXT PRIMARY KEY,",
-      "  connector_type TEXT NOT NULL,",
-      "  connector_target TEXT NULL,",
-      "  operation TEXT NOT NULL,",
-      "  payload_json TEXT NOT NULL,",
-      "  attempt_count INTEGER NOT NULL,",
-      "  max_attempts INTEGER NOT NULL,",
-      "  last_error TEXT NULL,",
-      "  first_enqueued_at INTEGER NOT NULL,",
-      "  dead_lettered_at INTEGER NOT NULL,",
-      "  last_attempt_at INTEGER NOT NULL",
-      ");",
-      "CREATE TABLE connector_delivery_status (",
-      "  connector_type TEXT NOT NULL,",
-      "  connector_target TEXT NULL,",
-      "  last_success_at INTEGER NULL,",
-      "  last_failure_at INTEGER NULL,",
-      "  last_error TEXT NULL,",
-      "  updated_at INTEGER NOT NULL",
-      ");",
-    ].join("\n"));
-
-    const now = Date.now();
-    database.prepare(
-      "INSERT INTO connector_dead_letters (id, connector_type, connector_target, operation, payload_json, attempt_count, max_attempts, last_error, first_enqueued_at, dead_lettered_at, last_attempt_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-    ).run(
-      "dead-1",
-      "betterstack",
-      null,
-      "send",
-      JSON.stringify({ record: { message: "failed delivery" } }),
-      8,
-      8,
-      "temporary outage",
-      now - 5_000,
-      now - 1_000,
-      now - 1_000,
-    );
-    database.prepare(
-      "INSERT INTO connector_jobs (id, connector_type, connector_target, operation, payload_json, attempt_count, max_attempts, next_attempt_at, state, last_error, created_at, updated_at, claimed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-    ).run(
-      "job-1",
-      "otlp",
-      "billing",
-      "send",
-      JSON.stringify({ record: { message: "retrying delivery" } }),
-      1,
-      8,
-      now,
-      "pending",
-      "still retrying",
-      now - 10_000,
-      now,
-      null,
-    );
-    database.prepare(
-      "INSERT INTO connector_delivery_status (connector_type, connector_target, last_success_at, last_failure_at, last_error, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
-    ).run("betterstack", null, now - 50_000, now - 1_000, "temporary outage", now - 1_000);
-    database.prepare(
-      "INSERT INTO connector_delivery_status (connector_type, connector_target, last_success_at, last_failure_at, last_error, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
-    ).run("otlp", "billing", now - 20_000, now - 5_000, "still retrying", now - 5_000);
-  } finally {
-    database.close();
-  }
 }

@@ -26,6 +26,7 @@ import { cn } from "@/lib/utils";
 
 import { EmptyState } from "./empty-state";
 import { ErrorState } from "./error-state";
+import { PanelSkeleton } from "./studio-skeletons";
 
 interface AssistantPanelProps {
   chatError?: Error;
@@ -87,10 +88,7 @@ export function AssistantPanel({
   if (!status) {
     return (
       <div className="flex min-h-0 flex-1 flex-col p-4">
-        <EmptyState
-          title="Loading assistant"
-          description="Checking server-side AI configuration."
-        />
+        <PanelSkeleton rows={5} compact />
       </div>
     );
   }
@@ -234,7 +232,7 @@ export function AssistantPanel({
           onChange={(event) => onDraftChange(event.currentTarget.value)}
           placeholder="Ask about these logs, recurring patterns, or what to inspect next."
           className={cn(
-            "border-input bg-background min-h-24 w-full resize-y rounded-none border px-3 py-2 text-sm outline-none focus-visible:border-ring",
+            "border-input bg-background min-h-24 w-full resize-y rounded-md border px-3 py-2 text-sm outline-none focus-visible:border-ring",
             "placeholder:text-muted-foreground",
           )}
         />

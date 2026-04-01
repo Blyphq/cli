@@ -1,8 +1,10 @@
 import { buildLogEntries } from "./grouping";
 import { normalizeRecord, serializeForSearch } from "./normalize";
 import { readLogFileText } from "./logs";
+import { matchesDetectedSection } from "./sections";
 
 import type {
+  StudioCustomSectionDefinition,
   StudioLogDiscovery,
   StudioLogsPage,
   StudioLogsQueryInput,
@@ -20,6 +22,7 @@ interface QueryLogsOptions {
   files: StudioLogDiscovery["files"];
   input: StudioLogsQueryInput;
   projectPath?: string;
+  customSections?: StudioCustomSectionDefinition[];
   preloaded?: {
     records: StudioNormalizedRecord[];
     scannedRecords: number;
@@ -31,6 +34,7 @@ export async function queryLogs({
   files,
   input,
   projectPath,
+  customSections,
   preloaded,
 }: QueryLogsOptions): Promise<StudioLogsPage> {
   const limit = clampLimit(input.limit);
@@ -41,7 +45,7 @@ export async function queryLogs({
   const loaded =
     preloaded ?? (await loadNormalizedRecords(candidateFiles, projectPath));
   const allRecords = loaded.records.slice().sort(compareRecordsDescending);
-  const matchedRecords = filterRecords(allRecords, input).sort(compareRecordsDescending);
+  const matchedRecords = filterRecords(allRecords, input, customSections).sort(compareRecordsDescending);
   const grouping = input.grouping ?? "grouped";
   const { entries } = buildLogEntries(matchedRecords, allRecords, grouping);
   const pagedEntries = entries.slice(offset, offset + limit);
@@ -131,10 +135,11 @@ export function filterRecords(
   records: StudioNormalizedRecord[],
   input: Pick<
     StudioLogsQueryInput,
-    "level" | "type" | "search" | "fileId" | "from" | "to"
+    "level" | "type" | "search" | "fileId" | "from" | "to" | "sectionId"
   >,
+  customSections: StudioCustomSectionDefinition[] = [],
 ): StudioNormalizedRecord[] {
-  return records.filter((record) => matchesFilters(record, input));
+  return records.filter((record) => matchesFilters(record, input, customSections));
 }
 
 function clampLimit(limit: number | undefined): number {
@@ -153,8 +158,9 @@ function matchesFilters(
   record: StudioNormalizedRecord,
   input: Pick<
     StudioLogsQueryInput,
-    "level" | "type" | "search" | "fileId" | "from" | "to"
+    "level" | "type" | "search" | "fileId" | "from" | "to" | "sectionId"
   >,
+  customSections: StudioCustomSectionDefinition[] = [],
 ): boolean {
   if (input.fileId && record.fileId !== input.fileId) {
     return false;
@@ -211,6 +217,10 @@ function matchesFilters(
     if (!haystack.includes(input.search.toLowerCase())) {
       return false;
     }
+  }
+
+  if (!matchesDetectedSection(record, input.sectionId, customSections)) {
+    return false;
   }
 
   return true;

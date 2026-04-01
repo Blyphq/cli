@@ -2,6 +2,9 @@ import { resolveRecordSourceLocation } from "./source";
 
 import type { StudioHttpDetails, StudioLogFile, StudioNormalizedRecord, StudioRecordSource } from "./types";
 
+const SENSITIVE_HTTP_KEY_PATTERN =
+  /(authorization|cookie|set-cookie|password|passcode|secret|access[_-]?token|refresh[_-]?token|api[_-]?key|session|^token$|\.token$|_token$)/i;
+
 interface NormalizeRecordOptions {
   file: StudioLogFile;
   lineNumber: number;
@@ -20,8 +23,8 @@ export async function normalizeRecord({
   const malformed = !isPlainObject(parsed);
   const objectRecord = isPlainObject(parsed) ? parsed : {};
   const message = getMessage(objectRecord, rawLine, malformed);
-  const timestamp = getOptionalString(objectRecord.timestamp) ?? null;
-  const level = getOptionalString(objectRecord.level) ?? "unknown";
+  const timestamp = getTimestamp(objectRecord);
+  const level = getLevel(objectRecord.level);
   const type = getOptionalString(objectRecord.type) ?? null;
   const http = inferHttpDetails(objectRecord);
   const source = inferSource(objectRecord, http);
@@ -93,32 +96,162 @@ export function inferSource(record: Record<string, unknown>, http: StudioHttpDet
 
 export function inferHttpDetails(record: Record<string, unknown>): StudioHttpDetails | null {
   const type = getOptionalString(record.type) ?? null;
-  const method = getOptionalString(record.method) ?? null;
-  const url = getOptionalString(record.url) ?? null;
-  const path = getOptionalString(record.path) ?? url;
-  const statusCode = getOptionalNumber(record.statusCode) ?? getOptionalNumber(record.status) ?? null;
-  const durationMs = getOptionalNumber(record.responseTime) ?? getOptionalNumber(record.duration) ?? null;
+  const nestedData = isPlainObject(record.data) ? record.data : null;
+  const nestedBindings = isPlainObject(record.bindings) ? record.bindings : null;
+  const nestedHttp =
+    isPlainObject(record.http) ? record.http : isPlainObject(record.request) ? record.request : null;
+  const method =
+    getOptionalString(record.method) ??
+    getNestedOptionalString(nestedHttp, ["method"]) ??
+    getNestedOptionalString(nestedData, ["method", "request.method", "http.method"]) ??
+    getNestedOptionalString(nestedBindings, ["method", "request.method", "http.method"]) ??
+    null;
+  const url =
+    getOptionalString(record.url) ??
+    getNestedOptionalString(nestedHttp, ["url"]) ??
+    getNestedOptionalString(nestedData, ["url", "request.url", "http.url"]) ??
+    getNestedOptionalString(nestedBindings, ["url", "request.url", "http.url"]) ??
+    null;
+  const routeTemplate =
+    getOptionalString(record.route) ??
+    getNestedOptionalString(nestedHttp, ["route", "routeTemplate", "template"]) ??
+    getNestedOptionalString(nestedData, [
+      "route",
+      "routeTemplate",
+      "request.route",
+      "http.route",
+      "http.routeTemplate",
+    ]) ??
+    getNestedOptionalString(nestedBindings, [
+      "route",
+      "routeTemplate",
+      "request.route",
+      "http.route",
+      "http.routeTemplate",
+    ]) ??
+    null;
+  const path =
+    getOptionalString(record.path) ??
+    getNestedOptionalString(nestedHttp, ["path", "route"]) ??
+    getNestedOptionalString(nestedData, ["path", "route", "request.path", "http.path"]) ??
+    getNestedOptionalString(nestedBindings, ["path", "route", "request.path", "http.path"]) ??
+    url;
+  const statusCode =
+    getOptionalNumber(record.statusCode) ??
+    getOptionalNumber(record.status) ??
+    getNestedOptionalNumber(nestedHttp, ["statusCode", "status"]) ??
+    getNestedOptionalNumber(nestedData, ["statusCode", "status", "response.statusCode", "http.statusCode"]) ??
+    getNestedOptionalNumber(nestedBindings, ["statusCode", "status", "response.statusCode", "http.statusCode"]) ??
+    null;
+  const durationMs =
+    getOptionalNumber(record.responseTime) ??
+    getOptionalNumber(record.duration) ??
+    getNestedOptionalNumber(nestedHttp, ["durationMs", "responseTime", "duration"]) ??
+    getNestedOptionalNumber(nestedData, [
+      "durationMs",
+      "duration",
+      "responseTime",
+      "http.durationMs",
+      "http.duration",
+      "response.durationMs",
+      "response.duration",
+      "request.durationMs",
+      "request.duration",
+    ]) ??
+    getNestedOptionalNumber(nestedBindings, [
+      "durationMs",
+      "duration",
+      "responseTime",
+      "http.durationMs",
+      "http.duration",
+      "response.durationMs",
+      "response.duration",
+      "request.durationMs",
+      "request.duration",
+    ]) ??
+    null;
+  const parsedFromMessage = parseHttpMessage(getOptionalString(record.msg) ?? getOptionalString(record.message));
+  const fallbackMethod = method ?? parsedFromMessage?.method ?? null;
+  const fallbackPath = path ?? parsedFromMessage?.path ?? url;
+  const fallbackStatusCode = statusCode ?? parsedFromMessage?.statusCode ?? null;
+  const fallbackDurationMs = durationMs ?? parsedFromMessage?.durationMs ?? null;
   const isFrameworkHttp = type === "http_request" || type === "http_error";
   const isStructuredHttp =
-    method !== null &&
-    (statusCode !== null || durationMs !== null) &&
-    (path !== null || url !== null);
+    fallbackMethod !== null &&
+    (fallbackStatusCode !== null || fallbackDurationMs !== null) &&
+    (fallbackPath !== null || url !== null);
 
   if (!isFrameworkHttp && !isStructuredHttp) {
     return null;
   }
 
+  const requestHeaders = sanitizeHttpHeaders(
+    getNestedPlainObject(record, [
+      "requestHeaders",
+      "headers",
+      "request.headers",
+      "http.request.headers",
+      "data.request.headers",
+      "data.headers",
+      "bindings.request.headers",
+      "bindings.headers",
+    ]),
+  );
+  const responseHeaders = sanitizeHttpHeaders(
+    getNestedPlainObject(record, [
+      "responseHeaders",
+      "response.headers",
+      "http.response.headers",
+      "data.response.headers",
+      "bindings.response.headers",
+    ]),
+  );
+  const requestBody = sanitizeHttpPayload(
+    getNestedValueFromCandidates(record, [
+      "requestBody",
+      "body",
+      "request.body",
+      "http.request.body",
+      "data.request.body",
+    ]),
+  );
+  const responseBody = sanitizeHttpPayload(
+    getNestedValueFromCandidates(record, [
+      "responseBody",
+      "response.body",
+      "http.response.body",
+      "data.response.body",
+    ]),
+  );
+  const requestId =
+    getOptionalString(record.requestId) ??
+    getNestedOptionalString(nestedData, ["requestId", "request.id", "http.requestId"]) ??
+    getNestedOptionalString(nestedBindings, ["requestId", "request.id", "http.requestId"]) ??
+    null;
+  const traceId =
+    getOptionalString(record.traceId) ??
+    getNestedOptionalString(nestedData, ["traceId", "trace.id", "http.traceId"]) ??
+    getNestedOptionalString(nestedBindings, ["traceId", "trace.id", "http.traceId"]) ??
+    null;
+
   return {
     kind: isFrameworkHttp ? "framework-http" : "structured-http",
-    method,
-    path,
-    statusCode,
-    durationMs,
+    method: fallbackMethod,
+    path: fallbackPath,
+    statusCode: fallbackStatusCode,
+    durationMs: fallbackDurationMs,
     url,
+    routeTemplate,
     type,
     hostname: getOptionalString(record.hostname) ?? null,
     ip: getOptionalString(record.ip) ?? null,
     userAgent: getOptionalString(record.userAgent) ?? null,
+    requestHeaders,
+    responseHeaders,
+    requestBody,
+    responseBody,
+    requestId,
+    traceId,
     error: record.error ?? null,
   };
 }
@@ -128,7 +261,7 @@ function getMessage(
   rawLine: string,
   malformed: boolean,
 ): string {
-  const value = getOptionalString(record.message);
+  const value = getOptionalString(record.message) ?? getOptionalString(record.msg);
 
   if (value) {
     return value;
@@ -155,12 +288,150 @@ export function resolveRecordStack(record: Record<string, unknown>): string | nu
   return null;
 }
 
+function getTimestamp(record: Record<string, unknown>): string | null {
+  const direct =
+    normalizeTimestampValue(record.timestamp) ??
+    normalizeTimestampValue(record.time) ??
+    normalizeTimestampValue(record.createdAt) ??
+    normalizeTimestampValue(record.created_at);
+
+  if (direct) {
+    return direct;
+  }
+
+  if (isPlainObject(record.data)) {
+    return (
+      normalizeTimestampValue(record.data.timestamp) ??
+      normalizeTimestampValue(record.data.time) ??
+      null
+    );
+  }
+
+  return null;
+}
+
+function getLevel(value: unknown): string {
+  if (typeof value === "string" && value.length > 0) {
+    return value;
+  }
+  if (typeof value === "number" && Number.isFinite(value)) {
+    if (value >= 60) return "fatal";
+    if (value >= 50) return "error";
+    if (value >= 40) return "warning";
+    if (value >= 30) return "info";
+    if (value >= 20) return "debug";
+    if (value >= 10) return "trace";
+  }
+  return "unknown";
+}
+
 function getOptionalString(value: unknown): string | null {
   return typeof value === "string" && value.length > 0 ? value : null;
 }
 
 function getOptionalNumber(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function getNestedOptionalString(
+  value: Record<string, unknown> | null,
+  keys: string[],
+): string | null {
+  if (!value) {
+    return null;
+  }
+  for (const key of keys) {
+    const candidate = getNestedValue(value, key);
+    if (typeof candidate === "string" && candidate.length > 0) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
+function getNestedOptionalNumber(
+  value: Record<string, unknown> | null,
+  keys: string[],
+): number | null {
+  if (!value) {
+    return null;
+  }
+  for (const key of keys) {
+    const candidate = getNestedValue(value, key);
+    if (typeof candidate === "number" && Number.isFinite(candidate)) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
+function getNestedValue(value: Record<string, unknown>, key: string): unknown {
+  return key.split(".").reduce<unknown>((current, part) => {
+    if (!current || typeof current !== "object") {
+      return undefined;
+    }
+    return (current as Record<string, unknown>)[part];
+  }, value);
+}
+
+function getNestedValueFromCandidates(
+  value: Record<string, unknown>,
+  keys: string[],
+): unknown {
+  for (const key of keys) {
+    const candidate = getNestedValue(value, key);
+    if (candidate !== undefined) {
+      return candidate;
+    }
+  }
+
+  return undefined;
+}
+
+function getNestedPlainObject(
+  value: Record<string, unknown>,
+  keys: string[],
+): Record<string, unknown> | null {
+  const candidate = getNestedValueFromCandidates(value, keys);
+  return isPlainObject(candidate) ? candidate : null;
+}
+
+function normalizeTimestampValue(value: unknown): string | null {
+  if (typeof value === "string" && value.length > 0) {
+    const parsed = Date.parse(value);
+    return Number.isNaN(parsed) ? value : new Date(parsed).toISOString();
+  }
+  if (typeof value === "number" && Number.isFinite(value)) {
+    const next = new Date(value);
+    return Number.isNaN(next.getTime()) ? null : next.toISOString();
+  }
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value.toISOString();
+  }
+  return null;
+}
+
+function parseHttpMessage(
+  message: string | null,
+): { method: string; statusCode: number | null; path: string; durationMs: number | null } | null {
+  if (!message) {
+    return null;
+  }
+
+  const match = message.match(
+    /\b(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\s*(?:->|→)\s*(\d{3})\s+(\S+)(?:\s+(\d+(?:\.\d+)?)ms)?\b/i,
+  );
+
+  if (!match) {
+    return null;
+  }
+
+  return {
+    method: match[1]!.toUpperCase(),
+    statusCode: Number.parseInt(match[2]!, 10),
+    path: match[3]!,
+    durationMs: match[4] ? Number.parseFloat(match[4]) : null,
+  };
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -227,4 +498,53 @@ export function sanitizeForTransport(
   }
 
   return serialized;
+}
+
+function sanitizeHttpPayload(value: unknown): unknown {
+  return sanitizeSensitiveValue(sanitizeForTransport(value));
+}
+
+function sanitizeHttpHeaders(
+  value: Record<string, unknown> | null,
+): Record<string, unknown> | null {
+  const sanitized = sanitizeHttpPayload(value);
+  return sanitized && typeof sanitized === "object" && !Array.isArray(sanitized)
+    ? (sanitized as Record<string, unknown>)
+    : null;
+}
+
+function sanitizeSensitiveValue(value: unknown): unknown {
+  if (
+    value == null ||
+    typeof value === "number" ||
+    typeof value === "boolean" ||
+    typeof value === "bigint"
+  ) {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    return value;
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => sanitizeSensitiveValue(item));
+  }
+
+  if (!isPlainObject(value)) {
+    return value;
+  }
+
+  const sanitized: Record<string, unknown> = {};
+
+  for (const [key, nested] of Object.entries(value)) {
+    if (SENSITIVE_HTTP_KEY_PATTERN.test(key)) {
+      sanitized[key] = "[redacted]";
+      continue;
+    }
+
+    sanitized[key] = sanitizeSensitiveValue(nested);
+  }
+
+  return sanitized;
 }

@@ -19,6 +19,9 @@ const chatRequestSchema = z.object({
     .default({}),
   selectedRecordId: z.string().optional(),
   selectedGroupId: z.string().optional(),
+  selectedBackgroundRunId: z.string().optional(),
+  selectedAgentTaskId: z.string().optional(),
+  selectedPaymentTraceId: z.string().optional(),
   mode: z.enum(["chat", "describe-selection"]).optional(),
   model: z.string().optional(),
 });

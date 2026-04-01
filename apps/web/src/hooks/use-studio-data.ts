@@ -1,7 +1,25 @@
 import { useQuery } from "@tanstack/react-query";
 import { useDeferredValue } from "react";
 
-import type { StudioFilters, StudioGroupingMode, StudioSelection } from "@/lib/studio";
+import type {
+  StudioErrorUiState,
+  StudioFilters,
+  StudioGroupingMode,
+  StudioHttpUiState,
+  StudioSectionId,
+  StudioSelection,
+} from "@/lib/studio";
+import {
+  isAllLogsSection,
+  isAuthSection,
+  isBackgroundSection,
+  isDatabaseSection,
+  isErrorsSection,
+  isAgentsSection,
+  isHttpSection,
+  isOverviewSection,
+  isPaymentsSection,
+} from "@/lib/studio";
 import { useTRPC } from "@/utils/trpc";
 
 export interface UseStudioDataParams {
@@ -9,6 +27,10 @@ export interface UseStudioDataParams {
   filters: StudioFilters;
   offset: number;
   grouping: StudioGroupingMode;
+  section: StudioSectionId;
+  errorUi: StudioErrorUiState;
+  httpUi: StudioHttpUiState;
+  authUserId: string | null;
   selection: StudioSelection;
 }
 
@@ -17,12 +39,31 @@ export function useStudioData({
   filters,
   offset,
   grouping,
+  section,
+  errorUi,
+  httpUi,
+  authUserId,
   selection,
 }: UseStudioDataParams) {
   const trpc = useTRPC();
   const deferredSearch = useDeferredValue(filters.search);
+  const logsSectionId =
+    isOverviewSection(section) ||
+    isAllLogsSection(section) ||
+    isAuthSection(section) ||
+    isDatabaseSection(section) ||
+    isAgentsSection(section) ||
+    isBackgroundSection(section) ||
+    isPaymentsSection(section) ||
+    isHttpSection(section) ||
+    isErrorsSection(section)
+      ? undefined
+      : section;
 
-  const metaQuery = useQuery(trpc.studio.meta.queryOptions({ projectPath }));
+  const metaQuery = useQuery({
+    ...trpc.studio.meta.queryOptions({ projectPath }),
+    refetchInterval: 1000,
+  });
 
   const configQuery = useQuery({
     ...trpc.studio.config.queryOptions({ projectPath }),
@@ -34,18 +75,6 @@ export function useStudioData({
     enabled: metaQuery.isSuccess && metaQuery.data.project.valid,
   });
 
-  const deliveryStatusQuery = useQuery({
-    ...trpc.studio.deliveryStatus.queryOptions({
-      projectPath,
-      limit: 50,
-      offset: 0,
-      connectorKey: selection?.kind === "delivery" ? selection.connectorKey : undefined,
-    }),
-    enabled: metaQuery.isSuccess,
-    refetchInterval: 5_000,
-    refetchOnWindowFocus: true,
-  });
-
   const facetsQuery = useQuery({
     ...trpc.studio.facets.queryOptions({
       projectPath,
@@ -54,6 +83,7 @@ export function useStudioData({
       fileId: filters.fileId || undefined,
       from: filters.from || undefined,
       to: filters.to || undefined,
+      sectionId: logsSectionId,
     }),
     enabled: metaQuery.isSuccess && metaQuery.data.project.valid,
   });
@@ -70,8 +100,170 @@ export function useStudioData({
       fileId: filters.fileId || undefined,
       from: filters.from || undefined,
       to: filters.to || undefined,
+      sectionId: logsSectionId,
     }),
-    enabled: metaQuery.isSuccess && metaQuery.data.project.valid,
+    enabled:
+      metaQuery.isSuccess &&
+      metaQuery.data.project.valid &&
+      !isOverviewSection(section) &&
+      !isAuthSection(section) &&
+      !isAgentsSection(section) &&
+      !isBackgroundSection(section) &&
+      !isPaymentsSection(section) &&
+      !isDatabaseSection(section) &&
+      !isHttpSection(section) &&
+      !isErrorsSection(section),
+    refetchInterval: 1000,
+  });
+
+  const httpQuery = useQuery({
+    ...trpc.studio.http.queryOptions({
+      projectPath,
+      fileId: filters.fileId || undefined,
+      from: filters.from || undefined,
+      to: filters.to || undefined,
+      search: deferredSearch || undefined,
+      offset,
+      limit: 100,
+      method: httpUi.method || undefined,
+      statusGroup: httpUi.statusGroup || undefined,
+      route: httpUi.route || undefined,
+      minDurationMs: httpUi.minDurationMs ? Number(httpUi.minDurationMs) : undefined,
+    }),
+    enabled: metaQuery.isSuccess && metaQuery.data.project.valid && isHttpSection(section),
+    refetchInterval: 1000,
+  });
+
+  const errorsQuery = useQuery({
+    ...trpc.studio.errors.queryOptions({
+      projectPath,
+      offset,
+      limit: 100,
+      view: errorUi.view,
+      sort: errorUi.sort,
+      type: errorUi.type || undefined,
+      sourceFile: errorUi.sourceFile || undefined,
+      search: deferredSearch || undefined,
+      fileId: filters.fileId || undefined,
+      from: filters.from || undefined,
+      to: filters.to || undefined,
+      sectionId: errorUi.sectionTag || undefined,
+    }),
+    enabled: metaQuery.isSuccess && metaQuery.data.project.valid && isErrorsSection(section),
+    refetchInterval: 1000,
+  });
+
+  const overviewQuery = useQuery({
+    ...trpc.studio.overview.queryOptions({
+      projectPath,
+      fileId: filters.fileId || undefined,
+      from: filters.from || undefined,
+      to: filters.to || undefined,
+      search: deferredSearch || undefined,
+    }),
+    enabled: metaQuery.isSuccess && metaQuery.data.project.valid && isOverviewSection(section),
+    refetchInterval: 1000,
+  });
+
+  const authQuery = useQuery({
+    ...trpc.studio.auth.queryOptions({
+      projectPath,
+      offset,
+      limit: 100,
+      fileId: filters.fileId || undefined,
+      from: filters.from || undefined,
+      to: filters.to || undefined,
+      search: deferredSearch || undefined,
+      userId: authUserId || undefined,
+    }),
+    enabled: metaQuery.isSuccess && metaQuery.data.project.valid && section === "auth",
+    refetchInterval: 1000,
+  });
+
+  const backgroundJobsQuery = useQuery({
+    ...trpc.studio.backgroundJobs.queryOptions({
+      projectPath,
+      offset,
+      limit: 100,
+      fileId: filters.fileId || undefined,
+      from: filters.from || undefined,
+      to: filters.to || undefined,
+      search: deferredSearch || undefined,
+    }),
+    enabled: metaQuery.isSuccess && metaQuery.data.project.valid && section === "background",
+    refetchInterval: 1000,
+  });
+
+  const paymentsQuery = useQuery({
+    ...trpc.studio.payments.queryOptions({
+      projectPath,
+      offset,
+      limit: 100,
+      fileId: filters.fileId || undefined,
+      from: filters.from || undefined,
+      to: filters.to || undefined,
+      search: deferredSearch || undefined,
+    }),
+    enabled: metaQuery.isSuccess && metaQuery.data.project.valid && isPaymentsSection(section),
+    refetchInterval: 1000,
+  });
+
+  const paymentTraceQuery = useQuery({
+    ...trpc.studio.paymentTrace.queryOptions({
+      projectPath,
+      traceId: selection?.kind === "payment-trace" ? selection.id : "",
+      fileId: filters.fileId || undefined,
+      from: filters.from || undefined,
+      to: filters.to || undefined,
+      search: deferredSearch || undefined,
+    }),
+    enabled:
+      metaQuery.isSuccess &&
+      metaQuery.data.project.valid &&
+      selection?.kind === "payment-trace",
+  });
+
+  const databaseQuery = useQuery({
+    ...trpc.studio.database.queryOptions({
+      projectPath,
+      offset,
+      limit: 100,
+      fileId: filters.fileId || undefined,
+      from: filters.from || undefined,
+      to: filters.to || undefined,
+      search: deferredSearch || undefined,
+    }),
+    enabled: metaQuery.isSuccess && metaQuery.data.project.valid && section === "database",
+    refetchInterval: 1000,
+  });
+
+  const agentsQuery = useQuery({
+    ...trpc.studio.agents.queryOptions({
+      projectPath,
+      offset,
+      limit: 100,
+      fileId: filters.fileId || undefined,
+      from: filters.from || undefined,
+      to: filters.to || undefined,
+      search: deferredSearch || undefined,
+    }),
+    enabled: metaQuery.isSuccess && metaQuery.data.project.valid && isAgentsSection(section),
+    refetchInterval: 1000,
+  });
+
+  const agentTaskQuery = useQuery({
+    ...trpc.studio.agentTask.queryOptions({
+      projectPath,
+      taskId: selection?.kind === "agent-task" ? selection.id : "",
+      fileId: filters.fileId || undefined,
+      from: filters.from || undefined,
+      to: filters.to || undefined,
+      search: deferredSearch || undefined,
+    }),
+    enabled:
+      metaQuery.isSuccess &&
+      metaQuery.data.project.valid &&
+      selection?.kind === "agent-task",
   });
 
   const groupQuery = useQuery({
@@ -85,26 +277,58 @@ export function useStudioData({
       selection?.kind === "group",
   });
 
-  const recordQuery = useQuery({
-    ...trpc.studio.record.queryOptions({
+  const errorGroupQuery = useQuery({
+    ...trpc.studio.errorGroup.queryOptions({
       projectPath,
-      recordId: selection?.kind === "record" ? selection.id : "",
+      fingerprint: selection?.kind === "error-group" ? selection.id : "",
     }),
     enabled:
       metaQuery.isSuccess &&
       metaQuery.data.project.valid &&
-      selection?.kind === "record",
+      selection?.kind === "error-group",
+  });
+
+  const backgroundJobRunQuery = useQuery({
+    ...trpc.studio.backgroundJobRun.queryOptions({
+      projectPath,
+      runId: selection?.kind === "background-run" ? selection.id : "",
+      fileId: filters.fileId || undefined,
+      from: filters.from || undefined,
+      to: filters.to || undefined,
+      search: deferredSearch || undefined,
+    }),
+    enabled:
+      metaQuery.isSuccess &&
+      metaQuery.data.project.valid &&
+      selection?.kind === "background-run",
+  });
+
+  const recordQuery = useQuery({
+    ...trpc.studio.record.queryOptions({
+      projectPath,
+      recordId:
+        selection?.kind === "record" || selection?.kind === "error-occurrence"
+          ? selection.id
+          : "",
+    }),
+    enabled:
+      metaQuery.isSuccess &&
+      metaQuery.data.project.valid &&
+      (selection?.kind === "record" || selection?.kind === "error-occurrence"),
   });
 
   const recordSourceQuery = useQuery({
     ...trpc.studio.recordSource.queryOptions({
       projectPath,
-      recordId: selection?.kind === "record" ? selection.id : "",
+      recordId:
+        selection?.kind === "record" || selection?.kind === "error-occurrence"
+          ? selection.id
+          : "",
     }),
     enabled:
       metaQuery.isSuccess &&
       metaQuery.data.project.valid &&
-      selection?.kind === "record",
+      (selection?.kind === "record" || selection?.kind === "error-occurrence"),
   });
 
   const assistantStatusQuery = useQuery(
@@ -114,9 +338,17 @@ export function useStudioData({
   const files = filesQuery.data?.files ?? [];
   const entries = logsQuery.data?.entries ?? [];
   const selectedRecord =
-    selection?.kind === "record" ? recordQuery.data ?? null : null;
+    selection?.kind === "record" || selection?.kind === "error-occurrence"
+      ? recordQuery.data ?? null
+      : null;
   const selectedGroup =
     selection?.kind === "group" ? groupQuery.data ?? null : null;
+  const selectedBackgroundRun =
+    selection?.kind === "background-run" ? backgroundJobRunQuery.data ?? null : null;
+  const selectedPaymentTrace =
+    selection?.kind === "payment-trace" ? paymentTraceQuery.data ?? null : null;
+  const selectedErrorGroup =
+    selection?.kind === "error-group" ? errorGroupQuery.data ?? null : null;
 
   const isLoadingMeta = !metaQuery.data && metaQuery.isLoading;
   const isProjectInvalid = Boolean(metaQuery.data && !metaQuery.data.project.valid);
@@ -126,7 +358,19 @@ export function useStudioData({
   const hasLogsError =
     filesQuery.isError ||
     logsQuery.isError ||
+    errorsQuery.isError ||
+    overviewQuery.isError ||
+    authQuery.isError ||
+    backgroundJobsQuery.isError ||
+    paymentsQuery.isError ||
+    paymentTraceQuery.isError ||
+    httpQuery.isError ||
+    backgroundJobRunQuery.isError ||
+    databaseQuery.isError ||
+    agentsQuery.isError ||
+    agentTaskQuery.isError ||
     groupQuery.isError ||
+    errorGroupQuery.isError ||
     recordQuery.isError;
   const hasBackendError =
     metaQuery.isError || configQuery.isError || hasLogsError;
@@ -139,10 +383,21 @@ export function useStudioData({
     metaQuery,
     configQuery,
     filesQuery,
-    deliveryStatusQuery,
     facetsQuery,
     logsQuery,
+    httpQuery,
+    errorsQuery,
+    overviewQuery,
+    authQuery,
+    backgroundJobsQuery,
+    paymentsQuery,
+    paymentTraceQuery,
+    backgroundJobRunQuery,
+    databaseQuery,
+    agentsQuery,
+    agentTaskQuery,
     groupQuery,
+    errorGroupQuery,
     recordQuery,
     recordSourceQuery,
     assistantStatusQuery,
@@ -150,6 +405,11 @@ export function useStudioData({
     entries,
     selectedRecord,
     selectedGroup,
+    selectedBackgroundRun,
+    selectedAgentTask:
+      selection?.kind === "agent-task" ? agentTaskQuery.data ?? null : null,
+    selectedPaymentTrace,
+    selectedErrorGroup,
     isLoadingMeta,
     isProjectInvalid,
     projectError,
