@@ -29,6 +29,11 @@ jobs:
           node-version: "22.22.0"
           registry-url: "https://registry.npmjs.org"
 
+      - name: Print tool versions
+        run: |
+          echo "node $(node --version)"
+          echo "bun $(bun --version)"
+
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
@@ -50,6 +55,35 @@ jobs:
 
       - name: Build CLI
         run: bun run build:cli
+
+      - name: Dump CLI build diagnostics
+        if: ${{ failure() }}
+        run: |
+          echo "node $(node --version)"
+          echo "bun $(bun --version)"
+
+          echo "apps/web/dist/server/assets"
+          find apps/web/dist/server/assets -maxdepth 1 -type f -name '*.js' | sort || true
+
+          echo "packages/cli/studio/server/assets"
+          find packages/cli/studio/server/assets -maxdepth 1 -type f -name '*.js' | sort || true
+
+          echo "verify:studio-runtime-deps"
+          bun run --cwd packages/cli verify:studio-runtime-deps || true
+
+          echo "built-in imports in packaged Studio server"
+          if command -v rg >/dev/null 2>&1; then
+            rg -n '^(import .+ from |import )"((node:)?(buffer|crypto|events|fs|net|os|path|perf_hooks|process|stream|string_decoder|timers|tls|url|util|zlib)(/[^"]*)?)"' \
+              packages/cli/studio/server/assets \
+              -g '*.js' \
+              -S || true
+          fi
+
+          shopt -s nullglob
+          for file in packages/cli/studio/server/assets/*.js; do
+            echo "--- $file"
+            sed -n '1,80p' "$file"
+          done
 
       - name: Smoke test packaged Studio
         run: bun run --cwd packages/cli smoke:packaged-studio
