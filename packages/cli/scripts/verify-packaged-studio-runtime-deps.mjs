@@ -1,4 +1,5 @@
 import { readdir, readFile } from "node:fs/promises";
+import { builtinModules } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -12,6 +13,9 @@ const DYNAMIC_IMPORT_PATTERN = /import\(\s*["']([^"']+)["']\s*\)/g;
 
 const packageJson = JSON.parse(await readFile(packageJsonPath, "utf8"));
 const runtimeDependencies = new Set(Object.keys(packageJson.dependencies ?? {}));
+const builtinPackageNames = new Set(
+  builtinModules.map((moduleName) => normalizeBuiltinModuleName(moduleName)).filter(Boolean),
+);
 const jsFiles = await collectJavaScriptFiles(serverRoot);
 const imports = new Map();
 
@@ -35,7 +39,9 @@ for (const filePath of jsFiles) {
 }
 
 const missingPackages = [...imports.entries()]
-  .filter(([packageName]) => !runtimeDependencies.has(packageName))
+  .filter(
+    ([packageName]) => !runtimeDependencies.has(packageName) && !builtinPackageNames.has(packageName),
+  )
   .sort(([left], [right]) => left.localeCompare(right));
 
 if (missingPackages.length > 0) {
@@ -108,4 +114,8 @@ function normalizeToPackageName(specifier) {
   }
 
   return specifier.split("/")[0];
+}
+
+function normalizeBuiltinModuleName(moduleName) {
+  return moduleName.replace(/^node:/, "").split("/")[0] || null;
 }
