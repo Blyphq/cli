@@ -1,6 +1,6 @@
 {
   "name": "@blyp/cli",
-  "version": "0.1.54",
+  "version": "0.1.55",
   "type": "module",
   "repository": {
     "type": "git",
@@ -28,9 +28,11 @@
   },
   "types": "./dist/index.d.ts",
   "scripts": {
-    "build": "node ./scripts/build-studio.mjs && tsc -p tsconfig.build.json && chmod +x dist/index.js",
+    "build": "node ./scripts/build-studio.mjs && node ./scripts/verify-packaged-studio-runtime-deps.mjs && tsc -p tsconfig.build.json && chmod +x dist/index.js",
     "check-types": "tsc -p tsconfig.json --noEmit",
     "dev": "bun run ./src/index.ts",
+    "verify:studio-runtime-deps": "node ./scripts/verify-packaged-studio-runtime-deps.mjs",
+    "smoke:packaged-studio": "node ./scripts/smoke-packaged-studio.mjs",
     "test": "vitest run",
     "prepack": "bun run build"
   },
@@ -57,12 +59,16 @@
     "jiti": "^2.6.1",
     "lucide-react": "^0.577.0",
     "motion": "^12.36.0",
+    "mysql2": "^3.20.0",
     "nanoid": "^5.1.6",
     "next-themes": "^0.4.6",
+    "postgres": "^3.4.8",
     "open": "^11.0.0",
     "react": "19.2.3",
     "react-day-picker": "^9.14.0",
     "react-dom": "19.2.3",
+    "recharts": "^3.8.1",
+    "shiki": "^4.0.2",
     "sonner": "^2.0.3",
     "streamdown": "^2.4.0",
     "tailwind-merge": "^3.3.1",
