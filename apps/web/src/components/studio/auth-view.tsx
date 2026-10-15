@@ -1,4 +1,5 @@
 import type { StudioAuthOverview, StudioAuthSuspiciousPattern } from "@/lib/studio";
+import { cn } from "@/lib/utils";
 
 import { AuthStatsBar } from "./auth-stats-bar";
 import { AuthSuspiciousPanel } from "./auth-suspicious-panel";
@@ -40,8 +41,10 @@ export function AuthView({
       ?.recordIds ?? [],
   );
 
+  const hasUsers = (auth?.users.length ?? 0) > 0;
+
   return (
-    <div className="space-y-4">
+    <div className="flex min-w-0 flex-col gap-5">
       <AuthStatsBar
         stats={
           auth?.stats ?? {
@@ -59,23 +62,36 @@ export function AuthView({
         selectedPatternId={selectedPatternId}
         onSelect={onSelectPattern}
       />
-      <AuthUserBreakdown
-        users={auth?.users ?? []}
-        selectedUserId={selectedUserId}
-        onSelectUser={onSelectUser}
-        onReset={onResetUser}
-      />
-      <AuthTimeline
-        events={auth?.timeline ?? []}
-        selectedRecordId={selectedRecordId}
-        highlightedRecordIds={highlightedRecordIds}
-        offset={offset}
-        limit={limit}
-        total={auth?.totalTimelineEvents ?? 0}
-        loading={loading}
-        onSelect={onSelectRecord}
-        onPageChange={onPageChange}
-      />
+      <div
+        className={cn(
+          "grid min-w-0 items-start gap-5",
+          hasUsers && "xl:grid-cols-[minmax(0,1fr)_minmax(19rem,24rem)]",
+        )}
+      >
+        {hasUsers ? (
+          <div className="min-w-0 xl:sticky xl:top-4 xl:order-2">
+            <AuthUserBreakdown
+              users={auth?.users ?? []}
+              selectedUserId={selectedUserId}
+              onSelectUser={onSelectUser}
+              onReset={onResetUser}
+            />
+          </div>
+        ) : null}
+        <div className="min-w-0 xl:order-1">
+          <AuthTimeline
+            events={auth?.timeline ?? []}
+            selectedRecordId={selectedRecordId}
+            highlightedRecordIds={highlightedRecordIds}
+            offset={offset}
+            limit={limit}
+            total={auth?.totalTimelineEvents ?? 0}
+            loading={loading}
+            onSelect={onSelectRecord}
+            onPageChange={onPageChange}
+          />
+        </div>
+      </div>
     </div>
   );
 }

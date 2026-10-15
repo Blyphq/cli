@@ -1,32 +1,59 @@
-import { Card, CardContent } from "@/components/ui/card";
 import type { StudioDatabaseOverview } from "@/lib/studio";
 import { formatDurationMs } from "@/lib/studio";
+
+import { StatCell, StatStrip, type StudioTone } from "./studio-primitives";
 
 interface DatabaseStatsBarProps {
   stats: StudioDatabaseOverview["stats"];
 }
 
-export function DatabaseStatsBar({ stats }: DatabaseStatsBarProps) {
-  const items = [
-    { label: "Total queries", value: String(stats.totalQueries) },
-    { label: "Slow queries", value: String(stats.slowQueries) },
-    { label: "Failed queries", value: String(stats.failedQueries) },
-    { label: "Avg query time", value: formatDurationMs(stats.avgQueryTimeMs) },
-    { label: "Active transactions", value: String(stats.activeTransactions) },
-  ];
+function getAvgTone(value: number | null | undefined): StudioTone {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return "neutral";
+  }
 
+  if (value > 500) {
+    return "error";
+  }
+
+  return value > 100 ? "warn" : "neutral";
+}
+
+function share(part: number, total: number): string | undefined {
+  if (total <= 0 || part <= 0) {
+    return undefined;
+  }
+
+  return `${Math.round((part / total) * 100)}% of queries`;
+}
+
+export function DatabaseStatsBar({ stats }: DatabaseStatsBarProps) {
   return (
-    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-      {items.map((item) => (
-        <Card key={item.label} size="sm">
-          <CardContent className="space-y-1 py-1">
-            <div className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
-              {item.label}
-            </div>
-            <div className="text-sm font-medium text-foreground">{item.value}</div>
-          </CardContent>
-        </Card>
-      ))}
-    </div>
+    <StatStrip columns="grid-cols-2 @2xl:grid-cols-3 @5xl:grid-cols-5">
+      <StatCell label="Total queries" value={stats.totalQueries.toLocaleString()} />
+      <StatCell
+        label="Slow queries"
+        value={stats.slowQueries.toLocaleString()}
+        tone={stats.slowQueries > 0 ? "warn" : "neutral"}
+        hint={share(stats.slowQueries, stats.totalQueries) ?? "Above 100ms"}
+      />
+      <StatCell
+        label="Failed queries"
+        value={stats.failedQueries.toLocaleString()}
+        tone={stats.failedQueries > 0 ? "error" : "neutral"}
+        hint={share(stats.failedQueries, stats.totalQueries)}
+      />
+      <StatCell
+        label="Avg query time"
+        value={formatDurationMs(stats.avgQueryTimeMs)}
+        tone={getAvgTone(stats.avgQueryTimeMs)}
+      />
+      <StatCell
+        className="col-span-2 @2xl:col-span-1"
+        label="Active transactions"
+        value={stats.activeTransactions.toLocaleString()}
+        tone={stats.activeTransactions > 0 ? "info" : "neutral"}
+      />
+    </StatStrip>
   );
 }

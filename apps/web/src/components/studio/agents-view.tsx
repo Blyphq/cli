@@ -35,8 +35,8 @@ export function AgentsView({
 
   if (!agents && loading) {
     return (
-      <div className="space-y-4">
-        <StatTilesSkeleton />
+      <div className="flex flex-col gap-4">
+        <StatTilesSkeleton count={5} />
         <ListRowsSkeleton rows={5} />
         <PanelSkeleton rows={4} compact />
         <PanelSkeleton rows={4} compact />
@@ -45,8 +45,9 @@ export function AgentsView({
   }
 
   return (
-    <div className="space-y-4">
+    <div className="flex min-w-0 flex-col gap-4">
       <AgentsStatsBar
+        llmCalls={agents?.llmCalls}
         stats={
           agents?.stats ?? {
             agentTasks: 0,
@@ -63,6 +64,7 @@ export function AgentsView({
         loading={loading}
         selectedTaskId={selectedTaskId}
         sessionStart={sessionStart}
+        llmCalls={agents?.llmCalls}
         onSelect={onSelectTask}
       />
       <AgentFailureAnalysisPanel

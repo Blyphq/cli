@@ -31,8 +31,23 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
       {
         title: "Blyp Studio",
       },
+      {
+        name: "theme-color",
+        content: "#f9f6f2",
+        media: "(prefers-color-scheme: light)",
+      },
+      {
+        name: "theme-color",
+        content: "#100e0c",
+        media: "(prefers-color-scheme: dark)",
+      },
     ],
     links: [
+      {
+        rel: "icon",
+        type: "image/svg+xml",
+        href: "/favicon.svg",
+      },
       {
         rel: "stylesheet",
         href: appCss,

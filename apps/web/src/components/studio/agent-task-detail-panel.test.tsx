@@ -151,7 +151,8 @@ describe("AgentTaskDetailPanel", () => {
 
     await user.click(screen.getAllByRole("button", { name: /^details$/i })[0]!);
 
-    expect(screen.getByText(/^Input: Summarise feedback$/i)).toBeInTheDocument();
+    expect(screen.getByText("Input")).toBeInTheDocument();
+    expect(screen.getByText(/^Summarise feedback$/i)).toBeInTheDocument();
     expect(screen.queryByText(/^null$/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/"input":/i)).not.toBeInTheDocument();
   });

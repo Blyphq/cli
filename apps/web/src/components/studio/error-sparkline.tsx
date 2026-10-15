@@ -1,38 +1,22 @@
+import { cn } from "@/lib/utils";
+
+import { Sparkline } from "./sparkline";
+
 interface ErrorSparklineProps {
   buckets: number[];
+  className?: string;
+  /** Accessible summary; decorative by default since counts are shown alongside. */
+  label?: string;
 }
 
-export function ErrorSparkline({ buckets }: ErrorSparklineProps) {
-  const values = buckets.length > 0 ? buckets : [0];
-  const max = Math.max(...values, 1);
-  const width = 84;
-  const height = 24;
-  const barWidth = width / values.length;
-
+/** Error-frequency sparkline, stroked in the error level color. */
+export function ErrorSparkline({ buckets, className, label }: ErrorSparklineProps) {
   return (
-    <svg
-      aria-hidden
-      className="text-primary/70"
-      viewBox={`0 0 ${width} ${height}`}
-      fill="none"
-    >
-      {values.map((value, index) => {
-        const x = index * barWidth;
-        const barHeight = Math.max(2, (value / max) * height);
-        const y = height - barHeight;
-
-        return (
-          <rect
-            key={`${index}:${value}`}
-            x={x + 1}
-            y={y}
-            width={Math.max(2, barWidth - 2)}
-            height={barHeight}
-            rx="1.5"
-            className="fill-current"
-          />
-        );
-      })}
-    </svg>
+    <Sparkline
+      points={buckets}
+      color="var(--level-error)"
+      label={label}
+      className={cn("h-6 w-24", className)}
+    />
   );
 }

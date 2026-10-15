@@ -1,11 +1,20 @@
+import { ArrowRightLeft } from "lucide-react";
+
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import type { StudioDatabaseTransactionSummary } from "@/lib/studio";
-import { formatDurationMs, formatRelativeTime } from "@/lib/studio";
+import {
+  formatDateTime,
+  formatDurationMs,
+  formatRelativeTime,
+  getDurationClasses,
+} from "@/lib/studio";
+import { cn } from "@/lib/utils";
 
 import { EmptyState } from "./empty-state";
 import { PanelHeader } from "./panel-header";
+import { MonoChip, StatusDot, type StudioTone } from "./studio-primitives";
 
 interface DatabaseTransactionPanelProps {
   transactions: StudioDatabaseTransactionSummary[];
@@ -22,58 +31,103 @@ export function DatabaseTransactionPanel({
         title="No transactions detected"
         description="Transaction groups appear when records include a transaction id."
         size="compact"
+        icon={<ArrowRightLeft />}
       />
     );
   }
 
   return (
-    <Card>
+    <Card className="min-w-0 gap-0 py-0">
       <PanelHeader
+        className="py-3 [.border-b]:pb-3"
         title="Transactions"
         description="Grouped by transaction id when present."
       />
-      <CardContent className="space-y-3">
+      <ol className="divide-y divide-border/70">
         {transactions.map((transaction) => (
-          <div key={transaction.id} className="rounded-lg border border-border/60 bg-background/40 p-3">
-            <div className="flex flex-col gap-2">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-sm font-medium">{transaction.id}</span>
-                <Badge variant={getTransactionVariant(transaction.result)}>
-                  {getTransactionLabel(transaction.result)}
-                </Badge>
-              </div>
-              <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
-                <span>Started {formatRelativeTime(transaction.timestampStart)}</span>
-                <span>Duration {formatDurationMs(transaction.durationMs)}</span>
-                <span>{transaction.queries.length} queries</span>
-                {transaction.requestId ? <span>Request {transaction.requestId}</span> : null}
-                {transaction.traceId ? <span>Trace {transaction.traceId}</span> : null}
-              </div>
-              {transaction.queries.length > 0 ? (
-                <div className="space-y-2 pt-1">
-                  {transaction.queries.map((query) => (
-                    <div key={query.id} className="flex items-center justify-between gap-3 rounded-md border border-border/50 px-3 py-2">
-                      <div className="min-w-0">
-                        <div className="truncate text-sm font-medium">
-                          {query.operation} {query.modelOrTable ? `- ${query.modelOrTable}` : ""}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          {formatDurationMs(query.durationMs)}
-                        </div>
-                      </div>
-                      <Button variant="outline" size="sm" onClick={() => onSelectRecord(query.recordId)}>
-                        Select
-                      </Button>
-                    </div>
-                  ))}
-                </div>
+          <li key={transaction.id} className="flex min-w-0 flex-col gap-2 px-4 py-3">
+            <div className="flex min-w-0 items-center gap-2">
+              <StatusDot
+                tone={getTransactionTone(transaction.result)}
+                live={transaction.result === "open"}
+              />
+              <span className="min-w-0 truncate font-mono text-[0.75rem] font-medium text-foreground" title={transaction.id}>
+                {transaction.id}
+              </span>
+              <Badge variant={getTransactionVariant(transaction.result)} className="ml-auto">
+                {getTransactionLabel(transaction.result)}
+              </Badge>
+            </div>
+            <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 pl-3.5 font-mono text-[0.7rem] tabular-nums text-muted-foreground">
+              <span title={formatDateTime(transaction.timestampStart)}>
+                {formatRelativeTime(transaction.timestampStart)}
+              </span>
+              <span className={getDurationClasses(transaction.durationMs)}>
+                {formatDurationMs(transaction.durationMs)}
+              </span>
+              <span>
+                {transaction.queries.length} {transaction.queries.length === 1 ? "query" : "queries"}
+              </span>
+              {transaction.requestId ? (
+                <MonoChip title={`Request ${transaction.requestId}`}>req {transaction.requestId}</MonoChip>
+              ) : null}
+              {transaction.traceId ? (
+                <MonoChip title={`Trace ${transaction.traceId}`}>trace {transaction.traceId}</MonoChip>
               ) : null}
             </div>
-          </div>
+            {transaction.queries.length > 0 ? (
+              <ol className="ml-[3px] flex flex-col border-l border-border pl-3">
+                {transaction.queries.map((query) => (
+                  <li
+                    key={query.id}
+                    className="group/query relative flex min-w-0 items-center gap-3 rounded-md py-1 pr-1 pl-2 transition-colors duration-150 hover:bg-muted/60"
+                  >
+                    <span
+                      aria-hidden
+                      className="absolute top-1/2 -left-[15px] size-[5px] -translate-y-1/2 rounded-full border border-border-strong bg-card"
+                    />
+                    <span className="min-w-0 flex-1 truncate font-mono text-[0.72rem]">
+                      <span className="font-medium text-foreground">{query.operation}</span>
+                      {query.modelOrTable ? (
+                        <span className="text-muted-foreground"> {query.modelOrTable}</span>
+                      ) : null}
+                    </span>
+                    <span
+                      className={cn(
+                        "shrink-0 font-mono text-[0.72rem] tabular-nums",
+                        getDurationClasses(query.durationMs),
+                      )}
+                    >
+                      {formatDurationMs(query.durationMs)}
+                    </span>
+                    <Button
+                      variant="ghost"
+                      size="xs"
+                      className="shrink-0 text-muted-foreground hover:text-foreground"
+                      onClick={() => onSelectRecord(query.recordId)}
+                    >
+                      Select
+                    </Button>
+                  </li>
+                ))}
+              </ol>
+            ) : null}
+          </li>
         ))}
-      </CardContent>
+      </ol>
     </Card>
   );
+}
+
+function getTransactionTone(result: StudioDatabaseTransactionSummary["result"]): StudioTone {
+  switch (result) {
+    case "rolled_back":
+      return "error";
+    case "open":
+      return "info";
+    default:
+      return "ok";
+  }
 }
 
 function getTransactionVariant(result: StudioDatabaseTransactionSummary["result"]) {
@@ -81,9 +135,9 @@ function getTransactionVariant(result: StudioDatabaseTransactionSummary["result"
     case "rolled_back":
       return "destructive" as const;
     case "open":
-      return "secondary" as const;
+      return "info" as const;
     default:
-      return "outline" as const;
+      return "success" as const;
   }
 }
 

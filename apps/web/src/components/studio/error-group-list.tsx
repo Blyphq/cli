@@ -1,7 +1,8 @@
-import { ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
+import { CheckCircle2, ChevronLeft, ChevronRight, ShieldCheck } from "lucide-react";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import {
   Collapsible,
   CollapsibleContent,
@@ -44,6 +45,7 @@ export function ErrorGroupList({
   if (groups.length === 0 && resolvedGroups.length === 0) {
     return (
       <EmptyState
+        icon={<ShieldCheck />}
         title="No errors matched"
         description="Try a different time range, file, or filter."
       />
@@ -51,77 +53,89 @@ export function ErrorGroupList({
   }
 
   return (
-    <Card className="min-h-[36rem] min-w-0">
+    <Card className="min-h-[36rem] min-w-0 gap-0 py-0">
       <PanelHeader
+        className="py-3 [.border-b]:pb-3"
         title="Errors"
-        description={`${totalGroups} active grouped errors`}
+        description={
+          <span className="font-mono text-[0.7rem] tabular-nums">{`${totalGroups} active grouped errors`}</span>
+        }
       />
-      <CardContent className="space-y-4 p-4">
-        {groups.length === 0 ? (
+      {groups.length === 0 ? (
+        <div className="p-4">
           <EmptyState
+            icon={<CheckCircle2 />}
             title="No active error groups"
             description="All visible groups are resolved or ignored."
             size="compact"
           />
-        ) : (
-          <div className="space-y-3">
-            {groups.map((group) => (
+        </div>
+      ) : (
+        <ul aria-label="Error groups" className="divide-y divide-border/70">
+          {groups.map((group) => (
+            <li key={group.fingerprint}>
               <ErrorGroupCard
-                key={group.fingerprint}
                 group={group}
                 selected={selectedGroupId === group.fingerprint}
                 onSelect={onSelect}
                 onResolve={onResolve}
                 onIgnore={onIgnore}
               />
-            ))}
-          </div>
-        )}
-        {resolvedGroups.length > 0 ? (
-          <Collapsible defaultOpen={false} className="border border-border/60">
-            <CollapsibleTrigger className="flex w-full items-center justify-between px-4 py-3 text-left text-sm font-medium">
-              <span>Resolved ({resolvedGroups.length})</span>
-              <ChevronDown className="size-4 text-muted-foreground" />
-            </CollapsibleTrigger>
-            <CollapsibleContent className="space-y-3 border-t border-border/60 p-4">
+            </li>
+          ))}
+        </ul>
+      )}
+      {resolvedGroups.length > 0 ? (
+        <Collapsible defaultOpen={false} className="border-t border-border">
+          <CollapsibleTrigger className="group/resolved flex h-9 w-full items-center gap-2 bg-muted/30 px-4 text-left text-[0.75rem] font-medium text-foreground/90 outline-none transition-colors duration-150 hover:bg-muted/60 focus-visible:bg-muted">
+            <ChevronRight
+              aria-hidden
+              className="size-3.5 text-muted-foreground transition-transform duration-150 ease-out-expo group-data-[panel-open]/resolved:rotate-90"
+            />
+            <span>Resolved</span>
+            <Badge variant="success">{resolvedGroups.length}</Badge>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <ul aria-label="Resolved error groups" className="divide-y divide-border/70 border-t border-border/70">
               {resolvedGroups.map((group) => (
-                <ErrorGroupCard
-                  key={group.fingerprint}
-                  group={group}
-                  selected={selectedGroupId === group.fingerprint}
-                  onSelect={onSelect}
-                  onIgnore={onIgnore}
-                />
+                <li key={group.fingerprint}>
+                  <ErrorGroupCard
+                    group={group}
+                    selected={selectedGroupId === group.fingerprint}
+                    onSelect={onSelect}
+                    onIgnore={onIgnore}
+                  />
+                </li>
               ))}
-            </CollapsibleContent>
-          </Collapsible>
-        ) : null}
-        <div className="flex flex-col gap-3 border-t border-border/60 pt-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="text-xs text-muted-foreground">
-            Showing {showingStart}-{showingEnd} of {totalGroups}
-          </div>
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={offset === 0}
-              onClick={() => onPageChange(Math.max(0, offset - limit))}
-            >
-              <ChevronLeft />
-              Previous
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={offset + limit >= totalGroups}
-              onClick={() => onPageChange(offset + limit)}
-            >
-              Next
-              <ChevronRight />
-            </Button>
-          </div>
+            </ul>
+          </CollapsibleContent>
+        </Collapsible>
+      ) : null}
+      <div className="mt-auto flex flex-col gap-2 border-t border-border px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between">
+        <div className="font-mono text-[0.7rem] tabular-nums text-muted-foreground">
+          Showing {showingStart}-{showingEnd} of {totalGroups}
         </div>
-      </CardContent>
+        <div className="flex gap-1.5">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={offset === 0}
+            onClick={() => onPageChange(Math.max(0, offset - limit))}
+          >
+            <ChevronLeft />
+            Previous
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={offset + limit >= totalGroups}
+            onClick={() => onPageChange(offset + limit)}
+          >
+            Next
+            <ChevronRight />
+          </Button>
+        </div>
+      </div>
     </Card>
   );
 }

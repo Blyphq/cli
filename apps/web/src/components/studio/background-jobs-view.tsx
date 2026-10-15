@@ -28,7 +28,7 @@ export function BackgroundJobsView({
 }: BackgroundJobsViewProps) {
   if (!page && loading) {
     return (
-      <div className="space-y-4">
+      <div className="flex flex-col gap-4">
         <StatTilesSkeleton />
         <PanelSkeleton rows={4} compact />
         <ListRowsSkeleton rows={5} />
@@ -37,8 +37,9 @@ export function BackgroundJobsView({
   }
 
   return (
-    <div className="space-y-4">
+    <div className="flex min-w-0 flex-col gap-4">
       <BackgroundJobsStatsBar
+        runs={page?.runs}
         stats={
           page?.stats ?? {
             jobsDetected: 0,

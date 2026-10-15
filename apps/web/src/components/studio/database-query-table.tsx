@@ -1,7 +1,9 @@
 import type { KeyboardEvent } from "react";
 
+import { Database } from "lucide-react";
+
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import type { StudioDatabaseQueryEvent } from "@/lib/studio";
 import {
   formatDateTime,
@@ -23,6 +25,9 @@ interface DatabaseQueryTableProps {
   onSelectRecord(recordId: string): void;
 }
 
+const ROW_GRID =
+  "grid grid-cols-[4.5rem_minmax(0,1fr)_4.5rem] items-center gap-x-3 md:grid-cols-[4.5rem_minmax(0,1fr)_4.5rem_4rem_6rem]";
+
 export function DatabaseQueryTable({
   queries,
   selectedRecordId,
@@ -35,96 +40,103 @@ export function DatabaseQueryTable({
       <EmptyState
         title="No database queries matched the current filters"
         description="Try a different file, date range, or search term."
+        icon={<Database />}
       />
     );
   }
 
   return (
-    <Card className="min-w-0">
+    <Card className="min-w-0 gap-0 py-0">
       <PanelHeader
+        className="py-3 [.border-b]:pb-3"
         title="Query log"
         description={`${queries.length} shown from ${totalQueries} matching queries`}
       />
-      <CardContent className="p-0">
-        {loading && queries.length === 0 ? (
-          <div className="p-4">
-            <ListRowsSkeleton rows={6} />
+      {loading && queries.length === 0 ? (
+        <div className="p-4">
+          <ListRowsSkeleton rows={6} />
+        </div>
+      ) : null}
+      {queries.length > 0 ? (
+        <div className="min-w-0">
+          <div
+            aria-hidden
+            className={cn(
+              ROW_GRID,
+              "hidden h-8 border-b border-border bg-muted/40 px-4 text-[0.7rem] font-medium text-muted-foreground md:grid",
+            )}
+          >
+            <span>Operation</span>
+            <span>Model / table</span>
+            <span className="text-right">Duration</span>
+            <span className="text-center">Status</span>
+            <span className="text-right">Time</span>
           </div>
-        ) : null}
-        <div className="hidden overflow-x-auto lg:block">
-          <table className="w-full table-fixed text-left text-sm">
-            <thead className="border-b border-border/60 bg-background/60 text-xs uppercase tracking-[0.18em] text-muted-foreground">
-              <tr>
-                <th className="w-32 px-3 py-2 font-medium">Operation</th>
-                <th className="px-3 py-2 font-medium">Model / Table</th>
-                <th className="w-28 px-3 py-2 font-medium">Duration</th>
-                <th className="w-24 px-3 py-2 font-medium">Status</th>
-                <th className="w-28 px-3 py-2 font-medium">Time</th>
-              </tr>
-            </thead>
-            <tbody>
-              {queries.map((query) => (
-                <tr
-                  key={query.id}
-                  tabIndex={0}
-                  role="button"
-                  onClick={() => onSelectRecord(query.recordId)}
-                  onKeyDown={(event) => handleRowKeyDown(event, query.recordId, onSelectRecord)}
+          {queries.map((query) => {
+            const selected = selectedRecordId === query.recordId;
+            const target = query.modelOrTable ?? "Unknown";
+
+            return (
+              <div
+                key={query.id}
+                role="button"
+                tabIndex={0}
+                aria-label={`${query.operation} ${target}`}
+                aria-current={selected ? "true" : undefined}
+                onClick={() => onSelectRecord(query.recordId)}
+                onKeyDown={(event) => handleRowKeyDown(event, query.recordId, onSelectRecord)}
+                className={cn(
+                  ROW_GRID,
+                  "cursor-pointer gap-y-1 border-b border-border/70 px-4 py-2 outline-none transition-colors duration-150 last:border-0 hover:bg-muted/60 focus-visible:bg-muted",
+                  selected && "bg-primary-soft/50 shadow-[inset_2px_0_0_var(--signal)] hover:bg-primary-soft/60",
+                )}
+              >
+                <span className="truncate font-mono text-[0.72rem] font-medium text-foreground">
+                  {query.operation}
+                </span>
+                <span className="flex min-w-0 items-baseline gap-2">
+                  <span
+                    className={cn(
+                      "max-w-[55%] shrink-0 truncate font-mono text-[0.75rem]",
+                      query.modelOrTable ? "text-foreground" : "text-muted-foreground/70",
+                    )}
+                    title={target}
+                  >
+                    {target}
+                  </span>
+                  {query.queryText ? (
+                    <span
+                      className="min-w-0 truncate font-mono text-[0.7rem] text-muted-foreground/80"
+                      title={query.queryText}
+                    >
+                      {query.queryText}
+                    </span>
+                  ) : null}
+                </span>
+                <span
                   className={cn(
-                    "cursor-pointer border-b border-border/60 outline-none hover:bg-muted/30 focus-visible:bg-muted/40",
-                    selectedRecordId === query.recordId && "bg-primary/10",
+                    "text-right font-mono text-[0.75rem] tabular-nums",
+                    getDurationClasses(query.durationMs),
                   )}
                 >
-                  <td className="px-3 py-2 align-top text-sm font-medium">{query.operation}</td>
-                  <td className="px-3 py-2 align-top text-sm">
-                    <div className="truncate" title={query.modelOrTable ?? "Unknown"}>
-                      {query.modelOrTable ?? "Unknown"}
-                    </div>
-                  </td>
-                  <td className={cn("px-3 py-2 align-top text-sm font-medium", getDurationClasses(query.durationMs))}>
-                    {formatDurationMs(query.durationMs)}
-                  </td>
-                  <td className="px-3 py-2 align-top">
-                    <Badge variant={getStatusVariant(query.status)}>{getStatusLabel(query.status)}</Badge>
-                  </td>
-                  <td className="px-3 py-2 align-top text-xs text-muted-foreground" title={formatDateTime(query.timestamp)}>
-                    {formatRelativeTime(query.timestamp)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <div className="divide-y divide-border/60 lg:hidden">
-          {queries.map((query) => (
-            <button
-              key={query.id}
-              type="button"
-              onClick={() => onSelectRecord(query.recordId)}
-              className={cn(
-                "flex w-full flex-col gap-3 px-3 py-3 text-left hover:bg-muted/30",
-                selectedRecordId === query.recordId && "bg-primary/10",
-              )}
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="text-sm font-medium">{query.operation}</div>
-                  <div className="text-xs text-muted-foreground">{query.modelOrTable ?? "Unknown"}</div>
-                </div>
-                <Badge variant={getStatusVariant(query.status)}>{getStatusLabel(query.status)}</Badge>
-              </div>
-              <div className="flex items-center justify-between gap-3 text-xs">
-                <span className={cn("font-medium", getDurationClasses(query.durationMs))}>
                   {formatDurationMs(query.durationMs)}
                 </span>
-                <span className="text-muted-foreground" title={formatDateTime(query.timestamp)}>
-                  {formatRelativeTime(query.timestamp)}
-                </span>
+                <div className="col-span-full flex items-center justify-between gap-3 md:contents">
+                  <span className="flex md:justify-center">
+                    <Badge variant={getStatusVariant(query.status)}>{getStatusLabel(query.status)}</Badge>
+                  </span>
+                  <span
+                    className="text-right font-mono text-[0.7rem] whitespace-nowrap tabular-nums text-muted-foreground/80"
+                    title={formatDateTime(query.timestamp)}
+                  >
+                    {formatRelativeTime(query.timestamp)}
+                  </span>
+                </div>
               </div>
-            </button>
-          ))}
+            );
+          })}
         </div>
-      </CardContent>
+      ) : null}
     </Card>
   );
 }
@@ -134,9 +146,9 @@ function getStatusVariant(status: StudioDatabaseQueryEvent["status"]) {
     case "error":
       return "destructive" as const;
     case "slow":
-      return "secondary" as const;
+      return "warning" as const;
     default:
-      return "outline" as const;
+      return "success" as const;
   }
 }
 
@@ -147,15 +159,19 @@ function getStatusLabel(status: StudioDatabaseQueryEvent["status"]): string {
     case "slow":
       return "Slow";
     default:
-      return "Success";
+      return "OK";
   }
 }
 
 function handleRowKeyDown(
-  event: KeyboardEvent<HTMLTableRowElement>,
+  event: KeyboardEvent<HTMLDivElement>,
   recordId: string,
   onSelect: (recordId: string) => void,
 ) {
+  if (event.target !== event.currentTarget) {
+    return;
+  }
+
   if (event.key === "Enter" || event.key === " ") {
     event.preventDefault();
     onSelect(recordId);

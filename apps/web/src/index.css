@@ -1,115 +1,128 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
+@import "@fontsource-variable/dm-sans";
+@import "@fontsource-variable/manrope";
+@import "@fontsource-variable/geist-mono";
 
 @custom-variant dark (&:is(.dark *));
 
+/*
+ * Blyp design tokens — mirrors the palette used on https://blyp.dev so the
+ * Studio and the docs read as one product. Warm paper/ink neutrals, a single
+ * coral "signal" accent, and dedicated level colors for log semantics.
+ */
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.1450 0 0);
-  --card: oklch(0.9950 0 0);
-  --card-foreground: oklch(0.1450 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.1450 0 0);
-  --primary: oklch(0.6701 0.0916 294.92);
-  --primary-foreground: oklch(0.9850 0 0);
-  --secondary: oklch(0.8700 0 0);
-  --secondary-foreground: oklch(0.1450 0 0);
-  --muted: oklch(0.9500 0 0);
-  --muted-foreground: oklch(0.5560 0 0);
-  --accent: oklch(0.9500 0 0);
-  --accent-foreground: oklch(0.2050 0 0);
-  --destructive: oklch(0.5770 0.2450 27.3250);
-  --destructive-foreground: oklch(1 0 0);
-  --border: oklch(0.9500 0 0);
-  --input: oklch(0.9700 0 0);
-  --ring: oklch(0.7080 0 0);
-  --chart-1: oklch(0.8100 0.1000 252);
-  --chart-2: oklch(0.6200 0.1900 260);
-  --chart-3: oklch(0.5500 0.2200 263);
-  --chart-4: oklch(0.4900 0.2200 264);
-  --chart-5: oklch(0.4200 0.1800 266);
-  --sidebar: oklch(0.9850 0 0);
-  --sidebar-foreground: oklch(0.1450 0 0);
-  --sidebar-primary: oklch(0.2050 0 0);
-  --sidebar-primary-foreground: oklch(0.9850 0 0);
-  --sidebar-accent: oklch(0.9700 0 0);
-  --sidebar-accent-foreground: oklch(0.2050 0 0);
-  --sidebar-border: oklch(0.9220 0 0);
-  --sidebar-ring: oklch(0.7080 0 0);
-  --font-sans: DM Sans, ui-sans-serif, sans-serif, system-ui;
-  --font-serif: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
-  --font-mono: Geist Mono, ui-monospace, monospace;
-  --radius: 1rem;
-  --shadow-x: 0;
-  --shadow-y: 1px;
-  --shadow-blur: 3px;
-  --shadow-spread: 0px;
-  --shadow-opacity: 0.1;
-  --shadow-color: oklch(0 0 0);
-  --shadow-2xs: 0 1px 3px 0px hsl(0 0% 0% / 0.05);
-  --shadow-xs: 0 1px 3px 0px hsl(0 0% 0% / 0.05);
-  --shadow-sm: 0 1px 3px 0px hsl(0 0% 0% / 0.10), 0 1px 2px -1px hsl(0 0% 0% / 0.10);
-  --shadow: 0 1px 3px 0px hsl(0 0% 0% / 0.10), 0 1px 2px -1px hsl(0 0% 0% / 0.10);
-  --shadow-md: 0 1px 3px 0px hsl(0 0% 0% / 0.10), 0 2px 4px -1px hsl(0 0% 0% / 0.10);
-  --shadow-lg: 0 1px 3px 0px hsl(0 0% 0% / 0.10), 0 4px 6px -1px hsl(0 0% 0% / 0.10);
-  --shadow-xl: 0 1px 3px 0px hsl(0 0% 0% / 0.10), 0 8px 10px -1px hsl(0 0% 0% / 0.10);
-  --shadow-2xl: 0 1px 3px 0px hsl(0 0% 0% / 0.25);
+  --paper: #f9f6f2;
+  --sheet: #fefdfb;
+  --ink: #181410;
+  --graphite: #625d56;
+  --rule: #dfdcd7;
+  --rule-strong: #ccc8c2;
+  --stage: #f0ede7;
+  --signal: #ed5041;
+  --signal-hover: #d9372b;
+  --signal-soft: #ffe9e4;
+  --signal-soft-foreground: #af2c22;
+  --level-info: #0c82bf;
+  --level-warn: #ce871b;
+  --level-ok: #0e9254;
+  --level-error: var(--signal);
+  --level-debug: #8a847d;
+
+  --background: var(--paper);
+  --foreground: var(--ink);
+  --card: var(--sheet);
+  --card-foreground: var(--ink);
+  --popover: var(--sheet);
+  --popover-foreground: var(--ink);
+  --primary: var(--signal);
+  --primary-foreground: #fffbfa;
+  --primary-hover: var(--signal-hover);
+  --primary-soft: var(--signal-soft);
+  --primary-soft-foreground: var(--signal-soft-foreground);
+  --secondary: #eeebe7;
+  --secondary-foreground: var(--ink);
+  --muted: #efece8;
+  --muted-foreground: var(--graphite);
+  --accent: #ece9e4;
+  --accent-foreground: var(--ink);
+  --destructive: #cc2827;
+  --destructive-foreground: #fffbfa;
+  --border: var(--rule);
+  --border-strong: var(--rule-strong);
+  --input: var(--rule-strong);
+  --ring: var(--signal);
+  --chart-1: var(--signal);
+  --chart-2: var(--level-info);
+  --chart-3: var(--level-warn);
+  --chart-4: var(--level-ok);
+  --chart-5: #a04c9a;
+  --sidebar: #f6f3ef;
+  --sidebar-foreground: var(--ink);
+  --sidebar-primary: var(--signal);
+  --sidebar-primary-foreground: #fffbfa;
+  --sidebar-accent: #e9e6e0;
+  --sidebar-accent-foreground: var(--ink);
+  --sidebar-border: var(--rule);
+  --sidebar-ring: var(--signal);
+
+  --font-sans: "DM Sans Variable", "DM Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-heading: "Manrope Variable", "Manrope", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: var(--font-heading);
+  --font-mono: "Geist Mono Variable", "Geist Mono", ui-monospace, SFMono-Regular, monospace;
+  --radius: 0.5rem;
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+
+  --shadow-2xs: 0 1px 2px #1915110a;
+  --shadow-xs: 0 1px 2px #1915110f;
+  --shadow-sm: 0 1px 2px #1915110d, 0 2px 6px #1915110d;
+  --shadow: 0 1px 2px #1915110d, 0 2px 6px #1915110d;
+  --shadow-md: 0 2px 4px #1915110d, 0 10px 24px -6px #1915111f;
+  --shadow-lg: 0 4px 8px #1915110d, 0 24px 48px -12px #1915112e;
+  --shadow-xl: 0 4px 8px #1915110d, 0 24px 48px -12px #1915112e;
+  --shadow-2xl: 0 4px 8px #1915110d, 0 24px 48px -12px #19151140;
+  --shadow-stage: 0 1px 0 #fff9 inset, 0 30px 80px -24px #2e1d1747;
   --tracking-normal: 0em;
   --spacing: 0.25rem;
 }
 
 .dark {
-  --background: oklch(0.2050 0 0);
-  --foreground: oklch(0.9850 0 0);
-  --card: oklch(0.1650 0 0);
-  --card-foreground: oklch(0.9850 0 0);
-  --popover: oklch(0.2050 0 0);
-  --popover-foreground: oklch(0.9850 0 0);
-  --primary: oklch(0.6701 0.0916 294.92);
-  --primary-foreground: oklch(0.2050 0 0);
-  --secondary: oklch(0.2690 0 0);
-  --secondary-foreground: oklch(0.9850 0 0);
-  --muted: oklch(0.2690 0 0);
-  --muted-foreground: oklch(0.7080 0 0);
-  --accent: oklch(0.3710 0 0);
-  --accent-foreground: oklch(0.9850 0 0);
-  --destructive: oklch(0.7040 0.1910 22.2160);
-  --destructive-foreground: oklch(0.9850 0 0);
-  --border: oklch(0.2690 0 0);
-  --input: oklch(0.2690 0 0);
-  --ring: oklch(0.5560 0 0);
-  --chart-1: oklch(0.8100 0.1000 252);
-  --chart-2: oklch(0.6200 0.1900 260);
-  --chart-3: oklch(0.5500 0.2200 263);
-  --chart-4: oklch(0.4900 0.2200 264);
-  --chart-5: oklch(0.4200 0.1800 266);
-  --sidebar: oklch(0.2690 0 0);
-  --sidebar-foreground: oklch(0.9850 0 0);
-  --sidebar-primary: oklch(0.4880 0.2430 264.3760);
-  --sidebar-primary-foreground: oklch(0.9850 0 0);
-  --sidebar-accent: oklch(0.2690 0 0);
-  --sidebar-accent-foreground: oklch(0.9850 0 0);
-  --sidebar-border: oklch(0.2750 0 0);
-  --sidebar-ring: oklch(0.4390 0 0);
-  --font-sans: DM Sans, ui-sans-serif, sans-serif, system-ui;
-  --font-serif: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
-  --font-mono: Geist Mono, ui-monospace, monospace;
-  --radius: 1rem;
-  --shadow-x: 0;
-  --shadow-y: 1px;
-  --shadow-blur: 3px;
-  --shadow-spread: 0px;
-  --shadow-opacity: 0.1;
-  --shadow-color: oklch(0 0 0);
-  --shadow-2xs: 0 1px 3px 0px hsl(0 0% 0% / 0.05);
-  --shadow-xs: 0 1px 3px 0px hsl(0 0% 0% / 0.05);
-  --shadow-sm: 0 1px 3px 0px hsl(0 0% 0% / 0.10), 0 1px 2px -1px hsl(0 0% 0% / 0.10);
-  --shadow: 0 1px 3px 0px hsl(0 0% 0% / 0.10), 0 1px 2px -1px hsl(0 0% 0% / 0.10);
-  --shadow-md: 0 1px 3px 0px hsl(0 0% 0% / 0.10), 0 2px 4px -1px hsl(0 0% 0% / 0.10);
-  --shadow-lg: 0 1px 3px 0px hsl(0 0% 0% / 0.10), 0 4px 6px -1px hsl(0 0% 0% / 0.10);
-  --shadow-xl: 0 1px 3px 0px hsl(0 0% 0% / 0.10), 0 8px 10px -1px hsl(0 0% 0% / 0.10);
-  --shadow-2xl: 0 1px 3px 0px hsl(0 0% 0% / 0.25);
+  --paper: #100e0c;
+  --sheet: #181512;
+  --ink: #f1efeb;
+  --graphite: #a6a09b;
+  --rule: #2b2724;
+  --rule-strong: #3c3733;
+  --stage: #0a0806;
+  --signal: #fa6e58;
+  --signal-hover: #ff8b77;
+  --signal-soft: #3f1a14;
+  --signal-soft-foreground: #feac9b;
+  --level-info: #55aee8;
+  --level-warn: #eeb154;
+  --level-ok: #55c483;
+  --level-debug: #8f8984;
+
+  --primary-foreground: #1e0805;
+  --secondary: #211d1b;
+  --muted: #1e1b19;
+  --accent: #26221f;
+  --destructive: #e8594f;
+  --destructive-foreground: #1e0806;
+  --sidebar: #14110f;
+  --sidebar-primary-foreground: #1e0805;
+  --sidebar-accent: #221e1c;
+
+  --shadow-2xs: 0 1px 2px #00000040;
+  --shadow-xs: 0 1px 2px #0000004d;
+  --shadow-sm: 0 1px 2px #0000004d, 0 2px 6px #0003;
+  --shadow: 0 1px 2px #0000004d, 0 2px 6px #0003;
+  --shadow-md: 0 2px 4px #0000004d, 0 10px 24px -6px #00000073;
+  --shadow-lg: 0 4px 8px #0000004d, 0 24px 48px -12px #0000008c;
+  --shadow-xl: 0 4px 8px #0000004d, 0 24px 48px -12px #0000008c;
+  --shadow-2xl: 0 4px 8px #0000004d, 0 24px 48px -12px #000000a6;
+  --shadow-stage: 0 1px 0 #ffffff0d inset, 0 30px 80px -24px #000000b3;
 }
 
 @theme inline {
@@ -121,6 +134,9 @@
   --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-soft: var(--primary-soft);
+  --color-primary-soft-foreground: var(--primary-soft-foreground);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--muted);
@@ -130,8 +146,15 @@
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
   --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-stage: var(--stage);
+  --color-level-info: var(--level-info);
+  --color-level-warn: var(--level-warn);
+  --color-level-ok: var(--level-ok);
+  --color-level-error: var(--level-error);
+  --color-level-debug: var(--level-debug);
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
   --color-chart-3: var(--chart-3);
@@ -149,10 +172,13 @@
   --font-sans: var(--font-sans);
   --font-mono: var(--font-mono);
   --font-serif: var(--font-serif);
+  --font-heading: var(--font-heading);
 
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
+  --ease-out-expo: var(--ease-out-expo);
+
+  --radius-sm: calc(var(--radius) - 2px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 2px);
   --radius-xl: calc(var(--radius) + 4px);
 
   --shadow-2xs: var(--shadow-2xs);
@@ -163,13 +189,169 @@
   --shadow-lg: var(--shadow-lg);
   --shadow-xl: var(--shadow-xl);
   --shadow-2xl: var(--shadow-2xl);
+  --shadow-stage: var(--shadow-stage);
 }
 
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
+  html {
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
   body {
     @apply bg-background text-foreground;
+    font-feature-settings: "ss01", "cv11";
+  }
+  :is(code, pre, kbd, samp) {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+  ::selection {
+    background: color-mix(in oklch, var(--signal) 28%, transparent);
+  }
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--rule-strong) transparent;
+  }
+}
+
+/* ---------- Blyp brand utilities (shared with blyp.dev) ---------- */
+
+@utility font-heading {
+  font-family: var(--font-heading);
+  font-optical-sizing: auto;
+}
+
+/* Small uppercase label with a signal-colored square, used above section titles. */
+@utility blyp-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.66rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--graphite);
+  &::before {
+    content: "";
+    width: 0.375rem;
+    height: 0.375rem;
+    border-radius: 1px;
+    background: var(--signal);
+    flex-shrink: 0;
+  }
+}
+
+@utility blyp-dot-grid {
+  background-image: radial-gradient(
+    color-mix(in oklch, var(--ink) 14%, transparent) 1px,
+    transparent 1.2px
+  );
+  background-size: 18px 18px;
+}
+
+@utility blyp-grain {
+  position: relative;
+  &::after {
+    content: "";
+    pointer-events: none;
+    position: absolute;
+    inset: 0;
+    opacity: 0.05;
+    mix-blend-mode: multiply;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+  .dark &::after {
+    mix-blend-mode: screen;
+    opacity: 0.035;
+  }
+}
+
+/* Pulsing "live" dot — apply to an element with a background color + rounded-full. */
+@utility blyp-live-dot {
+  position: relative;
+  &::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: inherit;
+    animation: blyp-live-ring 1.8s var(--ease-out-expo) infinite;
+  }
+}
+
+@utility blyp-line-in {
+  animation: blyp-line-in 0.42s var(--ease-out-expo) both;
+}
+
+@utility blyp-fade-up {
+  animation: blyp-fade-up 0.5s var(--ease-out-expo) both;
+}
+
+/* Animated 3×3 lattice used as a "streaming" indicator, matching the docs preview. */
+@utility blyp-lattice-cell {
+  opacity: 0.15;
+  animation: blyp-lattice-on 864ms cubic-bezier(0.77, 0, 0.175, 1) infinite;
+}
+
+@keyframes blyp-live-ring {
+  0% {
+    opacity: 0.55;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(2.6);
+  }
+}
+
+@keyframes blyp-line-in {
+  0% {
+    opacity: 0;
+    filter: blur(2px);
+    transform: translateY(6px);
+  }
+  100% {
+    opacity: 1;
+    filter: none;
+    transform: none;
+  }
+}
+
+@keyframes blyp-fade-up {
+  0% {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  100% {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes blyp-lattice-on {
+  0%,
+  100% {
+    opacity: 0.15;
+  }
+  18%,
+  42% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .blyp-live-dot::after,
+  .blyp-line-in,
+  .blyp-fade-up,
+  .blyp-lattice-cell {
+    animation: none;
+  }
+  .blyp-lattice-cell {
+    opacity: 0.6;
   }
 }

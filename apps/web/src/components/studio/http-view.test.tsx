@@ -149,6 +149,6 @@ describe("HttpView", () => {
 
     expect(mobileRow).toHaveClass("cursor-pointer");
     expect(mobileRow).toHaveClass("outline-none");
-    expect(mobileRow).toHaveClass("focus-visible:bg-muted/40");
+    expect(mobileRow).toHaveClass("focus-visible:bg-muted");
   });
 });

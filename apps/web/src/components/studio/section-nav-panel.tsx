@@ -13,6 +13,7 @@ import {
   Plus,
   Settings2,
   Shield,
+  Timer,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 
@@ -29,8 +30,6 @@ import {
   SidebarGroupContent,
   SidebarGroupLabel,
   SidebarMenu,
-  SidebarMenuBadge,
-  SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
@@ -109,10 +108,12 @@ export function SectionNavPanel({
 
   return (
     <>
-      <SidebarGroup>
-        <SidebarGroupLabel>Sections</SidebarGroupLabel>
+      <SidebarGroup className="py-1">
+        <SidebarGroupLabel className="h-6 px-2 text-[0.68rem] font-medium text-muted-foreground">
+          Sections
+        </SidebarGroupLabel>
         <SidebarGroupContent>
-          <SidebarMenu>
+          <SidebarMenu className="gap-0.5">
             {pinnedTop.map((item) => (
               <SectionButton
                 key={item.id}
@@ -143,7 +144,7 @@ export function SectionNavPanel({
                 <AnimatedSectionRow key={item.id}>
                   <SectionButton
                     active={section === item.id}
-                    icon={getSectionIcon(item.id)}
+                    icon={getSectionIcon(item.id, item.kind === "custom" ? item.icon : undefined)}
                     label={item.label}
                     count={item.count}
                     unread={hasUnread(item, visitedAtBySection)}
@@ -163,35 +164,39 @@ export function SectionNavPanel({
               />
             ))}
             <SidebarMenuItem>
-              <SidebarMenuButton onClick={() => setDialogOpen(true)}>
-                <Plus />
+              <button
+                type="button"
+                onClick={() => setDialogOpen(true)}
+                className={cn(navButtonClass, "text-muted-foreground hover:bg-sidebar-accent hover:text-foreground")}
+              >
+                <Plus className="size-4 shrink-0" />
                 <span>Add section</span>
-              </SidebarMenuButton>
+              </button>
             </SidebarMenuItem>
           </SidebarMenu>
         </SidebarGroupContent>
       </SidebarGroup>
-      <SidebarGroup>
-        <SidebarGroupLabel>Workspace</SidebarGroupLabel>
+      <SidebarGroup className="py-1">
+        <SidebarGroupLabel className="h-6 px-2 text-[0.68rem] font-medium text-muted-foreground">
+          Workspace
+        </SidebarGroupLabel>
         <SidebarGroupContent>
-          <SidebarMenu>
-            <SidebarMenuItem className="group/section-item">
-              <SidebarMenuButton
-                isActive={section === "project-config"}
-                onClick={() => onSelect("project-config")}
-                className="transition-colors duration-150 active:bg-primary/20 active:text-sidebar-accent-foreground"
-              >
-                <Settings2 />
-                <span>Project Config</span>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
+          <SidebarMenu className="gap-0.5">
+            <SectionButton
+              active={section === "project-config"}
+              icon={<Settings2 />}
+              label="Project Config"
+              unread={false}
+              onClick={() => onSelect("project-config")}
+            />
           </SidebarMenu>
         </SidebarGroupContent>
       </SidebarGroup>
       <Dialog open={dialogOpen} onOpenChange={handleDialogOpenChange}>
-        <DialogContent className="max-w-xl p-0">
-          <div className="border-b border-border/60 px-4 py-4">
-            <DialogTitle>Add custom section</DialogTitle>
+        <DialogContent className="max-w-xl gap-0 p-0">
+          <div className="space-y-1 border-b border-border px-4 py-4">
+            <div className="blyp-eyebrow">Custom section</div>
+            <DialogTitle className="font-heading text-base font-semibold tracking-[-0.02em]">Add custom section</DialogTitle>
             <DialogDescription>
               Define field, route, and message rules. The section appears only when matching logs exist.
             </DialogDescription>
@@ -228,6 +233,9 @@ export function SectionNavPanel({
   );
 }
 
+const navButtonClass =
+  "group/nav relative flex h-8 w-full items-center gap-2.5 rounded-md px-2 text-left text-[0.8rem] outline-none transition-colors duration-150 active:scale-[0.98] focus-visible:ring-2 focus-visible:ring-ring/50";
+
 function SectionButton(props: {
   active: boolean;
   icon: ReactNode;
@@ -238,34 +246,68 @@ function SectionButton(props: {
   onClick(): void;
 }) {
   return (
-    <SidebarMenuItem className="group/section-item">
-      <SidebarMenuButton
-        isActive={props.active}
+    <SidebarMenuItem>
+      <button
+        type="button"
+        aria-current={props.active ? "page" : undefined}
+        data-active={props.active || undefined}
         onClick={props.onClick}
         className={cn(
-          "transition-colors duration-150",
-          !props.active ? "hover:bg-primary/20 hover:text-sidebar-accent-foreground" : "!bg-primary/70"
+          navButtonClass,
+          props.active
+            ? "text-primary-soft-foreground"
+            : "text-foreground/80 hover:bg-sidebar-accent hover:text-foreground",
         )}
       >
-        <span className="shrink-0 [&>svg]:size-4">{props.icon}</span>
-        <span>{props.label}</span>
-        {props.unread ? (
-          <span className="ml-1 size-2 rounded-full bg-destructive" aria-hidden />
+        {props.active ? (
+          <motion.span
+            layoutId="studio-nav-active"
+            className="absolute inset-0 rounded-md bg-primary-soft"
+            transition={{ type: "spring", stiffness: 520, damping: 40 }}
+          />
         ) : null}
-      </SidebarMenuButton>
-      {typeof props.count === "number" ? (
-        <SidebarMenuBadge
+        <span
           className={cn(
-            "transition-colors duration-150 group-hover/section-item:text-sidebar-accent-foreground",
-            props.destructive && "text-destructive group-hover/section-item:text-destructive",
-            props.active && !props.destructive && "text-sidebar-accent-foreground",
+            "relative shrink-0 [&>svg]:size-4",
+            !props.active && "text-muted-foreground group-hover/nav:text-foreground",
           )}
         >
-          {props.count}
-        </SidebarMenuBadge>
-      ) : null}
+          {props.icon}
+        </span>
+        <span className="relative min-w-0 truncate">{props.label}</span>
+        {props.unread ? (
+          <span
+            className="blyp-live-dot relative size-1.5 shrink-0 rounded-full bg-level-error"
+            aria-label="New errors"
+          />
+        ) : null}
+        {typeof props.count === "number" ? (
+          <span
+            className={cn(
+              "relative ml-auto font-mono text-[0.68rem] tabular-nums",
+              props.destructive && props.count > 0
+                ? "text-level-error"
+                : props.active
+                  ? "text-primary-soft-foreground/80"
+                  : "text-muted-foreground",
+            )}
+          >
+            {formatNavCount(props.count)}
+          </span>
+        ) : null}
+      </button>
     </SidebarMenuItem>
   );
+}
+
+function formatNavCount(value: number): string {
+  if (value >= 1_000_000) {
+    return `${(value / 1_000_000).toFixed(1).replace(/\.0$/, "")}m`;
+  }
+  if (value >= 1_000) {
+    return `${(value / 1_000).toFixed(1).replace(/\.0$/, "")}k`;
+  }
+  return String(value);
 }
 
 function AnimatedSectionRow({ children }: { children: ReactNode }) {
@@ -305,7 +347,11 @@ function hasUnread(
   return Date.parse(section.lastErrorAt) > Date.parse(visitedAt);
 }
 
-function getSectionIcon(sectionId: string): ReactNode {
+function getSectionIcon(sectionId: string, customIcon?: string): ReactNode {
+  if (customIcon) {
+    return <span className="grid size-4 place-items-center text-[0.8rem] leading-none">{customIcon}</span>;
+  }
+
   switch (sectionId) {
     case "overview":
       return <LayoutDashboard />;
@@ -323,6 +369,8 @@ function getSectionIcon(sectionId: string): ReactNode {
       return <CreditCard />;
     case "database":
       return <Database />;
+    case "background":
+      return <Timer />;
     default:
       return <Circle />;
   }

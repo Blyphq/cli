@@ -1,17 +1,19 @@
 import type { KeyboardEvent } from "react";
 
+import { ChevronLeft, ChevronRight, Network, Waypoints } from "lucide-react";
+
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import type { StudioHttpRequestRow } from "@/lib/studio";
 import {
   formatDateTime,
   formatDurationMs,
   formatRelativeTime,
+  getDurationClasses,
   getHttpStatusBadgeVariant,
 } from "@/lib/studio";
 import { cn } from "@/lib/utils";
-import { ChevronLeft, ChevronRight } from "lucide-react";
 
 import { EmptyState } from "./empty-state";
 import { PanelHeader } from "./panel-header";
@@ -27,6 +29,29 @@ interface HttpRequestTableProps {
   onSelectRecord(recordId: string): void;
   onPageChange(nextOffset: number): void;
   onViewTrace(traceGroupId: string): void;
+}
+
+/**
+ * One responsive grid for every breakpoint: method / route / status / duration on
+ * the first line, trace + time folding onto a second line below `md`.
+ */
+const ROW_GRID =
+  "grid grid-cols-[3.5rem_minmax(0,1fr)_3.5rem_4.5rem] items-center gap-x-3 md:grid-cols-[3.5rem_minmax(0,1fr)_3.5rem_4.5rem_6.5rem_6rem]";
+
+function getHttpMethodClass(method: string): string {
+  switch (method.toUpperCase()) {
+    case "GET":
+      return "text-level-info";
+    case "POST":
+      return "text-level-ok";
+    case "PUT":
+    case "PATCH":
+      return "text-level-warn";
+    case "DELETE":
+      return "text-level-error";
+    default:
+      return "text-muted-foreground";
+  }
 }
 
 export function HttpRequestTable({
@@ -45,134 +70,130 @@ export function HttpRequestTable({
       <EmptyState
         title="No HTTP requests matched"
         description="Try a different route, method, status group, or duration threshold."
+        icon={<Network />}
       />
     );
   }
 
+  const rangeStart = totalRequests === 0 ? 0 : offset + 1;
+  const rangeEnd = Math.min(offset + rows.length, totalRequests);
+
   return (
-    <Card className="min-w-0">
+    <Card className="min-w-0 gap-0 py-0">
       <PanelHeader
+        className="py-3 [.border-b]:pb-3"
         title="Request log"
         description={`${rows.length} shown from ${totalRequests} matching requests`}
       />
-      <CardContent className="p-0">
-        {loading && rows.length === 0 ? (
-          <div className="p-4">
-            <ListRowsSkeleton rows={6} />
+      {loading && rows.length === 0 ? (
+        <div className="p-4">
+          <ListRowsSkeleton rows={6} />
+        </div>
+      ) : null}
+      {rows.length > 0 ? (
+        <div className="min-w-0">
+          <div
+            aria-hidden
+            className={cn(
+              ROW_GRID,
+              "hidden h-8 border-b border-border bg-muted/40 px-4 text-[0.7rem] font-medium text-muted-foreground md:grid",
+            )}
+          >
+            <span>Method</span>
+            <span>Route</span>
+            <span className="text-center">Status</span>
+            <span className="text-right">Duration</span>
+            <span>Trace</span>
+            <span className="text-right">Time</span>
           </div>
-        ) : null}
-        <div className="hidden overflow-x-auto lg:block">
-          <table className="w-full table-fixed text-left text-sm">
-            <thead className="border-b border-border/60 bg-background/60 text-xs uppercase tracking-[0.18em] text-muted-foreground">
-              <tr>
-                <th className="w-24 px-3 py-2 font-medium">Method</th>
-                <th className="px-3 py-2 font-medium">Route</th>
-                <th className="w-24 px-3 py-2 font-medium">Status</th>
-                <th className="w-28 px-3 py-2 font-medium">Duration</th>
-                <th className="w-28 px-3 py-2 font-medium">Trace</th>
-                <th className="w-28 px-3 py-2 font-medium">Time</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => (
-                <tr
+          <div>
+            {rows.map((row) => {
+              const selected = selectedRecordId === row.recordId;
+
+              return (
+                <div
                   key={row.id}
-                  tabIndex={0}
                   role="button"
+                  tabIndex={0}
                   aria-label={`${row.method} ${row.route}`}
+                  aria-current={selected ? "true" : undefined}
                   onClick={() => onSelectRecord(row.recordId)}
                   onKeyDown={(event) => handleRowKeyDown(event, row.recordId, onSelectRecord)}
                   className={cn(
-                    "cursor-pointer border-b border-border/60 outline-none hover:bg-muted/30 focus-visible:bg-muted/40",
-                    selectedRecordId === row.recordId && "bg-primary/10",
+                    ROW_GRID,
+                    "cursor-pointer gap-y-1 border-b border-border/70 px-4 py-2 outline-none transition-colors duration-150 last:border-0 hover:bg-muted/60 focus-visible:bg-muted",
+                    selected && "bg-primary-soft/50 shadow-[inset_2px_0_0_var(--signal)] hover:bg-primary-soft/60",
                   )}
                 >
-                  <td className="px-3 py-2 align-top font-medium">{row.method}</td>
-                  <td className="px-3 py-2 align-top whitespace-normal">{row.route}</td>
-                  <td className="px-3 py-2 align-top">
-                    <Badge variant={getHttpStatusBadgeVariant(row.statusGroup)}>
+                  <span
+                    className={cn(
+                      "font-mono text-[0.72rem] font-medium tracking-tight",
+                      getHttpMethodClass(row.method),
+                    )}
+                  >
+                    {row.method}
+                  </span>
+                  <span
+                    className="truncate font-mono text-[0.75rem] text-foreground"
+                    title={row.rawPath && row.rawPath !== row.route ? `${row.route}\n${row.rawPath}` : row.route}
+                  >
+                    {row.route}
+                  </span>
+                  <span className="flex justify-center">
+                    <Badge variant={getHttpStatusBadgeVariant(row.statusGroup)} className="tabular-nums">
                       {row.statusCode}
                     </Badge>
-                  </td>
-                  <td className="px-3 py-2 align-top">{formatDurationMs(row.durationMs)}</td>
-                  <td className="px-3 py-2 align-top">
-                    <TraceCell row={row} onViewTrace={onViewTrace} />
-                  </td>
-                  <td className="px-3 py-2 align-top text-xs text-muted-foreground" title={formatDateTime(row.timestamp)}>
-                    {formatRelativeTime(row.timestamp)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <div className="divide-y divide-border/60 lg:hidden">
-          {rows.map((row) => (
-            <div
-              key={row.id}
-              role="button"
-              tabIndex={0}
-              aria-label={`${row.method} ${row.route}`}
-              onClick={() => onSelectRecord(row.recordId)}
-              onKeyDown={(event) => {
-                if (event.target !== event.currentTarget) {
-                  return;
-                }
-
-                if (event.key === "Enter" || event.key === " ") {
-                  event.preventDefault();
-                  onSelectRecord(row.recordId);
-                }
-              }}
-              className={cn(
-                "flex w-full cursor-pointer flex-col gap-3 px-3 py-3 text-left outline-none hover:bg-muted/30 focus-visible:bg-muted/40",
-                selectedRecordId === row.recordId && "bg-primary/10",
-              )}
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="text-sm font-medium">
-                    {row.method} {row.route}
+                  </span>
+                  <span
+                    className={cn(
+                      "text-right font-mono text-[0.75rem] tabular-nums",
+                      getDurationClasses(row.durationMs),
+                    )}
+                  >
+                    {formatDurationMs(row.durationMs)}
+                  </span>
+                  <div className="col-span-full flex min-w-0 items-center justify-between gap-3 md:contents">
+                    <span className="flex min-w-0 items-center">
+                      <TraceCell row={row} onViewTrace={onViewTrace} />
+                    </span>
+                    <span
+                      className="text-right font-mono text-[0.7rem] whitespace-nowrap tabular-nums text-muted-foreground/80"
+                      title={formatDateTime(row.timestamp)}
+                    >
+                      {formatRelativeTime(row.timestamp)}
+                    </span>
                   </div>
-                  <div className="text-xs text-muted-foreground">{formatDurationMs(row.durationMs)}</div>
                 </div>
-                <Badge variant={getHttpStatusBadgeVariant(row.statusGroup)}>{row.statusCode}</Badge>
-              </div>
-              <div className="flex items-center justify-between gap-3 text-xs">
-                <TraceCell row={row} onViewTrace={onViewTrace} />
-                <span className="text-muted-foreground" title={formatDateTime(row.timestamp)}>
-                  {formatRelativeTime(row.timestamp)}
-                </span>
-              </div>
-            </div>
-          ))}
-        </div>
-        <div className="flex flex-col gap-3 border-t border-border/60 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="text-xs text-muted-foreground">
-            Showing {totalRequests === 0 ? 0 : offset + 1}-{Math.min(offset + rows.length, totalRequests)} of {totalRequests}
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={offset === 0}
-              onClick={() => onPageChange(Math.max(0, offset - limit))}
-            >
-              <ChevronLeft />
-              Previous
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={offset + limit >= totalRequests}
-              onClick={() => onPageChange(offset + limit)}
-            >
-              Next
-              <ChevronRight />
-            </Button>
+              );
+            })}
           </div>
         </div>
-      </CardContent>
+      ) : null}
+      <div className="flex flex-col gap-2 border-t border-border bg-muted/20 px-4 py-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="font-mono text-[0.7rem] tabular-nums text-muted-foreground">
+          Showing {rangeStart}-{rangeEnd} of {totalRequests}
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={offset === 0}
+            onClick={() => onPageChange(Math.max(0, offset - limit))}
+          >
+            <ChevronLeft />
+            Previous
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={offset + limit >= totalRequests}
+            onClick={() => onPageChange(offset + limit)}
+          >
+            Next
+            <ChevronRight />
+          </Button>
+        </div>
+      </div>
     </Card>
   );
 }
@@ -185,29 +206,37 @@ function TraceCell({
   onViewTrace(traceGroupId: string): void;
 }) {
   if (row.traceGroupId) {
+    const traceGroupId = row.traceGroupId;
+
     return (
       <Button
-        variant="outline"
+        variant="ghost"
         size="xs"
+        className="-ml-2 text-muted-foreground hover:text-foreground"
         onClick={(event) => {
           event.stopPropagation();
-          onViewTrace(row.traceGroupId!);
+          onViewTrace(traceGroupId);
         }}
       >
+        <Waypoints className="size-3" />
         View trace
       </Button>
     );
   }
 
   if (row.traceId) {
-    return <span className="text-xs text-muted-foreground">{row.traceId}</span>;
+    return (
+      <span className="truncate font-mono text-[0.7rem] text-muted-foreground" title={row.traceId}>
+        {row.traceId}
+      </span>
+    );
   }
 
-  return <span className="text-xs text-muted-foreground">n/a</span>;
+  return <span className="font-mono text-[0.7rem] text-muted-foreground/60">n/a</span>;
 }
 
 function handleRowKeyDown(
-  event: KeyboardEvent<HTMLTableRowElement>,
+  event: KeyboardEvent<HTMLDivElement>,
   recordId: string,
   onSelectRecord: (recordId: string) => void,
 ) {

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
 
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -146,9 +146,14 @@ describe("ErrorsView", () => {
       />,
     );
 
-    expect(screen.getByText("CheckoutError")).toBeInTheDocument();
-    await user.click(screen.getAllByRole("combobox")[0]!);
+    const groupedList = screen.getByRole("list", { name: /grouped errors/i });
+    expect(within(groupedList).getByText("CheckoutError")).toBeInTheDocument();
+    expect(within(groupedList).getByText("AuthError")).toBeInTheDocument();
     expect(screen.getByText("Grouped errors")).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /grouped/i })).toHaveAttribute("aria-checked", "true");
+
+    await user.click(screen.getByRole("radio", { name: /raw/i }));
+    expect(onUiChange).toHaveBeenCalledWith(expect.objectContaining({ view: "raw" }));
   });
 
   it("shows the resolved section when toggled on", () => {

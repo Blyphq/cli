@@ -22,7 +22,7 @@ export function DatabaseView({
   onAskAi,
 }: DatabaseViewProps) {
   return (
-    <div className="space-y-4">
+    <div className="flex min-w-0 flex-col gap-4">
       <DatabaseStatsBar
         stats={
           database?.stats ?? {
@@ -46,14 +46,16 @@ export function DatabaseView({
         onSelectRecord={onSelectRecord}
         onAskAi={onAskAi}
       />
-      <DatabaseTransactionPanel
-        transactions={database?.transactions ?? []}
-        onSelectRecord={onSelectRecord}
-      />
-      <DatabaseMigrationPanel
-        migrations={database?.migrationEvents ?? []}
-        onSelectRecord={onSelectRecord}
-      />
+      <div className="grid min-w-0 items-start gap-4 xl:grid-cols-2">
+        <DatabaseTransactionPanel
+          transactions={database?.transactions ?? []}
+          onSelectRecord={onSelectRecord}
+        />
+        <DatabaseMigrationPanel
+          migrations={database?.migrationEvents ?? []}
+          onSelectRecord={onSelectRecord}
+        />
+      </div>
     </div>
   );
 }

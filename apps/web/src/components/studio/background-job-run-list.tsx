@@ -1,8 +1,11 @@
+import { Workflow } from "lucide-react";
+
+import { Card } from "@/components/ui/card";
 import type { StudioBackgroundJobRun, StudioBackgroundJobRunDetail } from "@/lib/studio";
 
+import { BackgroundJobRunCard } from "./background-job-run-card";
 import { EmptyState } from "./empty-state";
 import { PanelHeader } from "./panel-header";
-import { BackgroundJobRunCard } from "./background-job-run-card";
 
 interface BackgroundJobRunListProps {
   runs: StudioBackgroundJobRun[];
@@ -26,6 +29,7 @@ export function BackgroundJobRunList({
   if (runs.length === 0) {
     return (
       <EmptyState
+        icon={<Workflow />}
         title="No background job runs matched"
         description="Try a different file, time range, or search term."
       />
@@ -33,12 +37,18 @@ export function BackgroundJobRunList({
   }
 
   return (
-    <div className="space-y-3">
+    <Card size="sm" className="min-w-0 gap-0 py-0">
       <PanelHeader
+        className="py-3"
         title="Job runs"
         description="Each run is grouped into a discrete execution timeline."
+        action={
+          <span className="font-mono text-[0.7rem] tabular-nums text-muted-foreground">
+            {runs.length} run{runs.length === 1 ? "" : "s"}
+          </span>
+        }
       />
-      <div className="space-y-3">
+      <div className="min-w-0">
         {runs.map((run) => (
           <BackgroundJobRunCard
             key={run.id}
@@ -52,6 +62,6 @@ export function BackgroundJobRunList({
           />
         ))}
       </div>
-    </div>
+    </Card>
   );
 }

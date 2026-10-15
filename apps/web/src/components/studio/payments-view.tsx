@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 
+import { CreditCard } from "lucide-react";
+
 import type { StudioPaymentTrace, StudioPaymentTraceDetail, StudioPaymentsOverview } from "@/lib/studio";
 
 import { EmptyState } from "./empty-state";
@@ -59,10 +61,10 @@ export function PaymentsView({
 
   if (!page && loading) {
     return (
-      <div className="space-y-6">
-        <StatTilesSkeleton />
+      <div className="flex min-w-0 flex-col gap-5">
+        <StatTilesSkeleton count={5} />
         <ListRowsSkeleton rows={5} />
-        <div className="grid gap-4 2xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
+        <div className="grid gap-5 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
           <PanelSkeleton rows={4} compact />
           <PanelSkeleton rows={4} compact />
         </div>
@@ -75,12 +77,13 @@ export function PaymentsView({
       <EmptyState
         title="Payments unavailable"
         description="Studio could not load payment activity for the current scope."
+        icon={<CreditCard />}
       />
     );
   }
 
   return (
-    <div className="space-y-6">
+    <div className="flex min-w-0 flex-col gap-5">
       <PaymentsStatsBar stats={page.stats} />
       <PaymentTraceList
         traces={pagedTraces}
@@ -95,7 +98,7 @@ export function PaymentsView({
         onAskAi={onAskAi}
         onPageChange={setTracePage}
       />
-      <div className="grid gap-4 2xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
+      <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
         <div className="min-w-0">
           <PaymentFailureBreakdownTable rows={page.failures} />
         </div>

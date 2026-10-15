@@ -10,10 +10,9 @@ import {
 
 import { useMediaQuery } from "@/hooks/use-media-query";
 
-import { Bot, Plus, X } from "lucide-react";
+import { Crosshair, MessagesSquare, Plus, Sparkles, X } from "lucide-react";
 
 import { AssistantPanel } from "@/components/studio/assistant-panel";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -182,7 +181,7 @@ export function AssistantSheet({
         <DialogContent
           aria-describedby={descriptionId}
           aria-labelledby={titleId}
-          className="h-dvh max-h-none max-w-none border-0 ring-0"
+          className="flex h-dvh max-h-none max-w-none flex-col border-0 bg-card ring-0"
           initialFocus={status?.enabled ? composerRef : true}
         >
           <MobileAssistantChrome
@@ -211,7 +210,7 @@ export function AssistantSheet({
       data-expanded={desktopExpanded ? "true" : "false"}
       data-testid="assistant-sheet"
       role="complementary"
-      className="fixed inset-y-4 right-4 z-40 min-w-0 transition-[width] duration-200 ease-out"
+      className="fixed inset-y-4 right-4 z-40 min-w-0 transition-[width] duration-200 ease-out-expo"
       onBlurCapture={handleDesktopBlurCapture}
       onFocusCapture={expandDesktop}
       onKeyDownCapture={handleDesktopKeyDownCapture}
@@ -223,8 +222,8 @@ export function AssistantSheet({
     >
       <div
         className={cn(
-          "ring-foreground/10 bg-card text-card-foreground flex h-full min-w-0 flex-col overflow-hidden border ring-1 transition-shadow duration-200",
-          desktopExpanded ? "shadow-2xl" : "shadow-lg",
+          "flex h-full min-w-0 flex-col overflow-hidden rounded-xl border border-border-strong bg-card text-card-foreground transition-shadow duration-200 ease-out-expo",
+          desktopExpanded ? "shadow-stage" : "shadow-lg",
         )}
       >
         <AssistantChrome
@@ -245,6 +244,17 @@ export function AssistantSheet({
   );
 }
 
+function AssistantMark() {
+  return (
+    <span className="grid size-7 shrink-0 place-items-center rounded-md bg-primary-soft text-primary-soft-foreground">
+      <Sparkles className="size-3.5" />
+    </span>
+  );
+}
+
+const ASSISTANT_DESCRIPTION =
+  "Ask for patterns, causal chains, blast radius, and next debugging steps.";
+
 function AssistantChrome({
   descriptionId,
   titleId,
@@ -257,38 +267,39 @@ function AssistantChrome({
   onClose(): void;
 }) {
   return (
-    <div className="border-b border-border/60 px-4 py-3">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 space-y-1">
-          <div className="flex min-w-0 items-center gap-2">
-            <Bot className="size-4" />
-            <h2 id={titleId} className="text-sm font-medium">
-              Assistant
-            </h2>
-          </div>
-          <p id={descriptionId} className="text-xs text-muted-foreground">
-            Ask for patterns, causal chains, blast radius, and next debugging steps.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Badge
-            variant="default"
-            className="max-w-[18rem] truncate"
-            title={scopeLabel}
-          >
-            {scopeLabel}
-          </Badge>
-          <Button
-            aria-label="Close assistant"
-            size="icon-sm"
-            variant="outline"
-            onClick={onClose}
-          >
-            <X />
-          </Button>
-        </div>
+    <div className="flex min-w-0 items-center gap-2.5 border-b border-border px-4 py-3">
+      <AssistantMark />
+      <div className="min-w-0 flex-1">
+        <h2
+          id={titleId}
+          className="font-heading text-[0.9rem] font-semibold leading-tight tracking-[-0.02em]"
+        >
+          Blyp AI
+        </h2>
+        <p id={descriptionId} className="truncate text-[0.72rem] text-muted-foreground">
+          {ASSISTANT_DESCRIPTION}
+        </p>
       </div>
+      <ScopeChip scopeLabel={scopeLabel} className="max-w-[18rem]" />
+      <Button aria-label="Close assistant" size="icon-sm" variant="ghost" onClick={onClose}>
+        <X />
+      </Button>
     </div>
+  );
+}
+
+function ScopeChip({ scopeLabel, className }: { scopeLabel: string; className?: string }) {
+  return (
+    <span
+      title={scopeLabel}
+      className={cn(
+        "inline-flex h-6 min-w-0 shrink items-center gap-1.5 rounded-md border border-border bg-muted/40 px-2 text-[0.7rem] text-muted-foreground",
+        className,
+      )}
+    >
+      <Crosshair className="size-3 shrink-0" aria-hidden />
+      <span className="truncate font-mono text-foreground/85">{scopeLabel}</span>
+    </span>
   );
 }
 
@@ -309,7 +320,8 @@ function AssistantChatSwitcher({
   }));
 
   return (
-    <div className="flex items-center gap-2 border-b border-border/60 px-4 py-3">
+    <div className="flex min-w-0 items-center gap-2 border-b border-border bg-muted/30 px-4 py-2">
+      <MessagesSquare className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
       <div className="min-w-0 flex-1">
         <Select
           items={chatItems}
@@ -320,7 +332,10 @@ function AssistantChatSwitcher({
             }
           }}
         >
-          <SelectTrigger aria-label="Choose chat">
+          <SelectTrigger
+            aria-label="Choose chat"
+            className="h-7 border-transparent bg-transparent px-2 shadow-none hover:border-border-strong hover:bg-card"
+          >
             <SelectValue placeholder="Choose chat" />
           </SelectTrigger>
           <SelectContent>
@@ -332,7 +347,7 @@ function AssistantChatSwitcher({
           </SelectContent>
         </Select>
       </div>
-      <Button variant="outline" size="sm" onClick={onCreateChat}>
+      <Button variant="outline" size="xs" onClick={onCreateChat}>
         <Plus />
         New chat
       </Button>
@@ -352,32 +367,25 @@ function MobileAssistantChrome({
   onClose(): void;
 }) {
   return (
-    <div className="border-b border-border/60 px-4 py-3">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 space-y-1">
-          <div className="flex min-w-0 items-center gap-2">
-            <Bot className="size-4" />
-            <DialogTitle id={titleId}>Assistant</DialogTitle>
-          </div>
-          <DialogDescription id={descriptionId}>
-            Ask for patterns, causal chains, blast radius, and next debugging
-            steps.
+    <div className="space-y-2.5 border-b border-border px-4 py-3">
+      <div className="flex min-w-0 items-center gap-2.5">
+        <AssistantMark />
+        <div className="min-w-0 flex-1">
+          <DialogTitle
+            id={titleId}
+            className="font-heading text-[0.9rem] font-semibold leading-tight tracking-[-0.02em]"
+          >
+            Blyp AI
+          </DialogTitle>
+          <DialogDescription id={descriptionId} className="text-[0.72rem] text-muted-foreground">
+            {ASSISTANT_DESCRIPTION}
           </DialogDescription>
         </div>
-        <Button
-          aria-label="Close assistant"
-          size="icon-sm"
-          variant="outline"
-          onClick={onClose}
-        >
+        <Button aria-label="Close assistant" size="icon-sm" variant="ghost" onClick={onClose}>
           <X />
         </Button>
       </div>
-      <div className="pt-3">
-        <Badge variant="default" className="max-w-full truncate" title={scopeLabel}>
-          {scopeLabel}
-        </Badge>
-      </div>
+      <ScopeChip scopeLabel={scopeLabel} className="max-w-full" />
     </div>
   );
 }

@@ -88,7 +88,8 @@ export function ChartTooltipContent({
   labelFormatter,
   formatter,
   hideLabel = false,
-}: React.ComponentProps<typeof RechartsPrimitive.Tooltip> & {
+}: RechartsPrimitive.DefaultTooltipContentProps & {
+  active?: boolean;
   hideLabel?: boolean;
 }) {
   const { config } = useChart();
@@ -105,11 +106,11 @@ export function ChartTooltipContent({
         </div>
       ) : null}
       <div className="space-y-1">
-        {payload.map((item) => {
+        {payload.map((item, index) => {
           const key = String(item.dataKey ?? item.name ?? "");
           const labelText = config[key]?.label ?? item.name ?? key;
           const itemValue = formatter
-            ? formatter(item.value, item.name, item, payload)
+            ? formatter(item.value, item.name, item, index, payload)
             : item.value;
 
           return (

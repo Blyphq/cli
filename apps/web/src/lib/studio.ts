@@ -72,7 +72,10 @@ export type StudioBadgeVariant =
   | "secondary"
   | "muted"
   | "outline"
-  | "destructive";
+  | "destructive"
+  | "info"
+  | "success"
+  | "warning";
 
 export interface StudioAssistantMessageMetadata {
   references?: StudioAssistantReference[];
@@ -297,20 +300,41 @@ export function fromCalendarFilterValue(value: string): Date | undefined {
 export function getLevelClasses(level: string): string {
   switch (level.toLowerCase()) {
     case "critical":
-      return "border-destructive/30 bg-destructive/10 text-destructive";
+    case "fatal":
+      return "border-level-error/40 bg-level-error text-primary-foreground";
     case "error":
-      return "border-destructive/20 bg-destructive/5 text-destructive";
+      return "border-transparent bg-level-error/12 text-level-error";
     case "warning":
     case "warn":
-      return "border-secondary bg-secondary text-secondary-foreground";
+      return "border-transparent bg-level-warn/12 text-level-warn";
     case "success":
-      return "border-primary/20 bg-primary/5 text-primary";
+      return "border-transparent bg-level-ok/12 text-level-ok";
     case "debug":
-      return "border-border bg-accent text-accent-foreground";
+    case "trace":
+      return "border-transparent bg-level-debug/12 text-level-debug";
     case "info":
-      return "border-primary/30 bg-primary/10 text-primary";
+      return "border-transparent bg-level-info/12 text-level-info";
     default:
-      return "border-border bg-muted text-muted-foreground";
+      return "border-transparent bg-muted text-muted-foreground";
+  }
+}
+
+/** Solid accent color for a log level — used for dots, bars and sparklines. */
+export function getLevelDotClass(level: string): string {
+  switch (level.toLowerCase()) {
+    case "critical":
+    case "fatal":
+    case "error":
+      return "bg-level-error";
+    case "warning":
+    case "warn":
+      return "bg-level-warn";
+    case "success":
+      return "bg-level-ok";
+    case "info":
+      return "bg-level-info";
+    default:
+      return "bg-level-debug";
   }
 }
 
@@ -320,12 +344,12 @@ export function getStatusClasses(
   switch (status) {
     case "found":
     case "valid":
-      return "border-primary/30 bg-primary/10 text-primary";
+      return "border-transparent bg-level-ok/12 text-level-ok";
     case "not-found":
-      return "border-secondary bg-secondary text-secondary-foreground";
+      return "border-transparent bg-level-warn/12 text-level-warn";
     case "error":
     case "invalid":
-      return "border-destructive/30 bg-destructive/10 text-destructive";
+      return "border-transparent bg-level-error/12 text-level-error";
   }
 }
 
@@ -357,7 +381,7 @@ export function getSourceBadgeVariant(
     case "structured":
       return "secondary";
     case "client":
-      return "default";
+      return "info";
     case "unknown":
       return "muted";
     default:
@@ -371,11 +395,11 @@ export function getDurationClasses(value: number | null | undefined): string {
   }
 
   if (value > 500) {
-    return "text-destructive";
+    return "text-level-error";
   }
 
   if (value > 100) {
-    return "text-amber-600";
+    return "text-level-warn";
   }
 
   return "text-foreground";
@@ -388,24 +412,24 @@ export function getHttpStatusBadgeVariant(
     case "5xx":
       return "destructive";
     case "4xx":
-      return "secondary";
+      return "warning";
     case "3xx":
-      return "outline";
+      return "info";
     default:
-      return "default";
+      return "success";
   }
 }
 
 export function getHttpStatusClasses(statusGroup: StudioHttpStatusGroup): string {
   switch (statusGroup) {
     case "5xx":
-      return "border-destructive/30 bg-destructive/10 text-destructive";
+      return "border-transparent bg-level-error/12 text-level-error";
     case "4xx":
-      return "border-amber-500/30 bg-amber-500/10 text-amber-700";
+      return "border-transparent bg-level-warn/12 text-level-warn";
     case "3xx":
-      return "border-border bg-muted text-muted-foreground";
+      return "border-transparent bg-level-info/12 text-level-info";
     default:
-      return "border-primary/30 bg-primary/10 text-primary";
+      return "border-transparent bg-level-ok/12 text-level-ok";
   }
 }
 
@@ -414,9 +438,9 @@ export function getHttpPerformanceRowClasses(
 ): string {
   switch (highlight) {
     case "error":
-      return "bg-destructive/5";
+      return "bg-level-error/[0.06]";
     case "slow":
-      return "bg-amber-500/5";
+      return "bg-level-warn/[0.06]";
     default:
       return "";
   }
@@ -435,12 +459,12 @@ export function getBackgroundJobStatusBadgeVariant(
 ): StudioBadgeVariant {
   switch (status) {
     case "COMPLETED":
-      return "default";
+      return "success";
     case "FAILED":
     case "TIMEOUT":
       return "destructive";
     default:
-      return "secondary";
+      return "info";
   }
 }
 
@@ -470,12 +494,12 @@ export function getPaymentTraceStatusBadgeVariant(
 ): StudioBadgeVariant {
   switch (status) {
     case "COMPLETED":
-      return "default";
+      return "success";
     case "DECLINED":
     case "ERROR":
       return "destructive";
     default:
-      return "secondary";
+      return "info";
   }
 }
 
@@ -662,7 +686,7 @@ export function getAuthOutcomeBadgeVariant(
 ): StudioBadgeVariant {
   switch (outcome) {
     case "success":
-      return "default";
+      return "success";
     case "failure":
       return "destructive";
     default:
@@ -743,12 +767,12 @@ export function formatOverviewTrend(
 export function getOverviewStatusClasses(status: StudioOverviewStatus): string {
   switch (status) {
     case "critical":
-      return "border-destructive/40 bg-destructive/8 text-destructive";
+      return "border-level-error/35 bg-level-error/[0.07] text-level-error";
     case "warning":
-      return "border-amber-500/30 bg-amber-500/8 text-amber-200 dark:text-amber-300";
+      return "border-level-warn/35 bg-level-warn/[0.07] text-level-warn";
     case "healthy":
     default:
-      return "border-primary/30 bg-primary/8 text-primary";
+      return "border-border bg-card text-level-ok";
   }
 }
 export function formatRelativeToSessionStart(
@@ -788,11 +812,11 @@ export function getAgentTaskStatusBadgeVariant(
     case "FAILED":
       return "destructive";
     case "COMPLETED":
-      return "default";
+      return "success";
     case "TIMEOUT":
-      return "secondary";
+      return "warning";
     default:
-      return "outline";
+      return "info";
   }
 }
 

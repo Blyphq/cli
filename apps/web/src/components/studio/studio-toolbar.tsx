@@ -1,18 +1,18 @@
 import type { ReactNode } from "react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import {
-  Bot,
   CalendarDays,
   LayoutPanelTop,
   RotateCcw,
   Search,
   SlidersHorizontal,
+  Sparkles,
+  X,
 } from "lucide-react";
 
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
-import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
@@ -36,46 +36,44 @@ import {
   toCalendarFilterValue,
 } from "@/lib/studio";
 
-import { TruncatedPath } from "./truncated-path";
-
 interface StudioToolbarProps {
-  draftProjectPath: string;
   facets: StudioFacets | undefined;
   files: StudioFile[];
   filters: StudioFilters;
   grouping: StudioGroupingMode;
   meta: StudioMeta | undefined;
   section: StudioSectionId;
-  onDraftProjectPathChange(value: string): void;
   onFilterChange(next: StudioFilters): void;
   onGroupingChange(value: StudioGroupingMode): void;
-  onInspect(): void;
   onStartStandaloneChat(): void;
   onResetFilters(): void;
 }
 
-
 export function StudioToolbar({
-  draftProjectPath,
   facets,
   files,
   filters,
   grouping,
   meta,
   section,
-  onDraftProjectPathChange,
   onFilterChange,
   onGroupingChange,
-  onInspect,
   onStartStandaloneChat,
   onResetFilters,
 }: StudioToolbarProps) {
-  const currentTarget = meta?.project.absolutePath || draftProjectPath;
+  const searchRef = useRef<HTMLInputElement>(null);
   const authMode = section === "auth";
   const backgroundMode = section === "background";
   const httpMode = section === "http";
   const overviewMode = section === "overview";
   const disableClassificationControls = authMode || overviewMode || backgroundMode || httpMode;
+  const activeFilterCount = [
+    filters.level,
+    filters.type,
+    filters.fileId,
+    filters.from,
+    filters.to,
+  ].filter(Boolean).length;
   const disabledControlText = overviewMode
     ? {
         level: "Overview doesn't filter by level",
@@ -100,72 +98,89 @@ export function StudioToolbar({
         view: "Auth timeline",
       };
 
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const typing =
+        target?.isContentEditable ||
+        target?.tagName === "INPUT" ||
+        target?.tagName === "TEXTAREA" ||
+        target?.tagName === "SELECT";
+      if (typing) {
+        return;
+      }
+      if (event.key === "/" || ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k")) {
+        event.preventDefault();
+        searchRef.current?.focus();
+        searchRef.current?.select();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
   return (
-    <Card className="overflow-visible border-border/70 bg-card">
-      <CardContent className="space-y-4 p-4">
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-end">
-          <div className="min-w-0 space-y-3">
-            <div className="min-w-0 space-y-1">
-              <div className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">
-                Studio
-              </div>
-              {currentTarget ? (
-                <TruncatedPath value={currentTarget} />
-              ) : (
-                <div className="text-xs text-muted-foreground">
-                  Inspect a local project using its current Blyp config and logs.
-                </div>
-              )}
-            </div>
-            <div className="flex min-w-0 flex-col gap-2 sm:flex-row">
-              <Input
-                className="flex-1"
-                value={draftProjectPath}
-                onChange={(event) => onDraftProjectPathChange(event.currentTarget.value)}
-                placeholder="Absolute or relative path"
-              />
-              <Button onClick={onInspect}>Inspect</Button>
-            </div>
-          </div>
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <Button
-              aria-label="Chat with Blyp"
-              variant="outline"
-              size="sm"
-              onClick={onStartStandaloneChat}
-            >
-              <Bot />
-              Chat with Blyp
-            </Button>
-          </div>
-        </div>
-        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
-          <FilterBox icon={<Search className="size-3.5" />} label="Search">
-            <Input
-              value={filters.search}
-              onChange={(event) =>
-                onFilterChange({ ...filters, search: event.currentTarget.value })
-              }
-              placeholder="Message, bindings, data"
-            />
-          </FilterBox>
-          <div className="flex justify-start md:justify-end">
+    <div className="order-last flex min-w-0 flex-1 basis-full items-center justify-end gap-2 sm:order-none sm:basis-auto">
+      <label className="group/search relative flex h-8 w-full min-w-0 max-w-[22rem] items-center gap-2 rounded-md border border-border-strong bg-card px-2.5 text-[0.78rem] shadow-xs transition-[border-color,box-shadow] duration-150 focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/25 hover:border-foreground/20">
+        <Search className="size-3.5 shrink-0 text-muted-foreground" />
+        <span className="sr-only">Search</span>
+        <input
+          ref={searchRef}
+          value={filters.search}
+          onChange={(event) =>
+            onFilterChange({ ...filters, search: event.currentTarget.value })
+          }
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              event.currentTarget.blur();
+            }
+          }}
+          placeholder="Message, bindings, data"
+          className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-muted-foreground/80"
+        />
+        {filters.search ? (
+          <button
+            type="button"
+            aria-label="Clear search"
+            onClick={() => onFilterChange({ ...filters, search: "" })}
+            className="grid size-5 place-items-center rounded-[4px] text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            <X className="size-3" />
+          </button>
+        ) : (
+          <kbd className="hidden rounded-[3px] bg-muted px-1 font-mono text-[0.62rem] text-muted-foreground sm:inline">
+            /
+          </kbd>
+        )}
+      </label>
+      <div className="flex shrink-0 items-center gap-2">
             <Popover>
               <PopoverTrigger
+                aria-label="Filters"
                 className={buttonVariants({
                   variant: "outline",
                   size: "default",
-                  className: "w-full md:w-auto",
                 })}
               >
                 <SlidersHorizontal />
-                Filters
+                <span className="hidden sm:inline">Filters</span>
+                {activeFilterCount > 0 ? (
+                  <span className="grid h-4 min-w-4 place-items-center rounded-[4px] bg-primary-soft px-1 font-mono text-[0.6rem] text-primary-soft-foreground">
+                    {activeFilterCount}
+                  </span>
+                ) : null}
               </PopoverTrigger>
               <PopoverContent
-                className="w-[min(94vw,56rem)] p-4"
+                className="w-[min(94vw,44rem)] gap-0 p-0"
                 align="end"
               >
-                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
+                  <div className="blyp-eyebrow">Filters</div>
+                  <span className="font-mono text-[0.66rem] text-muted-foreground">
+                    {activeFilterCount} active
+                  </span>
+                </div>
+                <div className="grid gap-3 p-4 md:grid-cols-2 xl:grid-cols-3">
                   <FilterBox icon={<SlidersHorizontal className="size-3.5" />} label="Level">
                     {disableClassificationControls ? (
                       <Input value={disabledControlText.level} readOnly disabled />
@@ -282,18 +297,24 @@ export function StudioToolbar({
                     />
                   </FilterBox>
                 </div>
-                <div className="mt-4 flex justify-end">
-                  <Button variant="outline" size="sm" onClick={onResetFilters}>
+                <div className="flex justify-end border-t border-border px-4 py-2.5">
+                  <Button variant="ghost" size="sm" onClick={onResetFilters}>
                     <RotateCcw />
                     Reset
                   </Button>
                 </div>
               </PopoverContent>
             </Popover>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
+            <Button
+              aria-label="Chat with Blyp"
+              variant="outline"
+              onClick={onStartStandaloneChat}
+            >
+              <Sparkles className="text-primary" />
+              <span className="hidden md:inline">Ask AI</span>
+            </Button>
+      </div>
+    </div>
   );
 }
 
@@ -312,7 +333,7 @@ function FilterBox({
 }) {
   return (
     <div className="grid min-w-0 gap-2">
-      <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+      <div className="flex items-center gap-1.5 text-[0.7rem] font-medium text-muted-foreground [&>svg]:size-3">
         {icon}
         {label}
       </div>
@@ -340,7 +361,7 @@ function DateFilterPicker({
       <PopoverTrigger
         className={buttonVariants({
           className:
-            "w-full justify-between border-input bg-background px-2.5 text-left text-xs font-normal text-foreground hover:bg-muted/50",
+            "w-full justify-between px-2.5 text-left text-xs font-normal text-foreground",
           size: "default",
           variant: "outline",
         })}
@@ -354,9 +375,7 @@ function DateFilterPicker({
       </PopoverTrigger>
       <PopoverContent className="w-auto p-0" align="start">
         <div className="flex items-center justify-between border-b border-border/60 px-3 py-2">
-          <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
-            {label} boundary
-          </div>
+          <div className="blyp-eyebrow">{label} boundary</div>
           <Button
             variant="ghost"
             size="xs"

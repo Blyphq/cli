@@ -1,39 +1,62 @@
-import { Card, CardContent } from "@/components/ui/card";
-import type { StudioBackgroundJobsOverview } from "@/lib/studio";
+import type { StudioBackgroundJobRun, StudioBackgroundJobsOverview } from "@/lib/studio";
 import { formatDuration, formatPercent } from "@/lib/studio";
+
+import { getRunAttempt } from "./background-job-run-card";
+import { StatCell, StatStrip } from "./studio-primitives";
 
 interface BackgroundJobsStatsBarProps {
   stats: StudioBackgroundJobsOverview["stats"];
+  /** Optional run rows used to count retried runs (from logged attempt fields). */
+  runs?: readonly StudioBackgroundJobRun[];
 }
 
-export function BackgroundJobsStatsBar({ stats }: BackgroundJobsStatsBarProps) {
-  const items = [
-    { label: "Jobs detected", value: String(stats.jobsDetected) },
-    { label: "Total runs", value: String(stats.totalRuns) },
-    { label: "Success rate", value: formatPercent(stats.successRate) },
-    {
-      label: "Failed runs",
-      value: String(stats.failedRuns),
-      meta: stats.mostCommonFailureReason ?? "No failures detected",
-    },
-    { label: "Avg duration", value: formatDuration(stats.avgDurationMs) },
-  ];
+export function BackgroundJobsStatsBar({ stats, runs }: BackgroundJobsStatsBarProps) {
+  const attempts = (runs ?? []).map(getRunAttempt).filter((value): value is number => value !== null);
+  const retriedRuns = attempts.filter((attempt) => attempt > 1).length;
+  const hasAttemptData = attempts.length > 0;
 
   return (
-    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-      {items.map((item) => (
-        <Card key={item.label} size="sm">
-          <CardContent className="space-y-1 p-4">
-            <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
-              {item.label}
-            </div>
-            <div className="break-words text-sm font-medium">{item.value}</div>
-            {item.meta ? (
-              <div className="text-xs text-muted-foreground">{item.meta}</div>
-            ) : null}
-          </CardContent>
-        </Card>
-      ))}
-    </div>
+    <StatStrip
+      columns={
+        hasAttemptData
+          ? "grid-cols-2 @2xl:grid-cols-3 @5xl:grid-cols-5"
+          : "grid-cols-2 @2xl:grid-cols-4"
+      }
+    >
+      <StatCell
+        label="Jobs detected"
+        value={stats.jobsDetected}
+        hint={`Distinct job type${stats.jobsDetected === 1 ? "" : "s"}`}
+      />
+      <StatCell
+        label="Total runs"
+        value={stats.totalRuns}
+        hint={
+          <span className="font-mono tabular-nums">
+            {stats.totalRuns > 0 ? `${formatPercent(stats.successRate)} success` : "No runs yet"}
+          </span>
+        }
+      />
+      <StatCell
+        label="Failed runs"
+        value={stats.failedRuns}
+        tone={stats.failedRuns > 0 ? "error" : "neutral"}
+        hint={stats.mostCommonFailureReason ?? "No failures detected"}
+      />
+      {hasAttemptData ? (
+        <StatCell
+          label="Retried runs"
+          value={retriedRuns}
+          tone={retriedRuns > 0 ? "warn" : "neutral"}
+          hint={`${attempts.length} run${attempts.length === 1 ? "" : "s"} report attempts`}
+        />
+      ) : null}
+      <StatCell
+        label="Avg duration"
+        value={formatDuration(stats.avgDurationMs)}
+        hint="Per run"
+        className={hasAttemptData ? "col-span-2 @2xl:col-span-2 @5xl:col-span-1" : undefined}
+      />
+    </StatStrip>
   );
 }

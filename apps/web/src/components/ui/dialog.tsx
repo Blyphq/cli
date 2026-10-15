@@ -48,7 +48,7 @@ const DialogContent = React.forwardRef<
           ref={ref}
           data-slot="dialog-content"
           className={cn(
-            "data-open:animate-in data-closed:animate-out data-closed:fade-out-0 data-open:fade-in-0 data-closed:zoom-out-95 data-open:zoom-in-95 ring-foreground/10 bg-background text-foreground relative w-full border shadow-xl ring-1 outline-none duration-150",
+            "data-open:animate-in data-closed:animate-out data-closed:fade-out-0 data-open:fade-in-0 data-closed:zoom-out-95 data-open:zoom-in-95 ring-border shadow-lg bg-background text-foreground relative w-full border shadow-xl ring-1 outline-none duration-150",
             className,
           )}
           {...props}

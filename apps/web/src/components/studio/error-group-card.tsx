@@ -1,12 +1,21 @@
 import type { KeyboardEvent } from "react";
 
+import { CheckCircle2, EyeOff, FileCode2 } from "lucide-react";
+
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { StudioErrorGroup } from "@/lib/studio";
-import { formatCompactDateTime } from "@/lib/studio";
+import { formatCompactDateTime, formatDateTime } from "@/lib/studio";
 import { cn } from "@/lib/utils";
 
-import { Sparkline } from "./sparkline";
+import {
+  ERROR_ROW_BASE,
+  ERROR_ROW_SELECTED,
+  formatErrorHttpSummary,
+  getErrorSourceLabel,
+  getErrorStatusBadgeVariant,
+} from "./error-group-row";
+import { ErrorSparkline } from "./error-sparkline";
 
 interface ErrorGroupCardProps {
   group: StudioErrorGroup;
@@ -16,6 +25,7 @@ interface ErrorGroupCardProps {
   onIgnore(groupId: string): void;
 }
 
+/** Issue-tracker style row with inline Resolve / Ignore actions. */
 export function ErrorGroupCard({
   group,
   selected,
@@ -23,92 +33,90 @@ export function ErrorGroupCard({
   onResolve,
   onIgnore,
 }: ErrorGroupCardProps) {
-  const source =
-    group.fingerprintSource.relativePath
-      ? `${group.fingerprintSource.relativePath}${group.fingerprintSource.line ? `:${group.fingerprintSource.line}` : ""}`
-      : group.sourceLocation
-        ? `${group.sourceLocation.relativePath}:${group.sourceLocation.line}`
-        : null;
+  const source = getErrorSourceLabel(group);
+  const http = formatErrorHttpSummary(group.http);
   const statusLabel = group.occurrenceCount > 1 ? "Recurring" : "New";
+  const name = group.errorType ?? group.message;
 
   return (
     <div
       role="button"
       tabIndex={0}
+      aria-current={selected ? "true" : undefined}
       onClick={() => onSelect(group.fingerprint)}
       onKeyDown={(event) => handleCardKeyDown(event, group.fingerprint, onSelect)}
-      className={cn(
-        "w-full space-y-3 border border-border/60 bg-background/50 p-4 text-left transition-colors hover:bg-muted/30",
-        selected && "border-primary/50 bg-primary/5",
-      )}
+      className={cn(ERROR_ROW_BASE, "cursor-pointer items-start", selected && ERROR_ROW_SELECTED)}
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 space-y-1">
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <div className="truncate text-sm font-medium">
-              {group.errorType ?? "Error"}
-            </div>
-            <Badge variant={group.occurrenceCount === 1 ? "default" : "secondary"}>
-              {statusLabel}
-            </Badge>
-          </div>
-          <div className="line-clamp-2 break-words text-sm text-muted-foreground">
-            {group.messageFirstLine}
-          </div>
+      <div className="min-w-0 flex-1 space-y-1">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="truncate text-[0.82rem] font-medium text-foreground">
+            {group.errorType ?? "Error"}
+          </span>
+          <Badge variant={getErrorStatusBadgeVariant(statusLabel)}>{statusLabel}</Badge>
         </div>
-        <div className="text-right text-xs text-muted-foreground">
-          {group.occurrenceCount} time{group.occurrenceCount === 1 ? "" : "s"}
+        <div className="line-clamp-2 text-[0.78rem] break-words text-muted-foreground">
+          {group.messageFirstLine}
+        </div>
+        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[0.68rem] tabular-nums text-muted-foreground/90">
+          {source ? (
+            <span className="inline-flex min-w-0 items-center gap-1" title={source}>
+              <FileCode2 aria-hidden className="size-3 shrink-0 text-muted-foreground/70" />
+              <span className="truncate">{source}</span>
+            </span>
+          ) : null}
+          {http ? <span className="truncate">{http}</span> : null}
+          <span title={formatDateTime(group.firstSeenAt)}>first {formatCompactDateTime(group.firstSeenAt)}</span>
+          <span title={formatDateTime(group.lastSeenAt)}>last {formatCompactDateTime(group.lastSeenAt)}</span>
+          {group.sectionTags.map((tag) => (
+            <span
+              key={`${group.fingerprint}:${tag}`}
+              className="inline-flex h-4 items-center rounded-[3px] bg-muted px-1 text-[0.62rem] text-muted-foreground"
+            >
+              {tag}
+            </span>
+          ))}
         </div>
       </div>
-      <div className="flex items-center justify-between gap-3">
-        <div className="min-w-0 flex-1 space-y-2">
-          <div className="flex min-w-0 flex-wrap gap-2 text-[11px] text-muted-foreground">
-            <span>First {formatCompactDateTime(group.firstSeenAt)}</span>
-            <span>Last {formatCompactDateTime(group.lastSeenAt)}</span>
-            {source ? <span>{source}</span> : null}
-            {group.http?.method && (group.http.path || group.http.url) ? (
-              <span>
-                {group.http.method} {group.http.path ?? group.http.url} {group.http.statusCode ?? ""}
-              </span>
-            ) : null}
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {group.sectionTags.map((tag) => (
-              <Badge key={`${group.fingerprint}:${tag}`} variant="outline">
-                {tag}
-              </Badge>
-            ))}
-          </div>
+      <div className="flex shrink-0 flex-col items-end gap-1.5">
+        <div className="flex items-center gap-3">
+          <ErrorSparkline buckets={group.sparklineBuckets} className="hidden h-6 w-20 sm:block" />
+          <span className="font-mono text-[0.8rem] font-medium tabular-nums text-foreground">
+            {group.occurrenceCount.toLocaleString()}
+            <span className="ml-1 font-sans text-[0.66rem] font-normal text-muted-foreground">
+              {group.occurrenceCount === 1 ? "event" : "events"}
+            </span>
+          </span>
         </div>
-        <Sparkline points={group.sparklineBuckets} className="h-6 w-24 shrink-0 text-primary" />
-      </div>
-      <div className="flex flex-wrap justify-end gap-2">
-        {onResolve ? (
+        <div className="flex gap-1 opacity-100 transition-opacity duration-150 sm:opacity-0 sm:group-hover/row:opacity-100 sm:group-focus-within/row:opacity-100">
+          {onResolve ? (
+            <Button
+              type="button"
+              aria-label={`Resolve ${name}`}
+              variant="outline"
+              size="xs"
+              onClick={(event) => {
+                event.stopPropagation();
+                onResolve(group.fingerprint);
+              }}
+            >
+              <CheckCircle2 />
+              Resolve
+            </Button>
+          ) : null}
           <Button
             type="button"
-            aria-label={`Resolve ${group.errorType ?? group.message}`}
+            aria-label={`Ignore ${name}`}
             variant="outline"
             size="xs"
             onClick={(event) => {
               event.stopPropagation();
-              onResolve(group.fingerprint);
+              onIgnore(group.fingerprint);
             }}
           >
-            Resolved
+            <EyeOff />
+            Ignore
           </Button>
-        ) : null}
-        <Button
-          type="button"
-          aria-label={`Ignore ${group.errorType ?? group.message}`}
-          variant="outline"
-          size="xs"
-          onClick={(event) => {
-            event.stopPropagation();
-            onIgnore(group.fingerprint);
-          }}
-        >
-          Ignore
-        </Button>
+        </div>
       </div>
     </div>
   );

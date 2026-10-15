@@ -1,15 +1,13 @@
-import { ArrowDownRight, ArrowRight, ArrowUpRight } from "lucide-react";
+import type { ReactNode } from "react";
 
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
 import {
   formatOverviewMetricValue,
-  formatOverviewTrend,
   formatRelativeTime,
-  getOverviewStatusClasses,
   type StudioOverview,
+  type StudioOverviewStatus,
 } from "@/lib/studio";
-import { cn } from "@/lib/utils";
+
+import { StatCell, StatStrip, StatusDot, type StatCellProps, type StudioTone } from "./studio-primitives";
 
 interface OverviewHealthBarProps {
   stats: StudioOverview["stats"];
@@ -17,69 +15,98 @@ interface OverviewHealthBarProps {
   now: number;
 }
 
-export function OverviewHealthBar({
-  stats,
-  connectedAt,
-  now,
-}: OverviewHealthBarProps) {
+/** Healthy metrics stay neutral; only problems pick up a level tone. */
+function toneForStatus(status: StudioOverviewStatus): StudioTone {
+  switch (status) {
+    case "critical":
+      return "error";
+    case "warning":
+      return "warn";
+    default:
+      return "neutral";
+  }
+}
+
+function StatLabel({ children, title }: { children: ReactNode; title: string }) {
+  return (
+    <span title={title} className="truncate">
+      {children}
+    </span>
+  );
+}
+
+function formatTrendLabel(deltaPercent: number | null, trend: "up" | "down" | "flat"): string {
+  if (trend === "flat" || deltaPercent === null || !Number.isFinite(deltaPercent)) {
+    return "No change";
+  }
+  return `${Math.abs(deltaPercent).toFixed(1)}%`;
+}
+
+export function OverviewHealthBar({ stats, connectedAt, now }: OverviewHealthBarProps) {
   const uptimeMs = Math.max(0, now - Date.parse(connectedAt));
-  const cards = [
-    stats.totalEvents,
-    stats.errorRate,
-    stats.activeTraces,
-    stats.warnings,
-    stats.avgResponseTime,
+  const { totalEvents, errorRate, activeTraces, warnings, avgResponseTime, uptime } = stats;
+
+  const cells: Array<StatCellProps & { key: string }> = [
     {
-      ...stats.uptime,
-      value: uptimeMs,
-      helperText: `Connected ${formatRelativeTime(connectedAt, now)}.`,
+      key: "total-events",
+      label: <StatLabel title={totalEvents.helperText}>{totalEvents.label}</StatLabel>,
+      value: formatOverviewMetricValue(totalEvents.label, totalEvents.value),
+      tone: toneForStatus(totalEvents.status),
+      hint: totalEvents.value > 0 ? "In current scope" : "Nothing in scope yet",
     },
-  ] as const;
+    {
+      key: "error-rate",
+      label: <StatLabel title={errorRate.helperText}>{errorRate.label}</StatLabel>,
+      value: formatOverviewMetricValue(errorRate.label, errorRate.value),
+      tone: toneForStatus(errorRate.status),
+      trend: {
+        direction: errorRate.trend,
+        label: formatTrendLabel(errorRate.deltaPercent, errorRate.trend),
+        goodWhen: "down",
+      },
+      hint: errorRate.comparisonWindowLabel,
+    },
+    {
+      key: "active-traces",
+      label: <StatLabel title={activeTraces.helperText}>{activeTraces.label}</StatLabel>,
+      value: formatOverviewMetricValue(activeTraces.label, activeTraces.value),
+      tone: toneForStatus(activeTraces.status),
+      hint: "Started, not yet completed",
+    },
+    {
+      key: "warnings",
+      label: <StatLabel title={warnings.helperText}>{warnings.label}</StatLabel>,
+      value: formatOverviewMetricValue(warnings.label, warnings.value),
+      tone: toneForStatus(warnings.status),
+      hint: "Last 15 min",
+    },
+    {
+      key: "avg-response-time",
+      label: <StatLabel title={avgResponseTime.helperText}>{avgResponseTime.label}</StatLabel>,
+      value: formatOverviewMetricValue(avgResponseTime.label, avgResponseTime.value),
+      tone: toneForStatus(avgResponseTime.status),
+      hint: avgResponseTime.value === null ? "No HTTP timing yet" : "p50 across HTTP",
+    },
+    {
+      key: "uptime",
+      label: (
+        <span title={uptime.helperText} className="inline-flex min-w-0 items-center gap-1.5">
+          <StatusDot tone="ok" />
+          <span className="truncate">{uptime.label}</span>
+        </span>
+      ),
+      value: formatOverviewMetricValue(uptime.label, uptimeMs),
+      tone: "neutral",
+      dot: false,
+      hint: `Connected ${formatRelativeTime(connectedAt, now)}`,
+    },
+  ];
 
   return (
-    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-      {cards.map((stat) => (
-        <Card
-          key={stat.label}
-          className={cn("border shadow-sm", getOverviewStatusClasses(stat.status))}
-        >
-          <CardContent className="space-y-4 pt-5">
-            <div className="flex items-start justify-between gap-3">
-              <div className="space-y-1">
-                <div className="text-[11px] uppercase tracking-[0.18em] opacity-70">
-                  {stat.label}
-                </div>
-                <div className="text-3xl font-medium tracking-tight">
-                  {formatOverviewMetricValue(stat.label, stat.value)}
-                </div>
-              </div>
-              <Badge variant="outline" className="rounded-md border-current/30 bg-transparent text-[10px] uppercase">
-                {stat.status}
-              </Badge>
-            </div>
-            <div className="flex min-h-6 items-center justify-between gap-3">
-              {"trend" in stat ? (
-                <div className="flex items-center gap-1 text-[11px] opacity-80">
-                  {stat.trend === "up" ? (
-                    <ArrowUpRight className="size-3.5" />
-                  ) : stat.trend === "down" ? (
-                    <ArrowDownRight className="size-3.5" />
-                  ) : (
-                    <ArrowRight className="size-3.5" />
-                  )}
-                  <span>{formatOverviewTrend(stat.trend, stat.deltaPercent)}</span>
-                </div>
-              ) : null}
-            </div>
-            <div className="space-y-1 text-[11px] leading-5 opacity-80">
-              <div>{stat.helperText}</div>
-              {"comparisonWindowLabel" in stat ? (
-                <div>{stat.comparisonWindowLabel}</div>
-              ) : null}
-            </div>
-          </CardContent>
-        </Card>
+    <StatStrip columns="grid-cols-2 @2xl:grid-cols-3 @5xl:grid-cols-6">
+      {cells.map(({ key, ...cell }) => (
+        <StatCell key={key} {...cell} />
       ))}
-    </div>
+    </StatStrip>
   );
 }

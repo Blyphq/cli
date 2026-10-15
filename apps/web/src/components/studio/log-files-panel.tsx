@@ -1,19 +1,8 @@
-import { Database, FileArchive, FileText, FilterX } from "lucide-react";
+import { Database, FileArchive, FileText } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import type { StudioFile, StudioMeta } from "@/lib/studio";
-import {
-  formatBytes,
-  formatDateTime,
-  getFileKindBadgeVariant,
-  getFileStreamBadgeVariant,
-} from "@/lib/studio";
-
-import { EmptyState } from "./empty-state";
-import { PanelHeader } from "./panel-header";
-import { TruncatedPath } from "./truncated-path";
+import { formatBytes, formatDateTime } from "@/lib/studio";
+import { cn } from "@/lib/utils";
 
 interface LogFilesPanelProps {
   files: StudioFile[];
@@ -23,91 +12,121 @@ interface LogFilesPanelProps {
 }
 
 export function LogFilesPanel({ files, activeFileId, mode, onSelectFile }: LogFilesPanelProps) {
+  const isDatabase = mode === "database";
+  const totalBytes = files.reduce((sum, file) => sum + (file.sizeBytes ?? 0), 0);
+
   if (files.length === 0) {
     return (
-      <EmptyState
-        title={mode === "database" ? "Database source unavailable" : "No log files discovered"}
-        description={
-          mode === "database"
-            ? "Studio could not access the configured database source. Check that your Blyp config adapter is valid and the database is reachable."
-            : "Studio looked in the resolved log directory and archive directory, but found no Blyp log files."
-        }
-      />
+      <div className="rounded-md border border-dashed border-border-strong bg-card/60 p-2.5">
+        <div className="text-[0.75rem] font-medium">
+          {isDatabase ? "Database source unavailable" : "No log files discovered"}
+        </div>
+        <p className="mt-1 text-[0.68rem] leading-snug text-muted-foreground">
+          {isDatabase
+            ? "Check that your Blyp config adapter is valid and the database is reachable."
+            : "Studio looked in the resolved log and archive directories but found no Blyp log files."}
+        </p>
+      </div>
     );
   }
 
   return (
-    <Card>
-      <PanelHeader
-        title={mode === "database" ? "Log Source" : "Log Files"}
-        description={mode === "database" ? "Active Blyp database source." : "Active and archived Blyp streams."}
-      />
-      <CardContent className="space-y-2 min-w-0">
-        {mode !== "database" && (
-          <Button
-            variant="outline"
-            size="sm"
-            className="w-full justify-start"
+    <div className="rounded-md border border-border bg-card p-2 shadow-xs">
+      <div className="flex items-center justify-between px-1 pb-1.5 text-[0.7rem] text-muted-foreground">
+        <span>{isDatabase ? "Log source" : "Log files"}</span>
+        {!isDatabase ? (
+          <span className="font-mono tabular-nums">{formatBytes(totalBytes)}</span>
+        ) : null}
+      </div>
+      <div className="flex flex-col gap-0.5">
+        {!isDatabase && files.length > 1 ? (
+          <FileButton
+            selected={!activeFileId}
             onClick={() => onSelectFile("")}
-          >
-            <FilterX />
-            {activeFileId ? "Show all files" : "All files"}
-          </Button>
-        )}
+            icon={<FileText />}
+            name="All files"
+            meta={String(files.length)}
+          />
+        ) : null}
         {files.map((file) => {
           const selected = activeFileId === file.id;
           const isDbSource = file.id === "database:primary";
 
           return (
-            <Button
+            <FileButton
               key={file.id}
-              variant="outline"
-              size="default"
+              selected={selected}
               onClick={() => onSelectFile(selected ? "" : file.id)}
-              className={`h-auto w-full justify-start px-3 py-3 text-left ${selected ? "border-primary/30 bg-primary/10 hover:bg-primary/15" : "border-border/60 bg-background/60 hover:bg-muted/30"}`}
-            >
-              <div className="min-w-0 space-y-3">
-                <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  <div className="min-w-0 space-y-1">
-                    <div
-                      className="flex min-w-0 items-center gap-2 text-sm font-medium"
-                      title={file.name}
-                    >
-                      {isDbSource ? (
-                        <Database className="size-4" />
-                      ) : file.kind === "archive" ? (
-                        <FileArchive className="size-4" />
-                      ) : (
-                        <FileText className="size-4" />
-                      )}
-                      <span className="min-w-0 truncate">{file.name}</span>
-                    </div>
-                    <TruncatedPath value={file.relativePath} />
-                  </div>
-                  {!isDbSource && (
-                    <div className="flex shrink-0 flex-wrap items-center gap-1 sm:max-w-[9rem] sm:justify-end">
-                      <Badge variant={getFileKindBadgeVariant(file.kind)}>
-                        {file.kind}
-                      </Badge>
-                      <Badge variant={getFileStreamBadgeVariant(file.stream)}>
-                        {file.stream}
-                      </Badge>
-                    </div>
-                  )}
-                </div>
-                {!isDbSource && (
-                  <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-                    <span>{formatBytes(file.sizeBytes)}</span>
-                    <span className="truncate" title={formatDateTime(file.modifiedAt)}>
-                      {formatDateTime(file.modifiedAt)}
-                    </span>
-                  </div>
-                )}
-              </div>
-            </Button>
+              title={`${file.relativePath}${isDbSource ? "" : ` · ${formatDateTime(file.modifiedAt)}`}`}
+              icon={
+                isDbSource ? (
+                  <Database />
+                ) : file.kind === "archive" ? (
+                  <FileArchive />
+                ) : (
+                  <FileText />
+                )
+              }
+              name={file.name}
+              tone={file.stream === "error" ? "error" : undefined}
+              meta={isDbSource ? undefined : formatBytes(file.sizeBytes)}
+            />
           );
         })}
-      </CardContent>
-    </Card>
+      </div>
+      <p className="mt-1.5 px-1 text-[0.68rem] leading-snug text-muted-foreground">
+        {isDatabase
+          ? "Reading from your configured database adapter"
+          : `NDJSON · ${files.length} ${files.length === 1 ? "stream" : "streams"}`}
+      </p>
+    </div>
+  );
+}
+
+function FileButton({
+  selected,
+  onClick,
+  icon,
+  name,
+  meta,
+  title,
+  tone,
+}: {
+  selected: boolean;
+  onClick(): void;
+  icon: React.ReactNode;
+  name: string;
+  meta?: string;
+  title?: string;
+  tone?: "error";
+}) {
+  return (
+    <button
+      type="button"
+      title={title ?? name}
+      aria-pressed={selected}
+      onClick={onClick}
+      className={cn(
+        "flex h-7 w-full min-w-0 items-center gap-2 rounded-[5px] px-1.5 text-left text-[0.72rem] outline-none transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-ring/50",
+        selected
+          ? "bg-muted text-foreground"
+          : "text-foreground/75 hover:bg-muted/70 hover:text-foreground",
+      )}
+    >
+      <span
+        className={cn(
+          "shrink-0 [&>svg]:size-3.5",
+          tone === "error" ? "text-level-error" : "text-muted-foreground",
+        )}
+      >
+        {icon}
+      </span>
+      <span className="min-w-0 flex-1 truncate font-mono">{name}</span>
+      {meta ? (
+        <span className="shrink-0 font-mono text-[0.64rem] tabular-nums text-muted-foreground">
+          {meta}
+        </span>
+      ) : null}
+    </button>
   );
 }

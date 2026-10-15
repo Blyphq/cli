@@ -22,6 +22,14 @@ interface OverviewViewProps {
   onAskAiForError(item: StudioOverviewRecentErrorItem): void;
 }
 
+/**
+ * Composition (≥ xl): ruled stat strip on top, then a wide streaming log panel on
+ * the left and a rail with recent errors + section health on the right. The feed
+ * stretches to the rail's height so neither column leaves a dead gap. Below xl
+ * everything collapses into a single column.
+ */
+const columnsClass = "grid items-stretch gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(22rem,25rem)]";
+
 export function OverviewView({
   overview,
   connectedAt,
@@ -39,35 +47,33 @@ export function OverviewView({
 
   if (!overview) {
     return (
-      <div className="space-y-6">
+      <div className="flex flex-col gap-4">
         <StatTilesSkeleton />
-        <PanelSkeleton rows={4} compact />
-        <div className="grid gap-5 2xl:grid-cols-[minmax(0,1.7fr)_minmax(24rem,0.9fr)]">
-          <PanelSkeleton rows={5} compact />
-          <ListRowsSkeleton rows={5} dense />
+        <div className={columnsClass}>
+          <PanelSkeleton rows={8} compact />
+          <div className="flex flex-col gap-4">
+            <ListRowsSkeleton rows={4} dense />
+            <PanelSkeleton rows={3} compact />
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      <OverviewSectionsGrid sections={overview.sections} onSelect={onSelect} />
-      <OverviewHealthBar
-        stats={overview.stats}
-        connectedAt={connectedAt}
-        now={now}
-      />
-      <div className="grid gap-5 2xl:grid-cols-[minmax(0,1.7fr)_minmax(24rem,0.9fr)]">
-        <OverviewLiveFeed
-          items={overview.liveFeed}
-          onOpen={onSelectFeedTarget}
-        />
-        <OverviewRecentErrors
-          items={overview.recentErrors}
-          onAskAi={onAskAiForError}
-          onViewTrace={onViewTrace}
-        />
+    <div className="flex flex-col gap-4">
+      <OverviewHealthBar stats={overview.stats} connectedAt={connectedAt} now={now} />
+      <div className={columnsClass}>
+        <OverviewLiveFeed items={overview.liveFeed} onOpen={onSelectFeedTarget} />
+        <div className="flex min-w-0 flex-col gap-4">
+          <OverviewRecentErrors
+            items={overview.recentErrors}
+            now={now}
+            onAskAi={onAskAiForError}
+            onViewTrace={onViewTrace}
+          />
+          <OverviewSectionsGrid sections={overview.sections} now={now} onSelect={onSelect} />
+        </div>
       </div>
     </div>
   );

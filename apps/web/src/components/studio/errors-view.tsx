@@ -1,26 +1,22 @@
+import { Bug, CheckCircle2, ChevronRight, EyeOff, ShieldCheck } from "lucide-react";
+
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Card } from "@/components/ui/card";
 import type {
   StudioErrorGroup,
   StudioErrorOccurrence,
-  StudioErrorSort,
   StudioErrorUiState,
   StudioErrorsPage,
   StudioSelection,
 } from "@/lib/studio";
+import { cn } from "@/lib/utils";
 
 import { EmptyState } from "./empty-state";
-import { ErrorGroupRow } from "./error-group-row";
-import { ErrorRawRow } from "./error-raw-row";
+import { ERROR_GROUP_COLUMNS, ErrorGroupRow, getErrorSourceLabel } from "./error-group-row";
+import { ERROR_RAW_COLUMNS, ErrorRawRow } from "./error-raw-row";
 import { ErrorStatsBar } from "./error-stats-bar";
+import { ErrorsToolbar, ToolbarToggle } from "./errors-toolbar";
 import { PanelHeader } from "./panel-header";
 import { ListRowsSkeleton } from "./studio-skeletons";
 
@@ -38,9 +34,8 @@ interface ErrorsViewProps {
   onUnignore(fingerprint: string): void;
 }
 
-const ALL_TYPES = "__all_types__";
-const ALL_SOURCES = "__all_sources__";
-const ALL_TAGS = "__all_tags__";
+const LIST_HEADER =
+  "flex h-8 items-center gap-4 border-b border-border bg-muted/40 px-4 text-[0.7rem] font-medium text-muted-foreground";
 
 export function ErrorsView({
   data,
@@ -58,23 +53,32 @@ export function ErrorsView({
   const groups = (data?.entries.filter((entry) => entry.kind === "error-group") as StudioErrorGroup[] | undefined) ?? [];
   const occurrences =
     (data?.entries.filter((entry) => entry.kind === "occurrence") as StudioErrorOccurrence[] | undefined) ?? [];
-  const activeGroups = groups.filter((group) => {
-    const ignored = Boolean(ignoredByFingerprint[group.fingerprint]);
-    if (ignored) {
-      return false;
-    }
-    const resolvedAt = resolvedAtByFingerprint[group.fingerprint];
-    const isResolved = isGroupResolved(group, resolvedAt);
-    if (isResolved) {
-      return false;
-    }
-    return true;
-  });
-  const resolvedGroups = groups.filter((group) => isGroupResolved(group, resolvedAtByFingerprint[group.fingerprint]));
-  const visibleResolvedGroups = resolvedGroups.filter(
-    (group) => !ignoredByFingerprint[group.fingerprint],
+  const activeGroups = groups.filter(
+    (group) =>
+      !ignoredByFingerprint[group.fingerprint] &&
+      !isGroupResolved(group, resolvedAtByFingerprint[group.fingerprint]),
+  );
+  const visibleResolvedGroups = groups.filter(
+    (group) =>
+      isGroupResolved(group, resolvedAtByFingerprint[group.fingerprint]) &&
+      !ignoredByFingerprint[group.fingerprint],
   );
   const ignoredGroups = groups.filter((group) => Boolean(ignoredByFingerprint[group.fingerprint]));
+  const hasEntries = Boolean(data?.entries.length);
+  const sessionStart = data?.earliestTimestamp ?? null;
+
+  const renderGroupRow = (group: StudioErrorGroup, keyPrefix = "") => (
+    <li key={`${keyPrefix}${group.fingerprint}`}>
+      <ErrorGroupRow
+        group={group}
+        selected={selection?.kind === "error-group" && selection.id === group.fingerprint}
+        sessionStart={sessionStart}
+        resolvedAt={resolvedAtByFingerprint[group.fingerprint] ?? null}
+        ignored={Boolean(ignoredByFingerprint[group.fingerprint])}
+        onSelect={(fingerprint) => onSelect({ kind: "error-group", id: fingerprint })}
+      />
+    </li>
+  );
 
   return (
     <div className="space-y-4">
@@ -88,219 +92,182 @@ export function ErrorsView({
           }
         }
       />
-      <Card size="sm">
-        <PanelHeader
-          title="Errors"
-          description="Grouped error triage for the current inspected session."
-        />
-        <CardContent className="space-y-3 p-4">
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-            <ControlSelect
-              label="View"
-              value={ui.view}
-              onValueChange={(value) =>
-                onUiChange({ ...ui, view: value as StudioErrorUiState["view"] })
-              }
-              options={[
-                { value: "grouped", label: "Grouped" },
-                { value: "raw", label: "Raw" },
-              ]}
-            />
-            <ControlSelect
-              label="Sort"
-              value={ui.sort}
-              onValueChange={(value) =>
-                onUiChange({ ...ui, sort: value as StudioErrorSort })
-              }
-              options={[
-                { value: "most-recent", label: "Most recent" },
-                { value: "most-frequent", label: "Most frequent" },
-                { value: "first-seen", label: "First seen" },
-              ]}
-            />
-            <ControlSelect
-              label="Type"
-              value={ui.type || ALL_TYPES}
-              onValueChange={(value) =>
-                onUiChange({ ...ui, type: value === ALL_TYPES ? "" : value })
-              }
-              options={[
-                { value: ALL_TYPES, label: "All types" },
-                ...(data?.availableTypes ?? []).map((value) => ({ value, label: value })),
-              ]}
-            />
-            <ControlSelect
-              label="Source file"
-              value={ui.sourceFile || ALL_SOURCES}
-              onValueChange={(value) =>
-                onUiChange({ ...ui, sourceFile: value === ALL_SOURCES ? "" : value })
-              }
-              options={[
-                { value: ALL_SOURCES, label: "All sources" },
-                ...(data?.availableSourceFiles ?? []).map((value) => ({ value, label: value })),
-              ]}
-            />
-            <ControlSelect
-              label="Section tag"
-              value={ui.sectionTag || ALL_TAGS}
-              onValueChange={(value) =>
-                onUiChange({ ...ui, sectionTag: value === ALL_TAGS ? "" : value })
-              }
-              options={[
-                { value: ALL_TAGS, label: "All tags" },
-                ...(data?.availableSectionTags ?? []).map((value) => ({ value, label: value })),
-              ]}
-            />
-          </div>
-          <div className="flex flex-wrap items-center gap-2 border-t border-border/60 pt-3">
-            <Button
-              variant={ui.showResolved ? "secondary" : "outline"}
-              size="sm"
-              className="min-w-[9.5rem]"
-              onClick={() => onUiChange({ ...ui, showResolved: !ui.showResolved })}
+      <ErrorsToolbar
+        viewMode={ui.view}
+        sort={ui.sort}
+        errorType={ui.type}
+        sourceFile={ui.sourceFile}
+        tag={ui.sectionTag}
+        errorTypes={data?.availableTypes ?? []}
+        sourceFiles={data?.availableSourceFiles ?? []}
+        tags={(data?.availableSectionTags ?? []).map((value) => ({ id: value, label: value }))}
+        sortDisabled={false}
+        onViewModeChange={(view) => onUiChange({ ...ui, view })}
+        onSortChange={(sort) => onUiChange({ ...ui, sort })}
+        onErrorTypeChange={(type) => onUiChange({ ...ui, type })}
+        onSourceFileChange={(sourceFile) => onUiChange({ ...ui, sourceFile })}
+        onTagChange={(sectionTag) => onUiChange({ ...ui, sectionTag })}
+        trailing={
+          <>
+            <ToolbarToggle
+              pressed={ui.showResolved}
+              onPressedChange={(showResolved) => onUiChange({ ...ui, showResolved })}
+              icon={<CheckCircle2 />}
             >
               Show resolved
-            </Button>
-            <Button
-              variant={ui.showIgnored ? "secondary" : "outline"}
-              size="sm"
-              className="min-w-[9.5rem]"
-              onClick={() => onUiChange({ ...ui, showIgnored: !ui.showIgnored })}
+            </ToolbarToggle>
+            <ToolbarToggle
+              pressed={ui.showIgnored}
+              onPressedChange={(showIgnored) => onUiChange({ ...ui, showIgnored })}
+              icon={<EyeOff />}
             >
               Show ignored
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-      <Card className="min-h-[36rem]">
+            </ToolbarToggle>
+          </>
+        }
+      />
+      <Card className="@container/errors min-h-[36rem] gap-0 py-0">
         <PanelHeader
+          className="py-3 [.border-b]:pb-3"
           title={ui.view === "grouped" ? "Grouped errors" : "Raw error events"}
-          description={`${data?.totalEntries ?? 0} visible entries from ${data?.totalMatched ?? 0} matched occurrences`}
+          description={
+            <span className="font-mono text-[0.7rem] tabular-nums">
+              {`${data?.totalEntries ?? 0} visible entries from ${data?.totalMatched ?? 0} matched occurrences`}
+            </span>
+          }
+          action={
+            data?.truncated ? (
+              <Badge variant="warning" title={`Scanned ${data.scannedRecords} records`}>
+                Truncated
+              </Badge>
+            ) : null
+          }
         />
-        <CardContent className="p-0">
-          {loading && !data?.entries.length ? (
-            <div className="p-4">
-              <ListRowsSkeleton rows={7} />
-            </div>
-          ) : null}
-          {!loading && !data?.entries.length ? (
+        {loading && !hasEntries ? (
+          <div className="p-4">
+            <ListRowsSkeleton rows={7} />
+          </div>
+        ) : !hasEntries ? (
+          <div className="p-4">
             <EmptyState
+              icon={<ShieldCheck />}
               title="No errors matched"
               description="Try a different time range, file, or search term."
             />
-          ) : ui.view === "grouped" ? (
-            <>
-              <div>
-                {activeGroups.map((group) => (
-                  <ErrorGroupRow
-                    key={group.fingerprint}
-                    group={group}
-                    selected={selection?.kind === "error-group" && selection.id === group.fingerprint}
-                    sessionStart={data?.earliestTimestamp ?? null}
-                    resolvedAt={resolvedAtByFingerprint[group.fingerprint] ?? null}
-                    ignored={Boolean(ignoredByFingerprint[group.fingerprint])}
-                    onSelect={(fingerprint) => onSelect({ kind: "error-group", id: fingerprint })}
-                  />
-                ))}
+          </div>
+        ) : ui.view === "grouped" ? (
+          <>
+            <div aria-hidden className={LIST_HEADER}>
+              <span className="min-w-0 flex-1">Issue</span>
+              <span className={ERROR_GROUP_COLUMNS.trend}>Trend</span>
+              <span className={ERROR_GROUP_COLUMNS.events}>Events</span>
+              <span className={ERROR_GROUP_COLUMNS.seen}>Last · first</span>
+            </div>
+            {activeGroups.length > 0 ? (
+              <ul aria-label="Grouped errors" className="divide-y divide-border/70">{activeGroups.map((group) => renderGroupRow(group))}</ul>
+            ) : (
+              <div className="p-4">
+                <EmptyState
+                  size="compact"
+                  icon={<CheckCircle2 />}
+                  title="No active error groups"
+                  description="Every visible group is resolved or ignored."
+                />
               </div>
-              {ui.showResolved && visibleResolvedGroups.length > 0 ? (
-                <div className="border-t border-border/60 p-4">
-                  <button
-                    type="button"
-                    className="flex items-center gap-2 text-sm font-medium"
-                    onClick={() => onToggleResolvedCollapsed(!resolvedCollapsed)}
-                  >
-                    <span>{resolvedCollapsed ? "Show" : "Hide"} resolved</span>
-                    <Badge variant="secondary">{visibleResolvedGroups.length}</Badge>
-                  </button>
-                  {!resolvedCollapsed ? (
-                    <div className="mt-3">
-                      {visibleResolvedGroups.map((group) => (
-                        <ErrorGroupRow
-                          key={`resolved:${group.fingerprint}`}
-                          group={group}
-                          selected={selection?.kind === "error-group" && selection.id === group.fingerprint}
-                          sessionStart={data?.earliestTimestamp ?? null}
-                          resolvedAt={resolvedAtByFingerprint[group.fingerprint] ?? null}
-                          ignored={Boolean(ignoredByFingerprint[group.fingerprint])}
-                          onSelect={(fingerprint) => onSelect({ kind: "error-group", id: fingerprint })}
-                        />
-                      ))}
-                    </div>
-                  ) : null}
+            )}
+            {ui.showResolved && visibleResolvedGroups.length > 0 ? (
+              <section className="border-t border-border">
+                <button
+                  type="button"
+                  aria-expanded={!resolvedCollapsed}
+                  className="flex h-9 w-full items-center gap-2 bg-muted/30 px-4 text-left text-[0.75rem] font-medium text-foreground/90 outline-none transition-colors duration-150 hover:bg-muted/60 focus-visible:bg-muted"
+                  onClick={() => onToggleResolvedCollapsed(!resolvedCollapsed)}
+                >
+                  <ChevronRight
+                    aria-hidden
+                    className={cn(
+                      "size-3.5 text-muted-foreground transition-transform duration-150 ease-out-expo",
+                      !resolvedCollapsed && "rotate-90",
+                    )}
+                  />
+                  <span>{resolvedCollapsed ? "Show" : "Hide"} resolved</span>
+                  <Badge variant="success">{visibleResolvedGroups.length}</Badge>
+                </button>
+                {!resolvedCollapsed ? (
+                  <ul aria-label="Resolved errors" className="divide-y divide-border/70 border-t border-border/70">
+                    {visibleResolvedGroups.map((group) => renderGroupRow(group, "resolved:"))}
+                  </ul>
+                ) : null}
+              </section>
+            ) : null}
+            {ui.showIgnored && ignoredGroups.length > 0 ? (
+              <section className="border-t border-border">
+                <div className="flex h-9 items-center gap-2 bg-muted/30 px-4 text-[0.75rem] font-medium text-foreground/90">
+                  <EyeOff aria-hidden className="size-3.5 text-muted-foreground" />
+                  <span>Ignored</span>
+                  <Badge variant="muted">{ignoredGroups.length}</Badge>
                 </div>
-              ) : null}
-              {ui.showIgnored && ignoredGroups.length > 0 ? (
-                <div className="border-t border-border/60 p-4">
-                  <div className="mb-3 text-sm font-medium">Ignored</div>
-                  <div className="space-y-2">
-                    {ignoredGroups.map((group) => (
-                      <div
+                <ul aria-label="Ignored errors" className="border-t border-border/70">
+                  {ignoredGroups.map((group) => {
+                    const source = getErrorSourceLabel(group);
+                    return (
+                      <li
                         key={`ignored:${group.fingerprint}`}
-                        className="flex items-center justify-between rounded border border-border/60 px-3 py-2"
+                        className="flex items-center gap-3 border-b border-border/70 px-4 py-2 last:border-0"
                       >
-                        <div className="min-w-0">
-                          <div className="truncate text-sm">{group.errorType}</div>
-                          <div className="truncate text-xs text-muted-foreground">
+                        <div className="min-w-0 flex-1 space-y-0.5 opacity-75">
+                          <div className="truncate text-[0.8rem] font-medium">{group.errorType}</div>
+                          <div className="truncate text-[0.75rem] text-muted-foreground">
                             {group.messageFirstLine}
                           </div>
+                          {source ? (
+                            <div className="truncate font-mono text-[0.68rem] text-muted-foreground/90">
+                              {source}
+                            </div>
+                          ) : null}
                         </div>
                         <Button variant="outline" size="xs" onClick={() => onUnignore(group.fingerprint)}>
                           Unignore
                         </Button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-            </>
-          ) : (
-            <div>
-              {occurrences.map((occurrence) => (
-                <ErrorRawRow
-                  key={occurrence.id}
-                  occurrence={occurrence}
-                  selected={selection?.kind === "error-occurrence" && selection.id === occurrence.id}
-                  onSelect={(id) => onSelect({ kind: "error-occurrence", id })}
-                />
-              ))}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </section>
+            ) : null}
+          </>
+        ) : (
+          <>
+            <div aria-hidden className={cn(LIST_HEADER, "gap-3")}>
+              <span className={ERROR_RAW_COLUMNS.time}>Time</span>
+              <span className={ERROR_RAW_COLUMNS.level}>Level</span>
+              <span className="min-w-0 flex-1">Event</span>
             </div>
-          )}
-        </CardContent>
+            {occurrences.length > 0 ? (
+              <ul aria-label="Raw error events" className="divide-y divide-border/70">
+                {occurrences.map((occurrence) => (
+                  <li key={occurrence.id}>
+                    <ErrorRawRow
+                      occurrence={occurrence}
+                      selected={selection?.kind === "error-occurrence" && selection.id === occurrence.id}
+                      onSelect={(id) => onSelect({ kind: "error-occurrence", id })}
+                    />
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <div className="p-4">
+                <EmptyState
+                  size="compact"
+                  icon={<Bug />}
+                  title="No raw error events"
+                  description="Switch back to grouped view or widen your filters."
+                />
+              </div>
+            )}
+          </>
+        )}
       </Card>
-    </div>
-  );
-}
-
-function ControlSelect(props: {
-  label: string;
-  value: string;
-  onValueChange(value: string): void;
-  options: Array<{ value: string; label: string }>;
-}) {
-  const selectedLabel =
-    props.options.find((option) => option.value === props.value)?.label ?? props.value;
-
-  return (
-    <div className="space-y-2">
-      <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
-        {props.label}
-      </div>
-      <Select
-        value={props.value}
-        onValueChange={(value) => props.onValueChange(value ?? props.value)}
-      >
-        <SelectTrigger>
-          <SelectValue>{selectedLabel}</SelectValue>
-        </SelectTrigger>
-        <SelectContent>
-          {props.options.map((option) => (
-            <SelectItem key={`${props.label}:${option.value}`} value={option.value}>
-              {option.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
     </div>
   );
 }

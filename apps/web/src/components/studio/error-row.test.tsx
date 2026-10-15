@@ -16,6 +16,7 @@ describe("Error row HTTP summaries", () => {
     render(
       <ErrorGroupRow
         group={{
+          kind: "error-group",
           fingerprint: "fp-0",
           errorType: "CheckoutError",
           message: "status zero",
@@ -50,6 +51,7 @@ describe("Error row HTTP summaries", () => {
     render(
       <ErrorRawRow
         occurrence={{
+          kind: "occurrence",
           id: "occurrence-0",
           fingerprint: "fp-0",
           timestamp: "2026-03-13T10:00:00.000Z",
@@ -64,7 +66,26 @@ describe("Error row HTTP summaries", () => {
           caller: null,
           stack: null,
           stackFrames: [],
-          http: { method: "POST", path: "/checkout", statusCode: 0, url: null },
+          http: {
+            kind: "structured-http",
+            method: "POST",
+            path: "/checkout",
+            statusCode: 0,
+            durationMs: null,
+            url: null,
+            routeTemplate: null,
+            type: null,
+            hostname: null,
+            ip: null,
+            userAgent: null,
+            requestHeaders: null,
+            responseHeaders: null,
+            requestBody: null,
+            responseBody: null,
+            requestId: null,
+            traceId: null,
+            error: null,
+          },
           sourceLocation: null,
           fingerprintSource: {
             key: "src/routes/checkout.ts:4",

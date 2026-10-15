@@ -1,20 +1,17 @@
 import { useState } from "react";
 
+import { ChevronRight, Webhook } from "lucide-react";
+
 import type { StudioPaymentWebhookEvent } from "@/lib/studio";
 import { formatCompactDateTime } from "@/lib/studio";
+import { cn } from "@/lib/utils";
 
 import { Badge } from "../ui/badge";
-import { Card, CardContent } from "../ui/card";
-import {
-  Pagination,
-  PaginationContent,
-  PaginationEllipsis,
-  PaginationItem,
-  PaginationLink,
-  PaginationNext,
-  PaginationPrevious,
-} from "../ui/pagination";
+import { Card } from "../ui/card";
+import { EmptyState } from "./empty-state";
+import { highlightJson } from "./json-detail-block";
 import { PanelHeader } from "./panel-header";
+import { StudioPagination } from "./payment-trace-list";
 
 interface PaymentWebhookPanelProps {
   events: StudioPaymentWebhookEvent[];
@@ -30,104 +27,111 @@ export function PaymentWebhookPanel({
   onPageChange,
 }: PaymentWebhookPanelProps) {
   const [openId, setOpenId] = useState<string | null>(null);
-  const pages = getVisiblePages(currentPage, totalPages);
+  const errorCount = events.filter((event) => event.result === "error").length;
 
   return (
-    <Card size="sm">
+    <Card className="gap-0 py-0">
       <PanelHeader
+        className="py-3"
         title="Webhook events"
         description="Incoming payment webhook traffic and processing results."
+        action={
+          errorCount > 0 ? (
+            <Badge variant="destructive">{errorCount} failed</Badge>
+          ) : null
+        }
       />
-      <CardContent className="space-y-3">
-        {events.length === 0 ? (
-          <div className="text-sm text-muted-foreground">
-            No payment webhook events matched this scope.
-          </div>
-        ) : (
-          <>
-            {events.map((event) => (
-              <button
-                key={event.id}
-                type="button"
-                className="w-full border border-border/60 bg-background/40 p-4 text-left"
-                onClick={() => setOpenId((current) => (current === event.id ? null : event.id))}
-              >
-                <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
-                  <span className="font-medium">{event.eventType ?? "webhook"}</span>
-                  <Badge variant={event.result === "error" ? "destructive" : "default"}>
+      {events.length === 0 ? (
+        <div className="p-3">
+          <EmptyState
+            title="No webhooks"
+            description="No payment webhook events matched this scope."
+            size="compact"
+            icon={<Webhook />}
+          />
+        </div>
+      ) : (
+        <>
+          <ul className="font-mono text-[0.74rem]">
+            {events.map((event) => {
+              const open = openId === event.id;
+              const hasPayload = Boolean(event.payloadPreview);
+
+              const rowClass = cn(
+                "grid w-full min-w-0 grid-cols-[0.75rem_4rem_minmax(0,1fr)_auto] items-center gap-x-2.5 px-3 py-2 text-left",
+                open && "bg-muted/50",
+              );
+              const rowContent = (
+                <>
+                  <ChevronRight
+                    aria-hidden
+                    className={cn(
+                      "size-3 text-muted-foreground/70 transition-transform duration-200 ease-out-expo",
+                      open && "rotate-90",
+                      !hasPayload && "opacity-0",
+                    )}
+                  />
+                  <Badge
+                    variant={event.result === "error" ? "destructive" : "success"}
+                    className="w-full"
+                  >
                     {event.result}
                   </Badge>
-                </div>
-                <div className="mt-1 text-xs text-muted-foreground">
-                  {formatCompactDateTime(event.timestamp)}
-                  {event.route ? ` • ${event.route}` : ""}
-                </div>
-                {openId === event.id && event.payloadPreview ? (
-                  <pre className="mt-3 overflow-auto whitespace-pre-wrap break-words rounded border border-border/60 bg-muted/20 p-3 font-mono text-[11px] leading-5">
-                    {event.payloadPreview}
-                  </pre>
-                ) : null}
-              </button>
-            ))}
-            {totalPages > 1 ? (
-              <Pagination className="justify-start">
-                <PaginationContent>
-                  <PaginationItem>
-                    <PaginationPrevious
-                      disabled={currentPage === 1}
-                      onClick={() => onPageChange(Math.max(1, currentPage - 1))}
-                    />
-                  </PaginationItem>
-                  {pages.map((page, index) =>
-                    page === "ellipsis" ? (
-                      <PaginationItem key={`ellipsis-${index}`}>
-                        <PaginationEllipsis />
-                      </PaginationItem>
-                    ) : (
-                      <PaginationItem key={page}>
-                        <PaginationLink
-                          isActive={page === currentPage}
-                          onClick={() => onPageChange(page)}
-                        >
-                          {page}
-                        </PaginationLink>
-                      </PaginationItem>
-                    ),
+                  <span className="flex min-w-0 items-baseline gap-2">
+                    <span className="truncate text-foreground">{event.eventType ?? "webhook"}</span>
+                    {event.route ? (
+                      <span className="hidden truncate text-[0.68rem] text-muted-foreground sm:inline">
+                        {event.route}
+                      </span>
+                    ) : null}
+                  </span>
+                  <span className="text-[0.68rem] tabular-nums text-muted-foreground/80">
+                    {formatCompactDateTime(event.timestamp)}
+                  </span>
+                </>
+              );
+
+              return (
+                <li key={event.id} className="border-b border-border/70 last:border-0">
+                  {hasPayload ? (
+                    <button
+                      type="button"
+                      aria-expanded={open}
+                      onClick={() => setOpenId((current) => (current === event.id ? null : event.id))}
+                      className={cn(
+                        rowClass,
+                        "outline-none transition-colors duration-150 hover:bg-muted/60 focus-visible:bg-muted",
+                      )}
+                    >
+                      {rowContent}
+                    </button>
+                  ) : (
+                    <div className={rowClass}>{rowContent}</div>
                   )}
-                  <PaginationItem>
-                    <PaginationNext
-                      disabled={currentPage === totalPages}
-                      onClick={() => onPageChange(Math.min(totalPages, currentPage + 1))}
-                    />
-                  </PaginationItem>
-                </PaginationContent>
-              </Pagination>
-            ) : null}
-          </>
-        )}
-      </CardContent>
+                  {open && event.payloadPreview ? (
+                    <pre className="mx-3 mb-2.5 max-h-64 overflow-auto rounded-md bg-muted/50 p-3 text-[0.7rem] leading-5 break-words whitespace-pre-wrap">
+                      {highlightJson(prettyPayload(event.payloadPreview))}
+                    </pre>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
+          <StudioPagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={onPageChange}
+          />
+        </>
+      )}
     </Card>
   );
 }
 
-function getVisiblePages(currentPage: number, totalPages: number): Array<number | "ellipsis"> {
-  if (totalPages <= 7) {
-    return Array.from({ length: totalPages }, (_, index) => index + 1);
+function prettyPayload(preview: string): string {
+  try {
+    return JSON.stringify(JSON.parse(preview), null, 2);
+  } catch {
+    return preview;
   }
-
-  const pages = new Set([1, totalPages, currentPage - 1, currentPage, currentPage + 1]);
-  const sortedPages = Array.from(pages)
-    .filter((page) => page >= 1 && page <= totalPages)
-    .sort((left, right) => left - right);
-  const visiblePages: Array<number | "ellipsis"> = [];
-
-  for (const page of sortedPages) {
-    const previousPage = visiblePages[visiblePages.length - 1];
-    if (typeof previousPage === "number" && page - previousPage > 1) {
-      visiblePages.push("ellipsis");
-    }
-    visiblePages.push(page);
-  }
-
-  return visiblePages;
 }

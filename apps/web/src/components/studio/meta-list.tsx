@@ -14,16 +14,14 @@ interface MetaListProps {
 
 export function MetaList({ items, className }: MetaListProps) {
   return (
-    <div className={cn("grid gap-3", className)}>
+    <div className={cn("grid gap-0 divide-y divide-border/70", className)}>
       {items.map((item) => (
         <div
           key={item.label}
-          className="grid min-w-0 gap-1 md:grid-cols-[8rem_minmax(0,1fr)] md:gap-3"
+          className="grid min-w-0 gap-1 py-2 first:pt-0 last:pb-0 md:grid-cols-[7.5rem_minmax(0,1fr)] md:gap-3"
         >
-          <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
-            {item.label}
-          </div>
-          <div className="min-w-0 text-sm break-words">{item.value}</div>
+          <div className="text-[0.72rem] text-muted-foreground">{item.label}</div>
+          <div className="min-w-0 text-[0.8rem] break-words">{item.value}</div>
         </div>
       ))}
     </div>

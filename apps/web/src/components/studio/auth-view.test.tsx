@@ -5,6 +5,21 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
+vi.mock("@/utils/trpc", () => ({
+  useTRPC: () => ({
+    studio: {
+      addCustomSection: { mutationOptions: (options: unknown) => options },
+      meta: { queryFilter: (input: unknown) => ({ queryKey: ["studio.meta", input] }) },
+    },
+  }),
+}));
+
+vi.mock("@tanstack/react-query", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@tanstack/react-query")>()),
+  useMutation: () => ({ mutate: vi.fn(), isPending: false }),
+  useQueryClient: () => ({ invalidateQueries: vi.fn() }),
+}));
+
 import { AuthView } from "./auth-view";
 import { SectionNavPanel } from "./section-nav-panel";
 import { StudioToolbar } from "./studio-toolbar";
@@ -272,10 +287,10 @@ describe("AuthView", () => {
 });
 
 describe("StudioToolbar", () => {
-  it("shows overview-specific disabled helper text", () => {
+  it("shows overview-specific disabled helper text", async () => {
+    const user = userEvent.setup();
     render(
       <StudioToolbar
-        draftProjectPath=""
         facets={undefined}
         files={[]}
         filters={{
@@ -289,24 +304,23 @@ describe("StudioToolbar", () => {
         grouping="grouped"
         meta={undefined}
         section="overview"
-        onDraftProjectPathChange={vi.fn()}
         onFilterChange={vi.fn()}
         onGroupingChange={vi.fn()}
-        onInspect={vi.fn()}
         onStartStandaloneChat={vi.fn()}
         onResetFilters={vi.fn()}
       />,
     );
 
+    await user.click(screen.getByRole("button", { name: /filters/i }));
     expect(screen.getByDisplayValue("Overview doesn't filter by level")).toBeDisabled();
     expect(screen.getByDisplayValue("Overview doesn't filter by type")).toBeDisabled();
     expect(screen.getByDisplayValue("Overview has no log grouping")).toBeDisabled();
   });
 
-  it("shows background-job-specific disabled helper text", () => {
+  it("shows background-job-specific disabled helper text", async () => {
+    const user = userEvent.setup();
     render(
       <StudioToolbar
-        draftProjectPath=""
         facets={undefined}
         files={[]}
         filters={{
@@ -320,15 +334,14 @@ describe("StudioToolbar", () => {
         grouping="grouped"
         meta={undefined}
         section="background"
-        onDraftProjectPathChange={vi.fn()}
         onFilterChange={vi.fn()}
         onGroupingChange={vi.fn()}
-        onInspect={vi.fn()}
         onStartStandaloneChat={vi.fn()}
         onResetFilters={vi.fn()}
       />,
     );
 
+    await user.click(screen.getByRole("button", { name: /filters/i }));
     expect(screen.getByDisplayValue("Background Jobs uses run analysis")).toBeDisabled();
     expect(screen.getByDisplayValue("Background Jobs doesn't filter by type")).toBeDisabled();
     expect(screen.getByDisplayValue("Background Jobs has no log grouping")).toBeDisabled();

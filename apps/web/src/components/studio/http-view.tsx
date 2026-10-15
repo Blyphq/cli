@@ -34,8 +34,8 @@ export function HttpView({
 }: HttpViewProps) {
   if (!page && loading) {
     return (
-      <div className="space-y-4">
-        <StatTilesSkeleton />
+      <div className="flex min-w-0 flex-col gap-4">
+        <StatTilesSkeleton count={6} />
         <PanelSkeleton rows={2} compact />
         <PanelSkeleton rows={4} compact />
         <ListRowsSkeleton rows={6} />
@@ -44,7 +44,7 @@ export function HttpView({
   }
 
   return (
-    <div className="space-y-4">
+    <div className="flex min-w-0 flex-col gap-4">
       <HttpStatsBar
         stats={
           page?.stats ?? {

@@ -1,7 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ComponentProps } from "react";
 import { Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
-import { Button } from "@/components/ui/button";
 
 import { BackgroundJobDetailPanel } from "@/components/studio/background-job-detail-panel";
 import { BackgroundJobsView } from "@/components/studio/background-jobs-view";
@@ -24,19 +23,16 @@ import { OverviewView } from "@/components/studio/overview-view";
 import { PaymentsView } from "@/components/studio/payments-view";
 import { SectionNavPanel } from "@/components/studio/section-nav-panel";
 import { PanelSkeleton } from "@/components/studio/studio-skeletons";
+import { ProjectSwitcher } from "@/components/studio/project-switcher";
 import { StudioToolbar } from "@/components/studio/studio-toolbar";
 import { AppSidebar } from "@/components/app-sidebar";
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbList,
-  BreadcrumbPage,
-} from "@/components/ui/breadcrumb";
 import { Separator } from "@/components/ui/separator";
+import { cn } from "@/lib/utils";
 import {
   SidebarInset,
   SidebarProvider,
   SidebarTrigger,
+  useSidebar,
 } from "@/components/ui/sidebar";
 import { useAssistantChat } from "@/hooks/use-assistant-chat";
 import {
@@ -61,18 +57,84 @@ import {
 } from "@/lib/studio";
 import { formatDurationMs } from "@/lib/studio";
 
-function ThemeToggle() {
-  const { theme, setTheme } = useTheme();
+function StudioSectionNavigation(props: ComponentProps<typeof SectionNavPanel>) {
+  const { setOpenMobile } = useSidebar();
+
   return (
-    <Button
-      variant="ghost"
-      size="icon"
-      onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+    <SectionNavPanel
+      {...props}
+      onSelect={(section) => {
+        props.onSelect(section);
+        setOpenMobile(false);
+      }}
+    />
+  );
+}
+
+function ThemeToggle() {
+  const { resolvedTheme, setTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  const current = mounted ? resolvedTheme : undefined;
+
+  return (
+    <div
+      role="radiogroup"
+      aria-label="Theme"
+      className="flex h-8 shrink-0 items-center gap-0.5 rounded-full border border-border bg-muted/60 p-0.5"
     >
-      <Sun className="h-4 w-4 dark:hidden" />
-      <Moon className="h-4 w-4 hidden dark:block" />
-      <span className="sr-only">Toggle theme</span>
-    </Button>
+      {(
+        [
+          { value: "light", label: "Light theme", icon: <Sun /> },
+          { value: "dark", label: "Dark theme", icon: <Moon /> },
+        ] as const
+      ).map((option) => {
+        const active = current === option.value;
+        return (
+          <button
+            key={option.value}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            aria-label={option.label}
+            onClick={() => setTheme(option.value)}
+            className={cn(
+              "grid size-6 place-items-center rounded-full outline-none transition-[background-color,color,box-shadow] duration-200 focus-visible:ring-2 focus-visible:ring-ring/50 [&>svg]:size-3.5",
+              active
+                ? "bg-card text-foreground shadow-xs"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {option.icon}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function StreamingIndicator({ active }: { active: boolean }) {
+  return (
+    <span
+      aria-hidden
+      className="grid shrink-0 grid-cols-3 gap-[1.5px]"
+      title={active ? "Watching for new logs" : "Idle"}
+    >
+      {[0, 108, 216, 756, -1, 324, 648, 540, 432].map((delay, index) => (
+        <span
+          key={index}
+          className={cn(
+            "size-1 rounded-[1px] bg-primary",
+            delay < 0
+              ? "opacity-[0.07]"
+              : active
+                ? "blyp-lattice-cell"
+                : "opacity-30",
+          )}
+          style={delay >= 0 && active ? { animationDelay: `${delay}ms` } : undefined}
+        />
+      ))}
+    </span>
   );
 }
 
@@ -349,7 +411,13 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
       ? "All Logs"
       : section === "project-config"
         ? "Project Config"
+      : section === "overview"
+        ? "Overview"
       : metaQuery.data?.sections.find((item) => item.id === section)?.label ?? "Section";
+  const currentSectionCount =
+    section === "all-logs"
+      ? (logsQuery.data?.totalMatched ?? null)
+      : (metaQuery.data?.sections.find((item) => item.id === section)?.count ?? null);
 
   const handleAskAiToFix = () => {
     if (!selectedErrorGroup) {
@@ -511,16 +579,20 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
   return (
     <>
       <SidebarProvider>
-        <AppSidebar>
-          <div className="space-y-3 py-2">
-            <SectionNavPanel
-              projectPath={projectPath}
-              meta={metaQuery.data}
-              section={section}
-              visitedAtBySection={visitedAtBySection}
-              onSelect={setSection}
+        <AppSidebar
+          project={
+            <ProjectSwitcher
+              absolutePath={metaQuery.data?.project.absolutePath}
+              draftProjectPath={draftProjectPath}
+              invalid={isProjectInvalid}
+              onDraftProjectPathChange={setDraftProjectPath}
+              onInspect={() =>
+                navigate({ search: { project: draftProjectPath || undefined } })
+              }
             />
-            {filesQuery.isError ? (
+          }
+          footer={
+            filesQuery.isError ? (
               <ErrorState
                 title="Log discovery failed"
                 description={filesQuery.error.message}
@@ -535,48 +607,51 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
                   setFilters((current: typeof filters) => ({ ...current, fileId }))
                 }
               />
-            )}
-          </div>
+            )
+          }
+        >
+          <StudioSectionNavigation
+            projectPath={projectPath}
+            meta={metaQuery.data}
+            section={section}
+            visitedAtBySection={visitedAtBySection}
+            onSelect={setSection}
+          />
         </AppSidebar>
-        <SidebarInset>
-          <header className="flex h-16 shrink-0 items-center justify-between gap-2 border-b border-border/60">
-            <div className="flex items-center gap-2 px-4">
-              <SidebarTrigger className="-ml-1" />
+        <SidebarInset className="min-w-0">
+          <header className="sticky top-0 z-20 flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-b border-border bg-background/85 px-3 py-2 backdrop-blur-md supports-[backdrop-filter]:bg-background/70 sm:h-12 sm:flex-nowrap sm:py-0 md:px-4">
+            <div className="flex min-w-0 flex-1 items-center gap-2 sm:flex-initial">
+              <SidebarTrigger className="-ml-1 text-muted-foreground hover:text-foreground" />
               <Separator
                 orientation="vertical"
-                className="mr-2 data-[orientation=vertical]:h-4"
+                className="mr-1 data-[orientation=vertical]:h-4"
               />
-              <Breadcrumb>
-                <BreadcrumbList>
-                  <BreadcrumbItem>
-                    <BreadcrumbPage>{currentSectionLabel}</BreadcrumbPage>
-                  </BreadcrumbItem>
-                </BreadcrumbList>
-              </Breadcrumb>
+              <StreamingIndicator active={!hasBackendError && !isProjectInvalid && !isLoadingMeta} />
+              <h1 className="truncate font-heading text-[0.95rem] font-semibold tracking-[-0.02em]">
+                {currentSectionLabel}
+              </h1>
+              {currentSectionCount !== null ? (
+                <span className="hidden font-mono text-[0.72rem] tabular-nums text-muted-foreground sm:inline">
+                  {currentSectionCount.toLocaleString()}
+                </span>
+              ) : null}
             </div>
-            <div className="px-4">
-              <ThemeToggle />
-            </div>
+            <StudioToolbar
+              facets={studioData.facetsQuery.data}
+              filters={filters}
+              grouping={grouping}
+              meta={metaQuery.data}
+              section={section}
+              files={files}
+              onStartStandaloneChat={assistant.createStandaloneChat}
+              onFilterChange={setFilters}
+              onGroupingChange={setGrouping}
+              onResetFilters={() => setFilters(DEFAULT_FILTERS)}
+            />
+            <ThemeToggle />
           </header>
           <div className="min-h-full p-4 text-foreground xl:p-6">
-            <div className="mx-auto grid max-w-[1720px] gap-5">
-              <StudioToolbar
-                draftProjectPath={draftProjectPath}
-                facets={studioData.facetsQuery.data}
-                filters={filters}
-                grouping={grouping}
-                meta={metaQuery.data}
-                section={section}
-                files={files}
-                onDraftProjectPathChange={setDraftProjectPath}
-                onInspect={() =>
-                  navigate({ search: { project: draftProjectPath || undefined } })
-                }
-                onStartStandaloneChat={assistant.createStandaloneChat}
-                onFilterChange={setFilters}
-                onGroupingChange={setGrouping}
-                onResetFilters={() => setFilters(DEFAULT_FILTERS)}
-              />
+            <div key={section} className="blyp-fade-up mx-auto grid max-w-[1720px] gap-5">
               <div
                 className={
                   isOverviewSection(section)

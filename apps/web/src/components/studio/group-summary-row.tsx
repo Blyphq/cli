@@ -1,13 +1,21 @@
-import type { KeyboardEvent } from "react";
+import { ChevronRight, Layers } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
 import type { StudioGroupDetail, StudioLogEntry } from "@/lib/studio";
 import {
-  formatCompactDateTime,
   formatDateTime,
+  formatDurationMs,
   getGroupingReasonLabel,
+  getLevelDotClass,
 } from "@/lib/studio";
 import { cn } from "@/lib/utils";
+
+import {
+  formatLogTime,
+  handleRowKeyDown,
+  LOG_COLUMNS,
+  LOG_ROW_INTERACTIVE,
+  LOG_ROW_SELECTED,
+} from "./log-row";
 
 type StudioGroupSummary = Extract<StudioLogEntry, { kind: "structured-group" }>;
 
@@ -15,109 +23,108 @@ interface GroupSummaryRowProps {
   group: StudioGroupSummary;
   selected: boolean;
   onSelect(groupId: string): void;
-  variant?: "desktop" | "mobile";
 }
 
-export function GroupSummaryRow({
-  group,
-  selected,
-  onSelect,
-  variant = "desktop",
-}: GroupSummaryRowProps) {
+export function GroupSummaryRow({ group, selected, onSelect }: GroupSummaryRowProps) {
   const reasonLabel = getGroupingReasonLabel(
     group.groupingReason as StudioGroupDetail["group"]["groupingReason"],
   );
-
-  if (variant === "mobile") {
-    return (
-      <button
-        type="button"
-        onClick={() => onSelect(group.id)}
-        className={cn(
-          "flex w-full min-w-0 flex-col gap-3 px-3 py-3 text-left transition-colors outline-none hover:bg-muted/30 focus-visible:bg-muted/40",
-          selected && "bg-primary/10",
-        )}
-      >
-        <div className="flex min-w-0 flex-wrap items-start justify-between gap-2">
-          <div className="min-w-0">
-            <div className="truncate text-sm font-medium" title={group.title}>
-              {group.title}
-            </div>
-            <div className="text-xs text-muted-foreground">
-              {formatCompactDateTime(group.timestampEnd)}
-            </div>
-          </div>
-          <Badge variant="secondary">{group.recordCount} log{group.recordCount === 1 ? "" : "s"}</Badge>
-        </div>
-        <div className="flex min-w-0 flex-wrap gap-2 text-[11px] text-muted-foreground">
-          {group.type ? <Badge variant="outline">{group.type}</Badge> : null}
-          <Badge variant="muted">{reasonLabel}</Badge>
-          <span>{group.fileNames.length} source{group.fileNames.length === 1 ? "" : "s"}</span>
-        </div>
-        <div className="space-y-1 text-[11px] text-muted-foreground">
-          {group.previewMessages.map((message) => (
-            <div key={`${group.id}:${message}`} className="line-clamp-1 break-words">
-              {message}
-            </div>
-          ))}
-        </div>
-      </button>
-    );
-  }
+  const durationMs = getSpanMs(group.timestampStart, group.timestampEnd);
+  const preview = group.previewMessages.find((message) => message !== group.title);
+  const fileLabel = group.fileNames.join(", ");
 
   return (
-    <tr
-      tabIndex={0}
-      role="button"
-      onKeyDown={(event) => handleRowKeyDown(event, group.id, onSelect)}
-      className={cn(
-        "cursor-pointer border-b border-border/60 outline-none hover:bg-muted/30 focus-visible:bg-muted/40",
-        selected && "bg-primary/10",
-      )}
-      onClick={() => onSelect(group.id)}
-    >
-      <td className="w-36 px-3 py-2 align-top text-xs text-muted-foreground">
-        {formatDateTime(group.timestampEnd)}
-      </td>
-      <td className="w-24 px-3 py-2 align-top">
-        <Badge variant="secondary">{group.recordCount} log{group.recordCount === 1 ? "" : "s"}</Badge>
-      </td>
-      <td className="min-w-0 px-3 py-2 align-top">
-        <div className="min-w-0 space-y-1">
-          <div className="truncate text-sm font-medium" title={group.title}>
-            {group.title}
-          </div>
-          <div className="flex min-w-0 flex-wrap gap-2 text-[11px] text-muted-foreground">
-            {group.type ? <Badge variant="outline">{group.type}</Badge> : null}
-            <Badge variant="muted">{reasonLabel}</Badge>
-            <span>{group.fileNames.length} source{group.fileNames.length === 1 ? "" : "s"}</span>
-          </div>
-          <div className="space-y-1 text-[11px] text-muted-foreground">
-            {group.previewMessages.map((message) => (
-              <div key={`${group.id}:${message}`} className="line-clamp-1 break-words">
-                {message}
-              </div>
-            ))}
-          </div>
-        </div>
-      </td>
-      <td
-        className="w-44 px-3 py-2 align-top text-xs text-muted-foreground"
-        title={group.fileNames.join(", ")}
+    <div role="listitem" className="blyp-line-in">
+      <div
+        tabIndex={0}
+        role="button"
+        aria-current={selected ? "true" : undefined}
+        aria-label={`Group: ${group.title}, ${group.recordCount} log${group.recordCount === 1 ? "" : "s"}`}
+        onKeyDown={(event) => handleRowKeyDown(event, group.id, onSelect)}
+        onClick={() => onSelect(group.id)}
+        className={cn(
+          LOG_COLUMNS.row,
+          LOG_ROW_INTERACTIVE,
+          "bg-muted/25",
+          selected && LOG_ROW_SELECTED,
+        )}
       >
-        <span className="block truncate">{group.fileNames.join(", ")}</span>
-      </td>
-    </tr>
+        <time
+          dateTime={group.timestampEnd ?? undefined}
+          title={`${formatDateTime(group.timestampStart)} – ${formatDateTime(group.timestampEnd)}`}
+          className={LOG_COLUMNS.time}
+        >
+          {formatLogTime(group.timestampEnd)}
+        </time>
+        <span className={LOG_COLUMNS.level}>
+          <span
+            className="flex w-full items-center justify-center gap-1 rounded-[4px] border border-border-strong bg-card py-0.5 text-[0.62rem] font-medium leading-none tabular-nums text-foreground"
+            title={`${group.recordCount} log${group.recordCount === 1 ? "" : "s"} in this group`}
+          >
+            <Layers className="size-2.5 text-muted-foreground" aria-hidden />
+            {group.recordCount}
+          </span>
+        </span>
+        <span className={LOG_COLUMNS.source} title={group.type ?? reasonLabel}>
+          {group.type ?? reasonLabel}
+        </span>
+        <span className={cn(LOG_COLUMNS.message, "flex items-center gap-2")}>
+          <ChevronRight
+            aria-hidden
+            className={cn(
+              "size-3 shrink-0 text-muted-foreground transition-transform duration-150 ease-out-expo group-hover/line:translate-x-0.5",
+              selected && "text-primary",
+            )}
+          />
+          <span className="min-w-0 truncate text-foreground" title={group.title}>
+            {group.title}
+          </span>
+          {preview ? (
+            <span
+              className="hidden min-w-0 flex-1 truncate text-muted-foreground/70 @3xl:inline"
+              title={preview}
+            >
+              · {preview}
+            </span>
+          ) : null}
+          <span className="ml-auto flex shrink-0 items-center gap-2 pl-1">
+            {group.levelSummary.length > 0 ? (
+              <span
+                className="flex items-center gap-0.5"
+                title={`Levels: ${group.levelSummary.join(", ")}`}
+              >
+                {group.levelSummary.map((level) => (
+                  <span
+                    key={level}
+                    aria-hidden
+                    className={cn("size-1.5 rounded-full", getLevelDotClass(level))}
+                  />
+                ))}
+              </span>
+            ) : null}
+            {durationMs !== null ? (
+              <span className="text-[0.7rem] tabular-nums text-muted-foreground">
+                {formatDurationMs(durationMs)}
+              </span>
+            ) : null}
+          </span>
+        </span>
+        <span
+          className={cn(LOG_COLUMNS.location, "truncate text-[0.7rem] text-muted-foreground/80")}
+          title={fileLabel}
+        >
+          {group.fileNames.length > 1 ? `${group.fileNames.length} sources` : fileLabel}
+        </span>
+      </div>
+    </div>
   );
 }
 
-function handleRowKeyDown(
-  event: KeyboardEvent<HTMLTableRowElement>,
-  groupId: string,
-  onSelect: (groupId: string) => void,
-) {
-  if (event.key === "Enter" || event.key === " ") {
-    event.preventDefault();
-    onSelect(groupId);
+function getSpanMs(start: string | null, end: string | null): number | null {
+  if (!start || !end) {
+    return null;
   }
+
+  const span = new Date(end).getTime() - new Date(start).getTime();
+  return Number.isFinite(span) && span >= 0 ? span : null;
 }

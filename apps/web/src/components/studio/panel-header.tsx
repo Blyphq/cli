@@ -23,14 +23,14 @@ export function PanelHeader({
 }: PanelHeaderProps) {
   return (
     <CardHeader
-      className={cn("min-w-0 border-b border-border/60 w-full flex flex-col gap-2", className)}
+      className={cn("flex w-full min-w-0 flex-col gap-1 border-b border-border", className)}
     >
-      <div className="flex items-center gap-2">
-        <CardTitle className="min-w-0">{title}</CardTitle>
-        {action ? <CardAction>{action}</CardAction> : null}
+      <div className="flex w-full min-w-0 items-center gap-2">
+        <CardTitle className="min-w-0 flex-1">{title}</CardTitle>
+        {action ? <CardAction className="flex shrink-0 items-center gap-1.5">{action}</CardAction> : null}
       </div>
       {description ? (
-        <CardDescription className="min-w-0 w-full break-words">
+        <CardDescription className="w-full min-w-0 text-[0.75rem] leading-relaxed break-words">
           {description}
         </CardDescription>
       ) : null}
