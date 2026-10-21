@@ -19,7 +19,7 @@ interface ProjectConfigPanelProps {
 }
 
 export function ProjectConfigPanel({ meta, config }: ProjectConfigPanelProps) {
-  if (!meta.project.valid) {
+  if (!meta.project.valid && meta.logs.mode !== "s3") {
     return (
       <EmptyState
         icon={<FolderX />}
@@ -45,7 +45,7 @@ export function ProjectConfigPanel({ meta, config }: ProjectConfigPanelProps) {
         />
         <StatCell
           label="Destination"
-          value={destination === "database" ? "Database" : "Files"}
+          value={destination === "s3" ? "S3" : destination === "none" ? "None" : destination === "database" ? "Database" : "Files"}
           hint={
             destination === "database"
               ? (config?.resolved.database.adapterKind ?? "unknown adapter")
@@ -129,7 +129,14 @@ export function ProjectConfigPanel({ meta, config }: ProjectConfigPanelProps) {
               },
             ]}
           />
-          {config?.resolved.destination === "database" ? (
+          {config?.resolved.destination === "s3" ? (
+            <Section title="S3 storage" items={[
+              { label: "Source", value: <MonoValue>{config.resolved.s3?.uri ?? "Unknown source"}</MonoValue> },
+              { label: "Region", value: <MonoValue>{config.resolved.s3?.region ?? "SDK default"}</MonoValue> },
+              { label: "Endpoint", value: <MonoValue>{config.resolved.s3?.endpoint ?? "AWS regional endpoint"}</MonoValue> },
+              { label: "Credentials", value: "Resolved on the Studio server" },
+            ]}/>
+          ) : config?.resolved.destination === "database" ? (
             <Section
               title="Database"
               items={[

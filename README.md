@@ -234,3 +234,34 @@ blyp-cli/
 - `bun run build`: Build all applications
 - `bun run check-types`: Check TypeScript types across all apps
 - `bun run cli`: Run the CLI from source (`bun run cli -- studio`)
+
+## S3 sources in Studio
+
+Studio reads `destination: 's3'` from a project config, or opens a bucket prefix directly:
+
+```sh
+blyp studio --source s3://production-logs/orders/production --region eu-west-1
+blyp studio --source s3://logs/app --region auto --endpoint https://<account-id>.r2.cloudflarestorage.com
+```
+
+Use `--force-path-style` for MinIO and server-side SDK credentials/profile settings.
+Direct sources need no project. An optional positional project provides source-code
+context and project configuration. Explicit CLI options take precedence over project
+settings. Stop an existing Studio server before changing its source options.
+
+No bucket requests occur until a time range is selected and **Load logs** is pressed.
+Every view shares a versioned dataset. Each load adds a bounded grant (by default:
+16 MiB download reservations, 20 LIST attempts, 64 GET attempts, 20,000 analyzed
+records, and 25 MiB decoded data). Up to five grants are available by default.
+**Load more** resumes without duplicate downloads; partial charts and counts are
+labeled. Live refresh shares the same allowance and pauses on hidden pages or
+exhausted budgets. Selected ranges may span at most seven days.
+
+Configure limits and cache behavior under `studio.s3` in the Blyp config. The default
+server cache is a 512 MiB disk LRU under `~/.blyp/cache/s3` with a 24-hour idle TTL;
+`cache: { mode: 'memory' }` avoids disk caching. Credentials and raw S3 configuration
+stay on the server. Only Blyp format v1 gzip NDJSON batches are supported.
+
+Release the matching core S3 writer before the CLI reader. Local MinIO integration
+was verified; AWS/R2 hosted validation requires dedicated test credentials and
+buckets and was unavailable in the implementation environment.

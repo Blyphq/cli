@@ -7,7 +7,7 @@ export async function resolveStudioProject(
   requestedPath?: string,
 ): Promise<StudioProjectResolution> {
   const envPath = process.env.BLYPQ_STUDIO_TARGET;
-  const rawPath = requestedPath ?? envPath ?? process.cwd();
+  const rawPath = requestedPath || envPath || process.cwd();
   const resolvedFrom = requestedPath
     ? "input"
     : envPath

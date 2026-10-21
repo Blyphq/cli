@@ -15,6 +15,7 @@ import { StatusDot } from "./studio-primitives";
 type FeedItem = StudioOverview["liveFeed"][number];
 
 interface OverviewLiveFeedProps {
+  live?: boolean;
   items: StudioOverview["liveFeed"];
   onOpen(target: FeedItem["target"]): void;
 }
@@ -50,7 +51,7 @@ function formatInlineFields(fields: FeedItem["summaryFields"]): string {
     .join("  ");
 }
 
-export function OverviewLiveFeed({ items, onOpen }: OverviewLiveFeedProps) {
+export function OverviewLiveFeed({ items, onOpen, live = true }: OverviewLiveFeedProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [paused, setPaused] = useState(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -74,18 +75,20 @@ export function OverviewLiveFeed({ items, onOpen }: OverviewLiveFeedProps) {
     <Card className="min-h-[30rem] min-w-0 gap-0 py-0 xl:min-h-[34rem]">
       <PanelHeader
         className="py-3"
-        title="Live activity feed"
+        title={live ? "Live activity feed" : "Loaded activity feed"}
         description={
-          empty
+          !live
+            ? "Events from the current dataset snapshot."
+            : empty
             ? "Waiting for scoped events."
             : paused
               ? "Auto-scroll paused while you hover."
               : "Newest scoped events stream here in real time."
         }
         action={
-          <Badge variant={paused ? "muted" : "success"} className="h-6 gap-1.5 px-2">
-            {paused ? <Pause /> : <StatusDot tone="ok" live />}
-            {paused ? "Paused" : "Live"}
+          <Badge variant={!live || paused ? "muted" : "success"} className="h-6 gap-1.5 px-2">
+            {live && paused ? <Pause /> : <StatusDot tone={live ? "ok" : "neutral"} live={live} />}
+            {!live ? "Snapshot" : paused ? "Paused" : "Live"}
           </Badge>
         }
       />
@@ -95,8 +98,8 @@ export function OverviewLiveFeed({ items, onOpen }: OverviewLiveFeedProps) {
           <div className="w-full max-w-md">
             <EmptyState
               icon={<Radio />}
-              title="Waiting for events"
-              description="Recent events will stream here as soon as logs match the current overview scope."
+              title={live ? "Waiting for events" : "No loaded events"}
+              description={live ? "Recent events will stream here as soon as logs match the current overview scope." : "No loaded records match the current overview scope."}
             />
           </div>
         </div>

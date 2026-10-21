@@ -13,16 +13,17 @@ interface LogFilesPanelProps {
 
 export function LogFilesPanel({ files, activeFileId, mode, onSelectFile }: LogFilesPanelProps) {
   const isDatabase = mode === "database";
+  const isS3 = mode === "s3";
   const totalBytes = files.reduce((sum, file) => sum + (file.sizeBytes ?? 0), 0);
 
   if (files.length === 0) {
     return (
       <div className="rounded-md border border-dashed border-border-strong bg-card/60 p-2.5">
         <div className="text-[0.75rem] font-medium">
-          {isDatabase ? "Database source unavailable" : "No log files discovered"}
+          {isS3 ? "S3 source" : isDatabase ? "Database source unavailable" : "No log files discovered"}
         </div>
         <p className="mt-1 text-[0.68rem] leading-snug text-muted-foreground">
-          {isDatabase
+          {isS3 ? "Load a time range to inspect its cached log batches." : isDatabase
             ? "Check that your Blyp config adapter is valid and the database is reachable."
             : "Studio looked in the resolved log and archive directories but found no Blyp log files."}
         </p>
@@ -33,7 +34,7 @@ export function LogFilesPanel({ files, activeFileId, mode, onSelectFile }: LogFi
   return (
     <div className="rounded-md border border-border bg-card p-2 shadow-xs">
       <div className="flex items-center justify-between px-1 pb-1.5 text-[0.7rem] text-muted-foreground">
-        <span>{isDatabase ? "Log source" : "Log files"}</span>
+        <span>{isS3 ? "Loaded S3 batches" : isDatabase ? "Log source" : "Log files"}</span>
         {!isDatabase ? (
           <span className="font-mono tabular-nums">{formatBytes(totalBytes)}</span>
         ) : null}

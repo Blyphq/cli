@@ -18,6 +18,9 @@ import { useTRPCClient } from "@/utils/trpc";
 
 export interface UseAssistantChatParams {
   projectPath: string;
+  sourceId?: string;
+  datasetId?: string;
+  snapshotVersion?: number;
   filters: StudioFilters;
   deferredSearch: string;
   selection: StudioSelection;
@@ -26,7 +29,7 @@ export interface UseAssistantChatParams {
 }
 
 export function useAssistantChat({
-  projectPath,
+  projectPath, sourceId, datasetId, snapshotVersion,
   filters,
   deferredSearch,
   selection,
@@ -80,7 +83,7 @@ export function useAssistantChat({
       new DefaultChatTransport<StudioChatMessage>({
         api: "/api/chat",
         body: {
-          projectPath,
+          projectPath, sourceId, datasetId, snapshotVersion,
           filters: {
             level: filters.level || undefined,
             type: filters.type || undefined,
@@ -119,7 +122,7 @@ export function useAssistantChat({
       filters.level,
       filters.to,
       filters.type,
-      projectPath,
+      projectPath, sourceId, datasetId, snapshotVersion,
       selectedModel,
       assistantScopeMode,
       selection,

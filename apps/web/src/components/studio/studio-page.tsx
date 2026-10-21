@@ -1,3 +1,4 @@
+import { S3SourcePanel } from "./s3-source-panel";
 import { useEffect, useState, type ComponentProps } from "react";
 import { Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
@@ -212,6 +213,10 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
     deferredSearch,
   } = studioData;
 
+  useEffect(() => {
+    setSelection(null); setOffset(0); setFilters(current => ({ ...current, fileId: "", from: "", to: "" }));
+  }, [studioData.s3Dataset.datasetId, metaQuery.data?.logs.s3?.id]);
+
   const shouldSyncSelection =
     !isOverviewSection(section) &&
     !isAuthSection(section) &&
@@ -312,6 +317,9 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
 
   const assistant = useAssistantChat({
     projectPath,
+    sourceId: metaQuery.data?.logs.s3?.id,
+    datasetId: studioData.s3Dataset.datasetId,
+    snapshotVersion: studioData.s3Dataset.status?.version,
     filters,
     deferredSearch,
     selection,
@@ -626,7 +634,7 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
                 orientation="vertical"
                 className="mr-1 data-[orientation=vertical]:h-4"
               />
-              <StreamingIndicator active={!hasBackendError && !isProjectInvalid && !isLoadingMeta} />
+              <StreamingIndicator active={!hasBackendError && !isProjectInvalid && !isLoadingMeta && (metaQuery.data?.logs.mode !== "s3" || (studioData.s3Dataset.status?.state === "ready" && !!studioData.s3Dataset.status.follow))} />
               <h1 className="truncate font-heading text-[0.95rem] font-semibold tracking-[-0.02em]">
                 {currentSectionLabel}
               </h1>
@@ -651,6 +659,7 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
             <ThemeToggle />
           </header>
           <div className="min-h-full p-4 text-foreground xl:p-6">
+            {metaQuery.data?.logs.s3 ? <S3SourcePanel source={metaQuery.data.logs.s3} dataset={studioData.s3Dataset}/> : null}
             <div key={section} className="blyp-fade-up mx-auto grid max-w-[1720px] gap-5">
               <div
                 className={
@@ -702,8 +711,11 @@ export function StudioPage({ navigate, search }: StudioPageProps) {
             ) : (
               <PanelSkeleton rows={6} />
             )
+          ) : metaQuery.data?.logs.mode === "s3" && !studioData.s3Dataset.datasetId ? (
+            <p className="py-12 text-center text-sm text-muted-foreground">Choose a time range and load logs to inspect this source.</p>
           ) : isOverviewSection(section) ? (
             <OverviewView
+              live={metaQuery.data?.logs.mode !== "s3" || (studioData.s3Dataset.status?.state === "ready" && !!studioData.s3Dataset.status.follow)}
               overview={studioData.overviewQuery.data}
               connectedAt={overviewConnectedAt}
               onSelect={setSection}

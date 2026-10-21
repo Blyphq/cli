@@ -1,0 +1,14 @@
+{
+  "id": "00000000-0000-4000-8000-000000000001",
+  "key": "app/v1/2026/10/21/12/8207414199999-1792585800000-1792585800000-00000000-0000-4000-8000-000000000001.ndjson.gz",
+  "body": "H4sIAAAAAAAAA6tWKsnMTS0uScwtULJSMjIwMtM1NNA1MgwxNLIyNrAyMNAzMDCIUtJRykktS80BKsnMS8sHcoF6ihPTU4ECbvlFuYklCmWGCmmZFSWlRalKtVwAPIPOTlYAAAA=",
+  "minTimestamp": 1792585800000,
+  "maxTimestamp": 1792585800000,
+  "recordCount": 1,
+  "decodedBytes": 86,
+  "record": {
+    "timestamp": "2026-10-21T12:30:00.000Z",
+    "level": "info",
+    "message": "Format v1 fixture"
+  }
+}

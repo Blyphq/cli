@@ -1,3 +1,4 @@
+import { getS3Source, getS3DatasetRecords } from "./s3";
 import path from "node:path";
 
 import {
@@ -73,6 +74,10 @@ async function discoverLogSource(
   projectPath: string,
   config: StudioConfigDiscovery,
 ): Promise<StudioLogDiscovery> {
+  if (config.resolved.destination === "s3" || config.resolved.destination === "none") {
+    return { logDir: "", archiveDir: "", logDirExists: false, archiveDirExists: false,
+      files: [], mode: config.resolved.destination, database: null, s3: config.resolved.s3 };
+  }
   if (config.resolved.destination === "database") {
     const syntheticFile = buildSyntheticDatabaseFile(config.resolved);
 
@@ -100,6 +105,9 @@ async function loadProjectRecords(
   scannedRecords: number;
   truncated: boolean;
 }> {
+  if (files.mode === "s3") {
+    return files.datasetId ? getS3DatasetRecords(files.datasetId, files.s3?.id, files.snapshotVersion) : { records: [], scannedRecords: 0, truncated: true };
+  }
   if (files.mode === "database") {
     return loadDatabaseRecords({ projectPath, config, input: filters });
   }
@@ -107,16 +115,10 @@ async function loadProjectRecords(
   return loadNormalizedRecords(files.files, projectPath);
 }
 
-export async function getStudioMeta(projectPath?: string): Promise<StudioMeta> {
-  const project = await resolveStudioProject(projectPath);
-  const config = await discoverStudioConfig(project);
-  const logs = project.valid
-    ? await discoverLogSource(project.absolutePath, config)
-    : emptyLogDiscovery(config);
-  const sections =
-    project.valid
-      ? await getStudioSections(project.absolutePath)
-      : [];
+export async function getStudioMeta(projectPath?: string, context: StudioSourceInput = {}): Promise<StudioMeta> {
+  const { project, config, files: logs } = await getStudioProjectFiles(projectPath, context);
+  const loaded = project.valid || logs.mode === "s3" ? await loadProjectRecords(project.absolutePath, config, logs) : { records: [] };
+  const sections = buildDetectedSections(loaded.records, config.resolved.studio.sections);
 
   return {
     project,
@@ -124,6 +126,8 @@ export async function getStudioMeta(projectPath?: string): Promise<StudioMeta> {
     sections,
     logs: {
       mode: logs.mode,
+      s3: logs.s3,
+      datasetId: logs.datasetId,
       database: logs.database,
       logDir: logs.logDir,
       archiveDir: logs.archiveDir,
@@ -136,26 +140,22 @@ export async function getStudioMeta(projectPath?: string): Promise<StudioMeta> {
   };
 }
 
-export async function getStudioConfig(projectPath?: string): Promise<StudioConfigDiscovery> {
-  const project = await resolveStudioProject(projectPath);
-  const config = await discoverStudioConfig(project);
+export async function getStudioConfig(projectPath?: string, context: StudioSourceInput = {}): Promise<StudioConfigDiscovery> {
+  const { config } = await getStudioProjectFiles(projectPath, context);
   return stripParsedConfig(config);
 }
 
-export async function getStudioFiles(projectPath?: string): Promise<StudioLogDiscovery> {
-  const project = await resolveStudioProject(projectPath);
-  const config = await discoverStudioConfig(project);
-
-  if (!project.valid) {
-    return emptyLogDiscovery(config);
-  }
-
-  return discoverLogSource(project.absolutePath, config);
+export async function getStudioFiles(projectPath?: string, context: StudioSourceInput = {}): Promise<StudioLogDiscovery> {
+  return (await getStudioProjectFiles(projectPath, context)).files;
 }
 
 export async function getStudioLogs(input: StudioLogsQueryInput): Promise<StudioLogsPage> {
-  const { files, project, config } = await getStudioProjectFiles(input.projectPath);
+  const { files, project, config } = await getStudioProjectFiles(input.projectPath, input);
 
+  if (files.mode === "s3") {
+    return queryLogs({ files: files.files, input, customSections: config.resolved.studio.sections,
+      preloaded: await loadProjectRecords(project.absolutePath, config, files) });
+  }
   if (files.mode === "database") {
     const dbLoaded = await loadDatabaseRecords({
       projectPath: project.absolutePath,
@@ -183,7 +183,7 @@ export async function getStudioLogs(input: StudioLogsQueryInput): Promise<Studio
 export async function getStudioErrors(
   input: StudioErrorsQueryInput,
 ): Promise<StudioErrorsPage> {
-  const { files, project, config } = await getStudioProjectFiles(input.projectPath);
+  const { files, project, config } = await getStudioProjectFiles(input.projectPath, input);
   const candidateFiles = input.fileId
     ? files.files.filter((file) => file.id === input.fileId)
     : files.files;
@@ -212,9 +212,9 @@ export async function getStudioErrors(
   });
 }
 
-export async function getStudioSections(projectPath?: string): Promise<StudioDetectedSection[]> {
-  const { files, project, config } = await getStudioProjectFiles(projectPath);
-  if (!project.valid) {
+export async function getStudioSections(projectPath?: string, context: StudioSourceInput = {}): Promise<StudioDetectedSection[]> {
+  const { files, project, config } = await getStudioProjectFiles(projectPath, context);
+  if (!project.valid && files.mode !== "s3") {
     return [];
   }
 
@@ -225,7 +225,7 @@ export async function getStudioSections(projectPath?: string): Promise<StudioDet
 export async function getStudioOverview(
   input: StudioOverviewQueryInput,
 ): Promise<StudioOverview> {
-  const { files, project, config } = await getStudioProjectFiles(input.projectPath);
+  const { files, project, config } = await getStudioProjectFiles(input.projectPath, input);
   const candidateFiles = input.fileId
     ? files.files.filter((file) => file.id === input.fileId)
     : files.files;
@@ -266,8 +266,8 @@ export async function getStudioOverview(
 }
 
 export async function getStudioAuth(input: StudioAuthQueryInput): Promise<StudioAuthOverview> {
-  const { files, project, config } = await getStudioProjectFiles(input.projectPath);
-  if (!project.valid) {
+  const { files, project, config } = await getStudioProjectFiles(input.projectPath, input);
+  if (!project.valid && files.mode !== "s3") {
     return {
       stats: {
         loginAttemptsTotal: 0,
@@ -305,7 +305,7 @@ export async function getStudioAuth(input: StudioAuthQueryInput): Promise<Studio
 }
 
 export async function getStudioHttp(input: StudioHttpQueryInput): Promise<StudioHttpOverview> {
-  const { files, project, config } = await getStudioProjectFiles(input.projectPath);
+  const { files, project, config } = await getStudioProjectFiles(input.projectPath, input);
   const candidateFiles = input.fileId
     ? files.files.filter((file) => file.id === input.fileId)
     : files.files;
@@ -344,8 +344,8 @@ export async function getStudioHttp(input: StudioHttpQueryInput): Promise<Studio
 export async function getStudioDatabase(
   input: StudioDatabaseQueryInput,
 ): Promise<StudioDatabaseOverview> {
-  const { files, project, config } = await getStudioProjectFiles(input.projectPath);
-  if (!project.valid) {
+  const { files, project, config } = await getStudioProjectFiles(input.projectPath, input);
+  if (!project.valid && files.mode !== "s3") {
     return {
       stats: {
         totalQueries: 0,
@@ -385,8 +385,8 @@ export async function getStudioDatabase(
 export async function getStudioAgents(
   input: StudioAgentsQueryInput,
 ): Promise<StudioAgentsOverview> {
-  const { files, project, config } = await getStudioProjectFiles(input.projectPath);
-  if (!project.valid) {
+  const { files, project, config } = await getStudioProjectFiles(input.projectPath, input);
+  if (!project.valid && files.mode !== "s3") {
     return {
       stats: {
         agentTasks: 0,
@@ -437,14 +437,17 @@ export async function getStudioAgents(
 
 export async function getStudioAgentTask(input: {
   projectPath?: string;
+  sourceId?: string;
+  datasetId?: string;
+  snapshotVersion?: number;
   taskId: string;
   fileId?: string;
   from?: string;
   to?: string;
   search?: string;
 }): Promise<StudioAgentTaskDetail | null> {
-  const { files, project, config } = await getStudioProjectFiles(input.projectPath);
-  if (!project.valid) {
+  const { files, project, config } = await getStudioProjectFiles(input.projectPath, input);
+  if (!project.valid && files.mode !== "s3") {
     return null;
   }
 
@@ -474,8 +477,8 @@ export async function getStudioAgentTask(input: {
 export async function getStudioBackgroundJobs(
   input: StudioBackgroundJobsQueryInput,
 ): Promise<StudioBackgroundJobsOverview> {
-  const { files, project, config } = await getStudioProjectFiles(input.projectPath);
-  if (!project.valid) {
+  const { files, project, config } = await getStudioProjectFiles(input.projectPath, input);
+  if (!project.valid && files.mode !== "s3") {
     return {
       stats: {
         jobsDetected: 0,
@@ -521,14 +524,17 @@ export async function getStudioBackgroundJobs(
 
 export async function getStudioBackgroundJobRun(input: {
   projectPath?: string;
+  sourceId?: string;
+  datasetId?: string;
+  snapshotVersion?: number;
   runId: string;
   fileId?: string;
   from?: string;
   to?: string;
   search?: string;
 }): Promise<StudioBackgroundJobRunDetail | null> {
-  const { files, project, config } = await getStudioProjectFiles(input.projectPath);
-  if (!project.valid) {
+  const { files, project, config } = await getStudioProjectFiles(input.projectPath, input);
+  if (!project.valid && files.mode !== "s3") {
     return null;
   }
 
@@ -559,8 +565,8 @@ export async function getStudioBackgroundJobRun(input: {
 export async function getStudioPayments(
   input: StudioPaymentsQueryInput,
 ): Promise<StudioPaymentsOverview> {
-  const { files, project, config } = await getStudioProjectFiles(input.projectPath);
-  if (!project.valid) {
+  const { files, project, config } = await getStudioProjectFiles(input.projectPath, input);
+  if (!project.valid && files.mode !== "s3") {
     return {
       stats: {
         checkoutAttempts: 0,
@@ -611,14 +617,17 @@ export async function getStudioPayments(
 
 export async function getStudioPaymentTrace(input: {
   projectPath?: string;
+  sourceId?: string;
+  datasetId?: string;
+  snapshotVersion?: number;
   traceId: string;
   fileId?: string;
   from?: string;
   to?: string;
   search?: string;
 }): Promise<StudioPaymentTraceDetail | null> {
-  const { files, project, config } = await getStudioProjectFiles(input.projectPath);
-  if (!project.valid) {
+  const { files, project, config } = await getStudioProjectFiles(input.projectPath, input);
+  if (!project.valid && files.mode !== "s3") {
     return null;
   }
 
@@ -648,6 +657,9 @@ export async function getStudioPaymentTrace(input: {
 
 export async function addStudioCustomSection(input: {
   projectPath?: string;
+  sourceId?: string;
+  datasetId?: string;
+  snapshotVersion?: number;
   name: string;
   icon: string;
   match: {
@@ -669,17 +681,17 @@ export async function addStudioCustomSection(input: {
   });
 
   return {
-    sections: await getStudioSections(project.absolutePath),
+    sections: await getStudioSections(project.absolutePath, input),
   };
 }
 
 export async function getStudioFacets(
   input: Pick<
     StudioLogsQueryInput,
-    "projectPath" | "level" | "search" | "fileId" | "from" | "to" | "sectionId"
+    "projectPath" | "sourceId" | "datasetId" | "snapshotVersion" | "level" | "search" | "fileId" | "from" | "to" | "sectionId"
   >,
 ): Promise<StudioLogFacets> {
-  const { files, project, config } = await getStudioProjectFiles(input.projectPath);
+  const { files, project, config } = await getStudioProjectFiles(input.projectPath, input);
   const loaded = await loadProjectRecords(project.absolutePath, config, files, input);
 
   return getLogFacets(loaded.records, input, config.resolved.studio.sections);
@@ -687,9 +699,12 @@ export async function getStudioFacets(
 
 export async function getStudioGroup(input: {
   projectPath?: string;
+  sourceId?: string;
+  datasetId?: string;
+  snapshotVersion?: number;
   groupId: string;
 }): Promise<StudioStructuredGroupDetail | null> {
-  const { files, project, config } = await getStudioProjectFiles(input.projectPath);
+  const { files, project, config } = await getStudioProjectFiles(input.projectPath, input);
   const loaded = await loadProjectRecords(project.absolutePath, config, files);
   const groups = buildGroupDetails(loaded.records);
 
@@ -698,9 +713,12 @@ export async function getStudioGroup(input: {
 
 export async function getStudioErrorGroup(input: {
   projectPath?: string;
+  sourceId?: string;
+  datasetId?: string;
+  snapshotVersion?: number;
   fingerprint: string;
 }): Promise<StudioErrorGroupDetail | null> {
-  const { files, project, config } = await getStudioProjectFiles(input.projectPath);
+  const { files, project, config } = await getStudioProjectFiles(input.projectPath, input);
   const loaded = await loadProjectRecords(project.absolutePath, config, files);
 
   return buildErrorGroupDetail({
@@ -713,9 +731,12 @@ export async function getStudioErrorGroup(input: {
 
 export async function getStudioRecord(input: {
   projectPath?: string;
+  sourceId?: string;
+  datasetId?: string;
+  snapshotVersion?: number;
   recordId: string;
 }) {
-  const { files, project, config } = await getStudioProjectFiles(input.projectPath);
+  const { files, project, config } = await getStudioProjectFiles(input.projectPath, input);
   const loaded = await loadProjectRecords(project.absolutePath, config, files);
 
   return loaded.records.find((record) => record.id === input.recordId) ?? null;
@@ -723,9 +744,12 @@ export async function getStudioRecord(input: {
 
 export async function getStudioRecordSource(input: {
   projectPath?: string;
+  sourceId?: string;
+  datasetId?: string;
+  snapshotVersion?: number;
   recordId: string;
 }): Promise<StudioSourceContext> {
-  const { files, project, config } = await getStudioProjectFiles(input.projectPath);
+  const { files, project, config } = await getStudioProjectFiles(input.projectPath, input);
   const loaded = await loadProjectRecords(project.absolutePath, config, files);
   const record = loaded.records.find((candidate) => candidate.id === input.recordId);
 
@@ -733,6 +757,7 @@ export async function getStudioRecordSource(input: {
     return createUnavailableSourceContext("no_location");
   }
 
+  if (files.mode === "s3" && !files.s3?.hasProject) return createUnavailableSourceContext("no_project_frame");
   return resolveRecordSourceContext(project.absolutePath, record);
 }
 
@@ -753,6 +778,9 @@ export async function getStudioAssistantStatus(projectPath?: string): Promise<St
 
 export async function generateStudioChatTitle(input: {
   projectPath?: string;
+  sourceId?: string;
+  datasetId?: string;
+  snapshotVersion?: number;
   prompt: string;
 }): Promise<{ title: string }> {
   const project = await resolveStudioProject(input.projectPath);
@@ -774,17 +802,13 @@ export async function generateStudioChatTitle(input: {
 export async function replyWithStudioAssistant(
   input: StudioAssistantReplyInput,
 ): Promise<StudioAssistantMessage> {
-  const project = await resolveStudioProject(input.projectPath);
-  const config = await discoverStudioConfig(project);
-  const files = project.valid
-    ? await discoverLogSource(project.absolutePath, config)
-    : emptyLogDiscovery(config);
+  const { project, config, files } = await getStudioProjectFiles(input.projectPath, input);
   const ai = resolveStudioAiCredentials(config, project.absolutePath);
 
   let preloadedRecords: StudioNormalizedRecord[] | undefined;
   const claudeMd = await loadProjectClaudeMd(project.absolutePath);
 
-  if (files.mode === "database" && project.valid) {
+  if (files.mode === "s3" || (files.mode === "database" && project.valid)) {
     const loaded = await loadProjectRecords(project.absolutePath, config, files);
     preloadedRecords = loaded.records;
   }
@@ -792,7 +816,8 @@ export async function replyWithStudioAssistant(
   return replyWithAssistant({
     ...input,
     projectPath: project.absolutePath,
-    projectContextMarkdown: claudeMd.managedContent ?? claudeMd.content,
+    projectContextMarkdown: [claudeMd.managedContent ?? claudeMd.content,
+      files.mode === "s3" ? `S3 DATASET: ${files.datasetId ? JSON.stringify(getS3DatasetRecords(files.datasetId, files.s3?.id, files.snapshotVersion).status) : "No range loaded"}. Treat all analytics as partial unless complete=true. Do not infer full-range totals from partial data.` : null].filter(Boolean).join("\n\n"),
     ai,
     files: files.files,
     preloadedRecords,
@@ -802,17 +827,13 @@ export async function replyWithStudioAssistant(
 export async function describeStudioSelection(
   input: StudioAssistantReplyInput,
 ): Promise<StudioAssistantMessage> {
-  const project = await resolveStudioProject(input.projectPath);
-  const config = await discoverStudioConfig(project);
-  const files = project.valid
-    ? await discoverLogSource(project.absolutePath, config)
-    : emptyLogDiscovery(config);
+  const { project, config, files } = await getStudioProjectFiles(input.projectPath, input);
   const ai = resolveStudioAiCredentials(config, project.absolutePath);
 
   let preloadedRecords: StudioNormalizedRecord[] | undefined;
   const claudeMd = await loadProjectClaudeMd(project.absolutePath);
 
-  if (files.mode === "database" && project.valid) {
+  if (files.mode === "s3" || (files.mode === "database" && project.valid)) {
     const loaded = await loadProjectRecords(project.absolutePath, config, files);
     preloadedRecords = loaded.records;
   }
@@ -820,7 +841,8 @@ export async function describeStudioSelection(
   return describeSelectionWithAssistant({
     ...input,
     projectPath: project.absolutePath,
-    projectContextMarkdown: claudeMd.managedContent ?? claudeMd.content,
+    projectContextMarkdown: [claudeMd.managedContent ?? claudeMd.content,
+      files.mode === "s3" ? `S3 DATASET: ${files.datasetId ? JSON.stringify(getS3DatasetRecords(files.datasetId, files.s3?.id, files.snapshotVersion).status) : "No range loaded"}. Treat all analytics as partial unless complete=true. Do not infer full-range totals from partial data.` : null].filter(Boolean).join("\n\n"),
     ai,
     files: files.files,
     preloadedRecords,
@@ -829,6 +851,9 @@ export async function describeStudioSelection(
 
 export async function streamStudioAssistant(input: {
   projectPath?: string;
+  sourceId?: string;
+  datasetId?: string;
+  snapshotVersion?: number;
   filters: StudioAssistantReplyInput["filters"];
   selectedRecordId?: string;
   selectedGroupId?: string;
@@ -839,24 +864,21 @@ export async function streamStudioAssistant(input: {
   mode?: "chat" | "describe-selection";
   model?: string;
 }): Promise<StudioAssistantStreamResult> {
-  const project = await resolveStudioProject(input.projectPath);
-  const config = await discoverStudioConfig(project);
-  const files = project.valid
-    ? await discoverLogSource(project.absolutePath, config)
-    : emptyLogDiscovery(config);
+  const { project, config, files } = await getStudioProjectFiles(input.projectPath, input);
   const ai = resolveStudioAiCredentials(config, project.absolutePath);
 
   let preloadedRecords: StudioNormalizedRecord[] | undefined;
   const claudeMd = await loadProjectClaudeMd(project.absolutePath);
 
-  if (files.mode === "database" && project.valid) {
+  if (files.mode === "s3" || (files.mode === "database" && project.valid)) {
     const loaded = await loadProjectRecords(project.absolutePath, config, files);
     preloadedRecords = loaded.records;
   }
 
   return streamAssistant({
     projectPath: project.absolutePath,
-    projectContextMarkdown: claudeMd.managedContent ?? claudeMd.content,
+    projectContextMarkdown: [claudeMd.managedContent ?? claudeMd.content,
+      files.mode === "s3" ? `S3 DATASET: ${files.datasetId ? JSON.stringify(getS3DatasetRecords(files.datasetId, files.s3?.id, files.snapshotVersion).status) : "No range loaded"}. Treat all analytics as partial unless complete=true. Do not infer full-range totals from partial data.` : null].filter(Boolean).join("\n\n"),
     files: files.files,
     filters: input.filters,
     selectedRecordId: input.selectedRecordId,
@@ -882,7 +904,8 @@ function emptyLogDiscovery(config: StudioConfigDiscovery): StudioLogDiscovery {
     logDirExists: false,
     archiveDirExists: false,
     files: [],
-    mode: config.resolved.destination === "database" ? "database" : "file",
+    mode: config.resolved.destination,
+    s3: config.resolved.s3,
     database:
       config.resolved.destination === "database"
         ? config.resolved.database
@@ -890,21 +913,31 @@ function emptyLogDiscovery(config: StudioConfigDiscovery): StudioLogDiscovery {
   };
 }
 
-async function getStudioProjectFiles(projectPath?: string): Promise<{
+interface StudioSourceInput { sourceId?: string; datasetId?: string; snapshotVersion?: number }
+
+async function getStudioProjectFiles(projectPath?: string, context: StudioSourceInput = {}): Promise<{
   project: Awaited<ReturnType<typeof resolveStudioProject>>;
   config: StudioConfigDiscovery;
   files: StudioLogDiscovery;
 }> {
   const project = await resolveStudioProject(projectPath);
   const config = await discoverStudioConfig(project);
+  if (context.datasetId && !context.sourceId) context = { ...context, sourceId: getS3DatasetRecords(context.datasetId).status.sourceId };
+  if (config.resolved.destination === "s3" && config.loadError && !config.resolved.s3 && !context.sourceId) throw new Error(config.loadError);
 
-  return {
-    project,
-    config,
-    files: project.valid
-      ? await discoverLogSource(project.absolutePath, config)
-      : emptyLogDiscovery(config),
-  };
+  if (context.sourceId) {
+    config.resolved.s3 = getS3Source(context.sourceId);
+    config.resolved.destination = "s3";
+  }
+  const files = project.valid || config.resolved.destination === "s3"
+    ? await discoverLogSource(project.absolutePath, config) : emptyLogDiscovery(config);
+  if (files.mode === "s3" && context.datasetId) {
+    const loaded = getS3DatasetRecords(context.datasetId, files.s3?.id, context.snapshotVersion);
+    files.datasetId = context.datasetId;
+    files.snapshotVersion = context.snapshotVersion;
+    files.files = loaded.files;
+  }
+  return { project, config, files };
 }
 
 // parsedConfig may contain live ORM runtime objects (PrismaClient, Drizzle db)
@@ -912,7 +945,7 @@ async function getStudioProjectFiles(projectPath?: string): Promise<{
 // service layer. Internal service helpers use discoverStudioConfig() directly
 // and retain the full object for DB queries.
 function stripParsedConfig(config: StudioConfigDiscovery): StudioConfigDiscovery {
-  return { ...config, parsedConfig: null };
+  return { ...config, parsedConfig: null, rawContent: config.resolved.destination === "s3" ? null : config.rawContent };
 }
 
 function sanitizeGeneratedChatTitle(value: string): string {

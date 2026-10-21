@@ -1,3 +1,4 @@
+import { registerS3Source, getDirectS3Source, type S3Connection, type S3ReadSettings } from "./s3";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -85,7 +86,8 @@ interface StudioConfigInput {
         enabled?: boolean;
         path?: string;
       };
-  destination?: "file" | "database";
+  destination?: "file" | "database" | "s3" | "none";
+  s3?: S3Connection;
   database?: {
     dialect?: string;
     adapter?: {
@@ -128,6 +130,7 @@ interface StudioConfigInput {
     }>;
   };
   studio?: {
+    s3?: S3ReadSettings;
     sections?: Array<{
       name?: string;
       icon?: string;
@@ -179,9 +182,11 @@ export async function discoverStudioConfig(
   const ignored = matches.slice(1);
   const rawContent = readConfigRawContent(winner.path);
 
+  let s3Requested = defaults.destination === "s3" || /["']?s3["']?\s*:/.test(rawContent ?? "");
   try {
     const loaded = loadConfigFile(winner, project.absolutePath);
     const parsedConfig = normalizeLoadedConfig(loaded);
+    s3Requested ||= parsedConfig.destination === "s3";
 
     return {
       status: "found",
@@ -197,10 +202,10 @@ export async function discoverStudioConfig(
       status: "error",
       winner,
       ignored,
-      rawContent,
+      rawContent: s3Requested ? null : rawContent,
       parsedConfig: null,
-      loadError: error instanceof Error ? error.message : "Failed to load config.",
-      resolved: defaults,
+      loadError: s3Requested ? "S3 source configuration could not be loaded. Check bucket, endpoint, credentials configuration, and studio.s3 limits on the server." : error instanceof Error ? error.message : "Failed to load config.",
+      resolved: s3Requested ? { ...defaults, destination: "s3" } : defaults,
     };
   }
 }
@@ -319,6 +324,7 @@ function normalizeLoadedConfig(value: unknown): StudioConfigInput {
 function sanitizeConfigForStudio(value: StudioConfigInput): StudioConfigInput {
   return {
     ...value,
+    s3: undefined,
     database: value.database
       ? {
           ...value.database,
@@ -412,7 +418,13 @@ function buildResolvedConfig(
   const file = mergeFileConfig(input.file, input.logDir, projectPath);
   const logDir = file.dir || path.join(projectPath, "logs");
 
+  const direct = getDirectS3Source(process.env.BLYPQ_STUDIO_TARGET ? projectPath : undefined, process.env.BLYPQ_STUDIO_TARGET ? input.s3 : undefined, input.studio?.s3);
+  const s3 = direct ?? (input.destination === "s3"
+    ? registerS3Source({ ...input.s3!, region: process.env.BLYPQ_STUDIO_S3_REGION || input.s3?.region, endpoint: process.env.BLYPQ_STUDIO_S3_ENDPOINT || input.s3?.endpoint, forcePathStyle: process.env.BLYPQ_STUDIO_S3_PATH_STYLE ? true : input.s3?.forcePathStyle }, { projectPath, settings: input.studio?.s3, identity: projectPath })
+    : undefined);
+  if (s3 || input.destination === "none") file.enabled = false;
   return {
+    s3,
     pretty: input.pretty ?? true,
     level: input.level ?? "info",
     logDir,
@@ -423,7 +435,7 @@ function buildResolvedConfig(
     studio: {
       sections: normalizeCustomSections(input.studio?.sections),
     },
-    destination: input.destination ?? "file",
+    destination: s3 ? "s3" : input.destination ?? "file",
     database: mergeDatabaseConfig(input, configFileType),
   };
 }

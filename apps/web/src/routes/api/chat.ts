@@ -7,6 +7,9 @@ import type { UIMessage } from "ai";
 const chatRequestSchema = z.object({
   messages: z.array(z.any()),
   projectPath: z.string().optional(),
+  sourceId: z.string().optional(),
+  datasetId: z.string().optional(),
+  snapshotVersion: z.number().int().min(0).optional(),
   filters: z
     .object({
       level: z.string().optional(),

@@ -15,6 +15,7 @@ import { ListRowsSkeleton, PanelSkeleton, StatTilesSkeleton } from "./studio-ske
 
 interface OverviewViewProps {
   overview: StudioOverview | undefined;
+  live?: boolean;
   connectedAt: string;
   onSelect(section: StudioSectionId): void;
   onSelectFeedTarget(target: StudioOverviewTarget | null): void;
@@ -32,6 +33,7 @@ const columnsClass = "grid items-stretch gap-4 xl:grid-cols-[minmax(0,1fr)_minma
 
 export function OverviewView({
   overview,
+  live = true,
   connectedAt,
   onSelect,
   onSelectFeedTarget,
@@ -64,7 +66,7 @@ export function OverviewView({
     <div className="flex flex-col gap-4">
       <OverviewHealthBar stats={overview.stats} connectedAt={connectedAt} now={now} />
       <div className={columnsClass}>
-        <OverviewLiveFeed items={overview.liveFeed} onOpen={onSelectFeedTarget} />
+        <OverviewLiveFeed live={live} items={overview.liveFeed} onOpen={onSelectFeedTarget} />
         <div className="flex min-w-0 flex-col gap-4">
           <OverviewRecentErrors
             items={overview.recentErrors}

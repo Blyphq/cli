@@ -1,3 +1,4 @@
+import { parseStudioSourceArgs } from "../lib/studio-source.js";
 import { spinner } from "@clack/prompts";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
@@ -28,9 +29,11 @@ const STUDIO_REQUEST_TIMEOUT_MS = 1_500;
 export const studioCommand: CommandDefinition = {
   name: "studio",
   description: "Start or manage the local Studio workflow.",
-  usage: "blyp studio [targetPath]",
+  usage: "blyp studio [targetPath] [--source s3://bucket/prefix] [--region region] [--endpoint URL] [--force-path-style]",
   async run(context: CommandContext): Promise<void> {
-    const targetProjectPath = path.resolve(context.cwd, context.argv[0] ?? context.cwd);
+    const options = parseStudioSourceArgs(context.argv, context.cwd);
+    const { targetProjectPath } = options;
+    const inspectionTarget = options.source ?? targetProjectPath;
 
     const relativeToCwd = path.relative(context.cwd, targetProjectPath);
     if (relativeToCwd.startsWith("..") || path.isAbsolute(relativeToCwd)) {
@@ -39,7 +42,7 @@ export const studioCommand: CommandDefinition = {
       );
     }
 
-    await ensureStudioAiSetup(targetProjectPath);
+    if (options.hasProject && !options.source) await ensureStudioAiSetup(targetProjectPath);
 
     const studioUrl = getStudioUrl(targetProjectPath);
     const status = spinner();
@@ -50,15 +53,19 @@ export const studioCommand: CommandDefinition = {
     status.start("Checking Studio frontend");
     const frontendIsRunning = await isUrlReachable(studioUrl);
 
+    if (frontendIsRunning && Object.keys(options.env).length) throw new CliError("Studio is already running. Stop it before changing its server-side S3 source configuration.");
+
     if (frontendIsRunning) {
       status.stop("Studio frontend is already running");
-      showInfo(`Inspecting ${targetProjectPath}`);
+      showInfo(`Inspecting ${inspectionTarget}`);
       await openStudioBrowser(studioUrl);
       return;
     }
 
     const child = startStudioProcess({
       targetProjectPath,
+      sourceEnv: options.env,
+      hasProject: options.hasProject,
       webAppDir,
       packagedStudioAvailable: packagedStudio !== null,
       status,
@@ -80,7 +87,7 @@ export const studioCommand: CommandDefinition = {
       await openStudioBrowser(studioUrl);
       showNote(
         "Studio",
-        `Inspecting ${targetProjectPath}\nFrontend running at ${studioUrl}\nPress Ctrl-C to stop it.`,
+        `Inspecting ${inspectionTarget}\nFrontend running at ${studioUrl}\nPress Ctrl-C to stop it.`,
       );
       await forwardSignalsUntilExit(child);
     } catch (error) {
@@ -95,6 +102,8 @@ export const studioCommand: CommandDefinition = {
 
 function startStudioProcess(input: {
   readonly targetProjectPath: string;
+  readonly sourceEnv: Record<string,string>;
+  readonly hasProject: boolean;
   readonly webAppDir: string | null;
   readonly packagedStudioAvailable: boolean;
   readonly status: ReturnType<typeof spinner>;
@@ -105,7 +114,8 @@ function startStudioProcess(input: {
       cwd: input.webAppDir,
       env: {
         ...process.env,
-        BLYPQ_STUDIO_TARGET: input.targetProjectPath,
+        BLYPQ_STUDIO_TARGET: input.hasProject ? input.targetProjectPath : "",
+        ...input.sourceEnv,
       },
       stdio: "inherit",
     });
@@ -121,7 +131,8 @@ function startStudioProcess(input: {
   return spawn(process.execPath, [getStudioHostScriptPath()], {
     env: {
       ...process.env,
-      BLYPQ_STUDIO_TARGET: input.targetProjectPath,
+      BLYPQ_STUDIO_TARGET: input.hasProject ? input.targetProjectPath : "",
+      ...input.sourceEnv,
       BLYPQ_STUDIO_PORT: "3003",
       BLYPQ_STUDIO_HOST: "127.0.0.1",
     },

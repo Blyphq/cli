@@ -1,3 +1,5 @@
+import type { S3SourceSummary } from "./s3";
+
 export type StudioConfigFileType = "json" | "jiti";
 export type StudioLogFileKind = "active" | "archive";
 export type StudioLogStream = "combined" | "error" | "unknown";
@@ -25,7 +27,7 @@ export type StudioGroupingReason =
   | "heuristic";
 export type StudioAssistantRole = "user" | "assistant";
 
-export type StudioLogMode = "file" | "database";
+export type StudioLogMode = "file" | "database" | "s3" | "none";
 
 export interface StudioDatabaseConfigSummary {
   enabled: boolean;
@@ -149,7 +151,8 @@ export interface StudioResolvedConfigSummary {
   studio: {
     sections: StudioCustomSectionDefinition[];
   };
-  destination: "file" | "database";
+  destination: "file" | "database" | "s3" | "none";
+  s3?: S3SourceSummary;
   database: StudioDatabaseConfigSummary;
 }
 
@@ -181,6 +184,9 @@ export interface StudioLogDiscovery {
   archiveDirExists: boolean;
   files: StudioLogFile[];
   mode: StudioLogMode;
+  s3?: S3SourceSummary;
+  datasetId?: string;
+  snapshotVersion?: number;
   database: StudioDatabaseConfigSummary | null;
 }
 
@@ -409,6 +415,9 @@ export interface StudioErrorStats {
 
 export interface StudioLogsQueryInput {
   projectPath?: string;
+  sourceId?: string;
+  datasetId?: string;
+  snapshotVersion?: number;
   limit?: number;
   offset?: number;
   level?: string;
@@ -423,6 +432,9 @@ export interface StudioLogsQueryInput {
 
 export interface StudioErrorsQueryInput {
   projectPath?: string;
+  sourceId?: string;
+  datasetId?: string;
+  snapshotVersion?: number;
   limit?: number;
   offset?: number;
   view?: StudioErrorViewMode;
@@ -438,6 +450,9 @@ export interface StudioErrorsQueryInput {
 
 export interface StudioBackgroundJobsQueryInput {
   projectPath?: string;
+  sourceId?: string;
+  datasetId?: string;
+  snapshotVersion?: number;
   fileId?: string;
   from?: string;
   to?: string;
@@ -448,6 +463,9 @@ export interface StudioBackgroundJobsQueryInput {
 
 export interface StudioAgentsQueryInput {
   projectPath?: string;
+  sourceId?: string;
+  datasetId?: string;
+  snapshotVersion?: number;
   fileId?: string;
   from?: string;
   to?: string;
@@ -461,6 +479,9 @@ export type StudioHttpPerformanceHighlight = "none" | "slow" | "error";
 
 export interface StudioHttpQueryInput {
   projectPath?: string;
+  sourceId?: string;
+  datasetId?: string;
+  snapshotVersion?: number;
   fileId?: string;
   from?: string;
   to?: string;
@@ -617,6 +638,9 @@ export interface StudioDatabaseOverview {
 
 export interface StudioDatabaseQueryInput {
   projectPath?: string;
+  sourceId?: string;
+  datasetId?: string;
+  snapshotVersion?: number;
   fileId?: string;
   from?: string;
   to?: string;
@@ -937,6 +961,9 @@ export type StudioOverviewTrend = "up" | "down" | "flat";
 
 export interface StudioOverviewQueryInput {
   projectPath?: string;
+  sourceId?: string;
+  datasetId?: string;
+  snapshotVersion?: number;
   fileId?: string;
   from?: string;
   to?: string;
@@ -1016,6 +1043,9 @@ export interface StudioOverview {
 
 export interface StudioAuthQueryInput {
   projectPath?: string;
+  sourceId?: string;
+  datasetId?: string;
+  snapshotVersion?: number;
   fileId?: string;
   from?: string;
   to?: string;
@@ -1096,6 +1126,9 @@ export interface StudioAuthOverview {
 
 export interface StudioPaymentsQueryInput {
   projectPath?: string;
+  sourceId?: string;
+  datasetId?: string;
+  snapshotVersion?: number;
   fileId?: string;
   from?: string;
   to?: string;
@@ -1147,6 +1180,9 @@ export interface StudioAssistantMessage {
 
 export interface StudioAssistantReplyInput {
   projectPath?: string;
+  sourceId?: string;
+  datasetId?: string;
+  snapshotVersion?: number;
   history: StudioAssistantHistoryItem[];
   filters: Pick<
     StudioLogsQueryInput,
@@ -1165,6 +1201,9 @@ export interface StudioMeta {
   sections: StudioDetectedSection[];
   logs: {
     mode: StudioLogMode;
+  s3?: S3SourceSummary;
+  datasetId?: string;
+  snapshotVersion?: number;
     database: StudioDatabaseConfigSummary | null;
     logDir: string;
     archiveDir: string;

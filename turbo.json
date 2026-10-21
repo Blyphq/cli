@@ -3,19 +3,54 @@
   "ui": "tui",
   "tasks": {
     "build": {
-      "dependsOn": ["^build"],
-      "inputs": ["$TURBO_DEFAULT$", ".env*"],
-      "outputs": ["dist/**"]
+      "dependsOn": [
+        "^build"
+      ],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        ".env*"
+      ],
+      "outputs": [
+        "dist/**"
+      ]
     },
     "lint": {
-      "dependsOn": ["^lint"]
+      "dependsOn": [
+        "^lint"
+      ]
     },
     "check-types": {
-      "dependsOn": ["^check-types"]
+      "dependsOn": [
+        "^check-types"
+      ]
     },
     "dev": {
       "cache": false,
       "persistent": true
+    },
+    "@blyp/cli#build": {
+      "dependsOn": [
+        "^build"
+      ],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        ".env*",
+        "$TURBO_ROOT$/apps/web/src/**",
+        "$TURBO_ROOT$/apps/web/public/**",
+        "$TURBO_ROOT$/apps/web/package.json",
+        "$TURBO_ROOT$/apps/web/vite.config.ts",
+        "$TURBO_ROOT$/apps/web/tsconfig.json",
+        "$TURBO_ROOT$/apps/web/.env*",
+        "$TURBO_ROOT$/packages/api/src/**",
+        "$TURBO_ROOT$/packages/api/package.json",
+        "$TURBO_ROOT$/packages/env/src/**",
+        "$TURBO_ROOT$/packages/env/package.json",
+        "$TURBO_ROOT$/packages/config/*.json"
+      ],
+      "outputs": [
+        "dist/**",
+        "studio/**"
+      ]
     }
   }
 }

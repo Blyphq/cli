@@ -1,3 +1,4 @@
+import { openS3Dataset, extendS3Dataset, refreshS3Dataset, closeS3Dataset, cancelS3Dataset, s3DatasetStatus } from "../studio/s3";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 
@@ -32,7 +33,7 @@ import {
 } from "../studio/service";
 
 const studioLogsInput = z.object({
-  projectPath: z.string().optional(),
+  sourceId: z.string().optional(), datasetId: z.string().optional(), snapshotVersion: z.number().int().min(0).optional(), projectPath: z.string().optional(),
   limit: z.number().int().positive().max(500).optional(),
   offset: z.number().int().min(0).optional(),
   level: z.string().optional(),
@@ -46,7 +47,7 @@ const studioLogsInput = z.object({
 });
 
 const studioErrorsInput = z.object({
-  projectPath: z.string().optional(),
+  sourceId: z.string().optional(), datasetId: z.string().optional(), snapshotVersion: z.number().int().min(0).optional(), projectPath: z.string().optional(),
   limit: z.number().int().positive().max(500).optional(),
   offset: z.number().int().min(0).optional(),
   view: z.enum(["grouped", "raw"]).optional(),
@@ -61,7 +62,7 @@ const studioErrorsInput = z.object({
 });
 
 const studioAuthInput = z.object({
-  projectPath: z.string().optional(),
+  sourceId: z.string().optional(), datasetId: z.string().optional(), snapshotVersion: z.number().int().min(0).optional(), projectPath: z.string().optional(),
   fileId: z.string().optional(),
   from: z.string().optional(),
   to: z.string().optional(),
@@ -73,7 +74,7 @@ const studioAuthInput = z.object({
 });
 
 const studioDatabaseInput = z.object({
-  projectPath: z.string().optional(),
+  sourceId: z.string().optional(), datasetId: z.string().optional(), snapshotVersion: z.number().int().min(0).optional(), projectPath: z.string().optional(),
   fileId: z.string().optional(),
   from: z.string().optional(),
   to: z.string().optional(),
@@ -83,7 +84,7 @@ const studioDatabaseInput = z.object({
 });
 
 const studioAgentsInput = z.object({
-  projectPath: z.string().optional(),
+  sourceId: z.string().optional(), datasetId: z.string().optional(), snapshotVersion: z.number().int().min(0).optional(), projectPath: z.string().optional(),
   fileId: z.string().optional(),
   from: z.string().optional(),
   to: z.string().optional(),
@@ -93,7 +94,7 @@ const studioAgentsInput = z.object({
 });
 
 const studioBackgroundJobsInput = z.object({
-  projectPath: z.string().optional(),
+  sourceId: z.string().optional(), datasetId: z.string().optional(), snapshotVersion: z.number().int().min(0).optional(), projectPath: z.string().optional(),
   fileId: z.string().optional(),
   from: z.string().optional(),
   to: z.string().optional(),
@@ -103,7 +104,7 @@ const studioBackgroundJobsInput = z.object({
 });
 
 const studioPaymentsInput = z.object({
-  projectPath: z.string().optional(),
+  sourceId: z.string().optional(), datasetId: z.string().optional(), snapshotVersion: z.number().int().min(0).optional(), projectPath: z.string().optional(),
   fileId: z.string().optional(),
   from: z.string().optional(),
   to: z.string().optional(),
@@ -113,7 +114,7 @@ const studioPaymentsInput = z.object({
 });
 
 const studioHttpInput = z.object({
-  projectPath: z.string().optional(),
+  sourceId: z.string().optional(), datasetId: z.string().optional(), snapshotVersion: z.number().int().min(0).optional(), projectPath: z.string().optional(),
   fileId: z.string().optional(),
   from: z.string().optional(),
   to: z.string().optional(),
@@ -127,7 +128,7 @@ const studioHttpInput = z.object({
 });
 
 const studioOverviewInput = z.object({
-  projectPath: z.string().optional(),
+  sourceId: z.string().optional(), datasetId: z.string().optional(), snapshotVersion: z.number().int().min(0).optional(), projectPath: z.string().optional(),
   fileId: z.string().optional(),
   from: z.string().optional(),
   to: z.string().optional(),
@@ -135,7 +136,7 @@ const studioOverviewInput = z.object({
 });
 
 const assistantInput = z.object({
-  projectPath: z.string().optional(),
+  sourceId: z.string().optional(), datasetId: z.string().optional(), snapshotVersion: z.number().int().min(0).optional(), projectPath: z.string().optional(),
   history: z.array(
     z.object({
       role: z.enum(["user", "assistant"]),
@@ -158,15 +159,21 @@ const assistantInput = z.object({
 });
 
 export const studioRouter = router({
+  openS3Dataset: publicProcedure.input(z.object({sourceId:z.string(),from:z.string(),to:z.string(),follow:z.boolean().optional()})).mutation(({input})=>openS3Dataset(input)),
+  extendS3Dataset: publicProcedure.input(z.object({datasetId:z.string()})).mutation(({input})=>extendS3Dataset(input.datasetId)),
+  refreshS3Dataset: publicProcedure.input(z.object({datasetId:z.string()})).mutation(({input})=>refreshS3Dataset(input.datasetId)),
+  closeS3Dataset: publicProcedure.input(z.object({datasetId:z.string()})).mutation(({input})=>closeS3Dataset(input.datasetId)),
+  cancelS3Dataset: publicProcedure.input(z.object({datasetId:z.string()})).mutation(({input})=>cancelS3Dataset(input.datasetId)),
+  s3DatasetStatus: publicProcedure.input(z.object({datasetId:z.string()})).query(({input})=>s3DatasetStatus(input.datasetId)),
   meta: publicProcedure
-    .input(z.object({ projectPath: z.string().optional() }).optional())
-    .query(({ input }) => getStudioMeta(input?.projectPath)),
+    .input(z.object({ sourceId: z.string().optional(), datasetId: z.string().optional(), snapshotVersion: z.number().int().min(0).optional(), projectPath: z.string().optional() }).optional())
+    .query(({ input }) => getStudioMeta(input?.projectPath, input)),
   config: publicProcedure
-    .input(z.object({ projectPath: z.string().optional() }).optional())
-    .query(({ input }) => getStudioConfig(input?.projectPath)),
+    .input(z.object({ sourceId: z.string().optional(), datasetId: z.string().optional(), snapshotVersion: z.number().int().min(0).optional(), projectPath: z.string().optional() }).optional())
+    .query(({ input }) => getStudioConfig(input?.projectPath, input)),
   files: publicProcedure
-    .input(z.object({ projectPath: z.string().optional() }).optional())
-    .query(({ input }) => getStudioFiles(input?.projectPath)),
+    .input(z.object({ sourceId: z.string().optional(), datasetId: z.string().optional(), snapshotVersion: z.number().int().min(0).optional(), projectPath: z.string().optional() }).optional())
+    .query(({ input }) => getStudioFiles(input?.projectPath, input)),
   logs: publicProcedure
     .input(studioLogsInput.optional())
     .query(({ input }) => getStudioLogs(input ?? {})),
@@ -188,7 +195,7 @@ export const studioRouter = router({
   paymentTrace: publicProcedure
     .input(
       z.object({
-        projectPath: z.string().optional(),
+        sourceId: z.string().optional(), datasetId: z.string().optional(), snapshotVersion: z.number().int().min(0).optional(), projectPath: z.string().optional(),
         traceId: z.string(),
         fileId: z.string().optional(),
         from: z.string().optional(),
@@ -203,7 +210,7 @@ export const studioRouter = router({
   backgroundJobRun: publicProcedure
     .input(
       z.object({
-        projectPath: z.string().optional(),
+        sourceId: z.string().optional(), datasetId: z.string().optional(), snapshotVersion: z.number().int().min(0).optional(), projectPath: z.string().optional(),
         runId: z.string(),
         fileId: z.string().optional(),
         from: z.string().optional(),
@@ -221,7 +228,7 @@ export const studioRouter = router({
   agentTask: publicProcedure
     .input(
       z.object({
-        projectPath: z.string().optional(),
+        sourceId: z.string().optional(), datasetId: z.string().optional(), snapshotVersion: z.number().int().min(0).optional(), projectPath: z.string().optional(),
         taskId: z.string(),
         fileId: z.string().optional(),
         from: z.string().optional(),
@@ -233,7 +240,7 @@ export const studioRouter = router({
   fileLogs: publicProcedure
     .input(
       z.object({
-        projectPath: z.string().optional(),
+        sourceId: z.string().optional(), datasetId: z.string().optional(), snapshotVersion: z.number().int().min(0).optional(), projectPath: z.string().optional(),
         fileId: z.string(),
         limit: z.number().int().positive().max(500).optional(),
         offset: z.number().int().min(0).optional(),
@@ -250,7 +257,7 @@ export const studioRouter = router({
     .input(
       z
         .object({
-          projectPath: z.string().optional(),
+          sourceId: z.string().optional(), datasetId: z.string().optional(), snapshotVersion: z.number().int().min(0).optional(), projectPath: z.string().optional(),
           level: z.string().optional(),
           search: z.string().optional(),
           fileId: z.string().optional(),
@@ -264,7 +271,7 @@ export const studioRouter = router({
   addCustomSection: publicProcedure
     .input(
       z.object({
-        projectPath: z.string().optional(),
+        sourceId: z.string().optional(), datasetId: z.string().optional(), snapshotVersion: z.number().int().min(0).optional(), projectPath: z.string().optional(),
         name: z.string().min(1),
         icon: z.string().min(1),
         match: z.object({
@@ -278,7 +285,7 @@ export const studioRouter = router({
   group: publicProcedure
     .input(
       z.object({
-        projectPath: z.string().optional(),
+        sourceId: z.string().optional(), datasetId: z.string().optional(), snapshotVersion: z.number().int().min(0).optional(), projectPath: z.string().optional(),
         groupId: z.string(),
       }),
     )
@@ -286,7 +293,7 @@ export const studioRouter = router({
   errorGroup: publicProcedure
     .input(
       z.object({
-        projectPath: z.string().optional(),
+        sourceId: z.string().optional(), datasetId: z.string().optional(), snapshotVersion: z.number().int().min(0).optional(), projectPath: z.string().optional(),
         fingerprint: z.string(),
       }),
     )
@@ -294,7 +301,7 @@ export const studioRouter = router({
   record: publicProcedure
     .input(
       z.object({
-        projectPath: z.string().optional(),
+        sourceId: z.string().optional(), datasetId: z.string().optional(), snapshotVersion: z.number().int().min(0).optional(), projectPath: z.string().optional(),
         recordId: z.string(),
       }),
     )
@@ -302,18 +309,18 @@ export const studioRouter = router({
   recordSource: publicProcedure
     .input(
       z.object({
-        projectPath: z.string().optional(),
+        sourceId: z.string().optional(), datasetId: z.string().optional(), snapshotVersion: z.number().int().min(0).optional(), projectPath: z.string().optional(),
         recordId: z.string(),
       }),
     )
     .query(({ input }) => getStudioRecordSource(input)),
   assistantStatus: publicProcedure
-    .input(z.object({ projectPath: z.string().optional() }).optional())
+    .input(z.object({ sourceId: z.string().optional(), datasetId: z.string().optional(), snapshotVersion: z.number().int().min(0).optional(), projectPath: z.string().optional() }).optional())
     .query(({ input }) => getStudioAssistantStatus(input?.projectPath)),
   generateChatTitle: publicProcedure
     .input(
       z.object({
-        projectPath: z.string().optional(),
+        sourceId: z.string().optional(), datasetId: z.string().optional(), snapshotVersion: z.number().int().min(0).optional(), projectPath: z.string().optional(),
         prompt: z.string().min(1),
       }),
     )
