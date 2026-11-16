@@ -39,7 +39,7 @@ export function LogFilesPanel({ files, activeFileId, mode, onSelectFile }: LogFi
           <span className="font-mono tabular-nums">{formatBytes(totalBytes)}</span>
         ) : null}
       </div>
-      <div className="flex flex-col gap-0.5">
+      <div className="flex max-h-[min(20rem,35svh)] flex-col gap-0.5 overflow-y-auto overscroll-contain">
         {!isDatabase && files.length > 1 ? (
           <FileButton
             selected={!activeFileId}
@@ -108,7 +108,7 @@ function FileButton({
       aria-pressed={selected}
       onClick={onClick}
       className={cn(
-        "flex h-7 w-full min-w-0 items-center gap-2 rounded-[5px] px-1.5 text-left text-[0.72rem] outline-none transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-ring/50",
+        "flex h-7 w-full min-w-0 shrink-0 items-center gap-2 rounded-[5px] px-1.5 text-left text-[0.72rem] outline-none transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-ring/50",
         selected
           ? "bg-muted text-foreground"
           : "text-foreground/75 hover:bg-muted/70 hover:text-foreground",
